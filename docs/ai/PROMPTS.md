@@ -81,3 +81,26 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
 - **Purpose:** local AI security review on Alessandro's subscription.
 - **Outcome:** no findings at confidence ≥ 8, so no false-positive filtering sub-tasks were needed. One non-security note: if `protected-paths.regex` were missing, the hooks would fail open (exit 1). Fixed: they now exit 2.
 - `/code-review` (high effort) ran inline in the lead agent, with no subagent. It reported 7 findings, all fixed (see the phase file).
+
+### P00-09 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > Resume this project. Follow CLAUDE.md's resume protocol: read docs/PROGRESS.md ("Resume here") and docs/progress/phase-00-harness.md first, then tell me in 3 lines where we are.
+  >
+  > Before Phase 1, close the one open Phase 0 item: prove the harness LIVE in this session (the authoring session never loaded the repo's hooks, so they are only proven by script tests). Do each step with the real tool, quote the real output, and do not retry a step that is blocked:
+  > 1. Use the Write tool to create .env.example with "X=1". Expected: blocked by protect-files.sh.
+  > 2. Use the Bash tool to run `rm -r -f ./harness-probe-dir`. Expected: blocked by block-dangerous-bash.sh.
+  > 3. Use the Write tool to create src/MortgageApplications.Core/HarnessProbe.cs with badly formatted code, then show the file. Expected: whitespace formatted by format-on-edit.sh. Then delete the file.
+  > 4. Confirm the five project subagents (dotnet-reviewer, spec-checker, security-auditor, test-designer, parallel-implementer) are registered, and tell me how to check what /context loads.
+  > If any hook does not fire, stop and tell me; don't work around it.
+  > Record the live evidence in docs/progress/phase-00-harness.md ("Harness proof" + "Open issues"), update docs/PROGRESS.md, commit on a branch `chore/phase-00-live-proof`, and open a small PR. Run the local /code-review and /security-review on it per the phase skill, then stop for my approval.
+  >
+  > After that PR is merged, start Phase 1 with the phase loop: /phase 01 spec
+  > Phase 1 scope: docs/spec/affordability-rules.md (starting from master prompt B4 in docs/ai/prompts/00-master-prompt.md, re-checking the worked examples) and docs/layers/PRODUCTION-LAYERS.md filled in for this API. Have the dotnet-reviewer subagent critique the rules before any code, and have the spec-checker map docs/spec/ORIGINAL_SPEC.md into the traceability section of docs/PROGRESS.md. Stop at CHECKPOINT A with the decisions I need to make.
+- **Purpose:** prove the hooks live, then queue Phase 1.
+- **Outcome:** steps 2, 3 and 4 passed live. Step 1 was blocked by the `Read(**/.env*)` deny rule before the hook ran, so the agent stopped and asked how to prove `protect-files.sh`.
+
+### P00-10 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > Probe a .key file
+- **Purpose:** choose a live test for `protect-files.sh` on a path that only the hook protects.
+- **Outcome:** a `Write` to `certs/harness-probe.key` was blocked by `protect-files.sh`. Evidence recorded in the phase 0 file ("Live proof").
