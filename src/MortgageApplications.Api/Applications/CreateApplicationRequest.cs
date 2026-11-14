@@ -13,23 +13,23 @@ namespace MortgageApplications.Api.Applications;
 public sealed record CreateApplicationRequest : IValidatableObject
 {
     /// <summary>Gross annual income, 1 to 10,000,000, at most 2 decimal places.</summary>
-    [Required(ErrorMessage = RequiredMessage)]
+    [Required(ErrorMessage = _requiredMessage)]
     public decimal? AnnualIncome { get; init; }
 
     /// <summary>Existing monthly commitments (excluding the new mortgage), 0 to 1,000,000, at most 2 decimal places.</summary>
-    [Required(ErrorMessage = RequiredMessage)]
+    [Required(ErrorMessage = _requiredMessage)]
     public decimal? MonthlyExpenses { get; init; }
 
     /// <summary>0 or more, at most 2 decimal places, leaving a loan of at least 1,000.</summary>
-    [Required(ErrorMessage = RequiredMessage)]
+    [Required(ErrorMessage = _requiredMessage)]
     public decimal? DepositAmount { get; init; }
 
     /// <summary>1,000 to 100,000,000, at most 2 decimal places.</summary>
-    [Required(ErrorMessage = RequiredMessage)]
+    [Required(ErrorMessage = _requiredMessage)]
     public decimal? PropertyValue { get; init; }
 
     /// <summary>Whole years, 5 to 40.</summary>
-    [Required(ErrorMessage = RequiredMessage)]
+    [Required(ErrorMessage = _requiredMessage)]
     [Range(5, 40, ErrorMessage = "Must be between 5 and 40 whole years.")]
     public int? TermYears { get; init; }
 
@@ -49,5 +49,5 @@ public sealed record CreateApplicationRequest : IValidatableObject
     public override string ToString() => $"{nameof(CreateApplicationRequest)} {{ redacted }}";
 
     // Same wording style as the Core rules; the default messages name the C# property (TermYears).
-    private const string RequiredMessage = "Required.";
+    private const string _requiredMessage = "Required.";
 }
