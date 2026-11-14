@@ -5,7 +5,6 @@
 - **Live hook proof done** (2026-11-14) in [#2](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/2) , squash-merged as `945d3c5`: `protect-files.sh`, `block-dangerous-bash.sh` and `format-on-edit.sh` fired live; all 5 subagents registered. Evidence: `docs/progress/phase-00-harness.md`, "Live proof".
 - **Next action:** Alessandro types `/phase 01 spec` (the skill can only be started by a human). Phase 1 then runs up to Checkpoint A. `docs/spec/ORIGINAL_SPEC.md` was added 2026-11-14.
 - **Open decisions / blockers for Alessandro:**
-  - Check that `.env.example` was not created by the step 1 probe (`ls -la .env.example`); the agent couldn't check it.
   - Later: branch protection on `main` (require the CI check).
 - **Last verify:** `./scripts/verify.sh` full → PASSED (2 tests, 91 hook cases) on `chore/phase-00-live-proof`, 2026-11-14. CI "Build, test, format" passed on PR #2.
 

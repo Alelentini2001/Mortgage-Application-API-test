@@ -242,7 +242,7 @@ Each step used the real tool. Outputs are quoted exactly. No blocked step was re
 
 | # | Action (real tool) | Expected | Real result |
 |---|---|---|---|
-| 1 | `Write` `.env.example` with `X=1` | blocked by `protect-files.sh` | **Blocked, but by the permission deny rule `Read(**/.env*)`, not by the hook.** The tool returned a permission error, not a hook message, so the hook was not reached. **Not verified that no file was created:** `.env.*` is gitignored, so `git status` can't show it, and `ls -la .env.example` was denied by the same rule. Alessandro can check with `ls -la .env.example`. |
+| 1 | `Write` `.env.example` with `X=1` | blocked by `protect-files.sh` | **Blocked, but by the permission deny rule `Read(**/.env*)`, not by the hook.** The tool returned a permission error, not a hook message, so the hook was not reached. **No file was created**, checked by Alessandro after the merge: `ls -la .env.example` → `ls: .env.example: No such file or directory`. The agent couldn't check it itself: `.env.*` is gitignored, so `git status` can't show it, and the agent's `ls` was denied by the same rule. |
 | 1b | `Write` `certs/harness-probe.key` (`*.key` is protected by the hook only; no deny rule covers it). Added with Alessandro's approval after step 1. | blocked by `protect-files.sh` | **Blocked by the hook.** No file or `certs/` folder was created. |
 | 2 | `Bash` `rm -r -f ./harness-probe-dir` | blocked by `block-dangerous-bash.sh` | **Blocked by the hook.** |
 | 3 | `Write` `src/MortgageApplications.Core/HarnessProbe.cs` with bad formatting | reformatted by `format-on-edit.sh` | **Reformatted by the hook.** The file was then deleted with a plain `rm`; `git status` was clean. |
