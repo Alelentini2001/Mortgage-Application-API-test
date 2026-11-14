@@ -1,6 +1,6 @@
 # Phase 02: Core domain + calculator (TDD)
 
-Status: **PR open, waiting for Checkpoint B** · Branch: `phase-02-core` · PR: — · Started: 2026-11-14 · Finished: —
+Status: **Merged** (squash `7a579a0`) · Branch: `phase-02-core` · PR: [#5](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/5) · Started: 2026-11-14 · Finished: 2026-11-14
 
 ## Goal
 
@@ -66,6 +66,12 @@ Checkpoint A, 2026-11-14: Alessandro replied "approved" (P02-02) to the plan and
 | P2-D4 | (a) seeded `System.Random` property test, no new package | Alessandro (agent's recommendation) |
 | P2-D5 | (a) one internal `InputGuard` used by the entity and the calculator | Alessandro (agent's recommendation) |
 | P2-D6 | (a) `Guid.CreateVersion7()` IDs; timestamps passed in by the caller | Alessandro (agent's recommendation) |
+
+## Checkpoint B outcome (2026-11-14)
+
+Alessandro: "approved" (P02-09).
+- CI "Build, test, format" passed on the PR head `871ffb0`. The PR was squash-merged as `7a579a0` with a written message.
+- No answer was given on the optional ADR for P2-D1/D2 or on the `tests/CLAUDE.md` property-test exception (`/code-review` finding 7), so both stay open.
 
 ## Docs verified (links)
 
