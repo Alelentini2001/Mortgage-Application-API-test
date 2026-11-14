@@ -1,6 +1,6 @@
 # Phase 03: API + persistence + validation (MVP)
 
-Status: **Planning (Checkpoint A)** · Branch: `phase-03-api` (not created yet) · PR: — · Started: 2026-11-14 · Finished: —
+Status: **PR open, waiting for Checkpoint B** · Branch: `phase-03-api` · PR: see `docs/PROGRESS.md` · Started: 2026-11-14 · Finished: —
 
 ## Goal
 
@@ -27,7 +27,7 @@ Carried in from Phase 2 (all in scope here):
 
 Not in scope: background processing (Phase 6), JWT auth (Phase 7: until then `ICurrentUser` returns one fixed development owner, per `PRODUCTION-LAYERS.md`), logging/OTel (Phase 5), Docker (Phase 4), rate limiting (Phase 8).
 
-## Plan (to be approved at Checkpoint A)
+## Plan (approved at Checkpoint A)
 
 1. **Branch** `phase-03-api` from `main`.
 2. **Packages** (only after P3-D6 is approved): add the approved versions to `Directory.Packages.props`, reference them, `dotnet restore`, `verify.sh --fast` still green. Separate `build(infra)` commit.
@@ -133,17 +133,45 @@ Checked with WebFetch on 2026-11-14 (ASP.NET Core 10 view where the page has ver
 - **Options validation:** https://learn.microsoft.com/en-us/dotnet/core/extensions/options
   - `IValidateOptions<T>.Validate(string? name, T options)` → `ValidateOptionsResult.Fail(…)` / `Success`; registered with `TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<T>, …>())`; `.ValidateOnStart()` on `AddOptions<T>().Bind(…)` moves validation to startup.
 - **Carried from Phase 2** (not re-fetched): `Guid.CreateVersion7`, `ArgumentOutOfRangeException` constructors, `Math.Round` with `MidpointRounding.AwayFromZero`.
-- **Not checked yet:** `TimeProvider` (standard BCL type, already planned in Phase 2) and Scalar's `MapScalarApiReference` (third-party docs). I'll check them at implementation and add the links here.
+- **`JsonSerializerOptions.AllowDuplicateProperties`** (added after the security gate, I2): https://learn.microsoft.com/en-us/dotnet/api/system.text.json.jsonserializeroptions.allowduplicateproperties?view=net-10.0
+  - Available in .NET 10; "The default is `true`"; "If set to `false`, JsonException is thrown when a duplicate property name is encountered during deserialization."
+- **Not done:** `TimeProvider` (standard BCL type, planned in Phase 2) and Scalar's `MapScalarApiReference` (third-party, not on Learn) were not checked against docs in this phase. Both are used as in their standard samples, and tests cover the behaviour (fixed clock in unit tests; Scalar 302 in Development, 404 in Production).
 
 ## Orchestration used
 
-_Filled in during the phase._
+- **Lead agent:** plan, docs check (WebFetch on Learn), NuGet version check (registration API, saved to the scratchpad), stubs, tests, implementation, smoke test, gate fixes, evidence.
+- **Subagents** (the real `.claude/agents/` definitions):
+  - `test-designer` (P03-04): 19 unit and 46 integration rows plus 12 ambiguities; Alessandro approved the selection (P03-05).
+  - `security-auditor` (P03-07), `dotnet-reviewer` (P03-08) and `spec-checker` (P03-09) ran in parallel, all read-only.
+- **Skills:** `/phase` (started by Alessandro). `/adr` not run (user-invoked only).
+- **Hooks that fired:**
+  - `block-dangerous-bash.sh` blocked a `curl … | python3` pipe during the NuGet version check (pipe-to-interpreter rule); redone by saving to the scratchpad first.
+  - Permission rules denied `dotnet tool *` (and the auto-mode classifier refused writing the tool manifest by hand), so Alessandro installed `dotnet-ef`. They also denied `dotnet ef migrations has-pending-model-changes` for the `dotnet-reviewer`.
+  - The Gitleaks pre-commit hook on every commit ("no leaks found").
+  - `.claude/hooks/tests/test-hooks.sh` via `verify.sh`: 91 cases on a clean tree, 90 with uncommitted `.cs` changes (by design).
+  - `format-on-edit.sh` and `verify-on-stop.sh`: their output wasn't shown in this session, so no claim is made.
+- **MCP servers:** none.
 
 ## Prompts
 
 `docs/ai/PROMPTS.md` entries P03-01 onwards.
 
 ## What was built
+
+Commits on `phase-03-api`: `a0daa7c` (packages), `e604a56` (red), `90136a9` (Core), `14a6c9c` (Infrastructure), `654281b` (Api), `371d9f9` (naming), `bf2920c` (migration), `a446c64` (docs), `eb21d5f` (`requests.http`), `8a2e80e` + `bb24cff` + `5f91df6` (gate fixes), then evidence.
+
+- **Core** (`src/MortgageApplications.Core/`)
+  - `Affordability/ApplicationInputRules.cs`: public rules §1 rule set (`InputError` field + message, never the value); `InputGuard` now throws its first error.
+  - `Applications/MortgageApplicationService.cs`, `IMortgageApplicationRepository.cs`: the use case and its owner-scoped port.
+  - `MortgageApplication` scalar constructor for EF (R4); `AffordabilityOptions` 16-character `RulesVersion` bound.
+- **Infrastructure** (`src/MortgageApplications.Infrastructure/`)
+  - `Persistence/MortgageApplicationsDbContext.cs`, `MortgageApplicationConfiguration.cs`, `AffordabilityAssessmentConfiguration.cs`, `EfMortgageApplicationRepository.cs`.
+  - `AffordabilityResultJson.cs` (result as one JSON column, P3-D3 fallback b), `MinimumScaleTwoConverter.cs` (2 dp after SQLite).
+  - `DesignTimeDbContextFactory.cs`, `Migrations/` (`InitialCreate`), `DependencyInjection.cs`, `DatabaseMigration.cs`.
+- **Api** (`src/MortgageApplications.Api/`)
+  - `Program.cs`; `Applications/ApplicationEndpoints.cs`, `CreateApplicationRequest.cs`, `Responses.cs`; `Errors/ProblemExceptionHandler.cs`, `ValidationErrorKeys.cs`; `Configuration/AffordabilityOptionsValidator.cs`; `Identity/ICurrentUser.cs`, `DevelopmentCurrentUser.cs`; `appsettings.json` (connection string, `Affordability` v1.0); `requests.http`.
+- **Build:** `Directory.Packages.props` (5 packages), `dotnet-tools.json` (`dotnet-ef` 10.0.15), `.editorconfig` (migrations are generated code).
+- **Tests:** `tests/MortgageApplications.UnitTests/Affordability/ApplicationInputRulesTests.cs`, `Applications/MortgageApplicationServiceTests.cs`, `Applications/Fakes.cs`, 2 tests in `AffordabilityOptionsTests.cs`; `tests/MortgageApplications.IntegrationTests/` (`ApiFactory`, `Http`, 9 test classes). `HarnessSmokeTests.cs` removed.
 
 ## Tests
 
@@ -177,10 +205,6 @@ About 30 unit test methods and 35 integration test methods once theories are cou
 | A11 | Test clock | A small hand-written `TimeProvider` subclass, **no new package** (`FakeTimeProvider` would need approval). |
 | A12 | Shared in-memory database | One open connection per test class, shared with the derived factory used for the other owner (I35), so the cross-owner test can't pass on an empty database. |
 
-## Security gate
-
-## Review gate
-
 ### Results
 
 **Red** (commit `e604a56`, stubs throw `NotImplementedException`; integration endpoints not mapped yet):
@@ -209,6 +233,8 @@ hook tests: 91 passed, 0 failed
 VERIFY PASSED (full)
 ```
 
+**After the gate fixes** (commits `8a2e80e` tests, `bb24cff` fixes, `5f91df6` naming): the tightened and new tests were run against the code before the fixes: integration total 89, failed 8 (3 × `ToString` redaction, 2 × C# names in messages, 1 × read-only checks after a load, 2 × duplicate JSON property). The tightened F1, F2, F4, Production-path and HTML-client tests passed already: the behaviour was right, the old tests just didn't prove it. After the fixes: 347 of 347 (258 unit + 89 integration). Final full verify: see "Verify (final)" below.
+
 What each new test class proves:
 
 | Class | Cases | Proves |
@@ -217,12 +243,15 @@ What each new test class proves:
 | `MortgageApplicationServiceTests` (unit) | U1–U3, U5–U8 | Owner and time come from the caller and the clock; E1/E2 stored with rules version and rate; another owner or the wrong application gives `null` and saves nothing |
 | `AffordabilityOptionsTests` (unit, 2 added) | U17 | `RulesVersion` 16 characters passes, 17 fails without the value |
 | `CreateApplicationTests` | I1–I3, I37 | 201 + `Location` + body; GET returns the same body; 2 dp in raw JSON after the SQLite round trip; no owner in any body |
-| `ValidationTests` | I9–I18, I20, I21, I28 | Each bound as a 400 naming exactly one camelCase field; limits accepted; missing/null/`{}`; Core rules wait for attribute errors; no echoed value |
-| `JsonStrictnessTests` | I22–I24, I26 | Malformed JSON stays 400 in Development; unknown property and number-as-string rejected without echo and nothing saved; 415 |
-| `AssessmentTests` | I4–I7 | Golden E1, E2 and E18 end to end (every output, checks, summary, rate, version, scale 2), `Location` resolves to the same body; two POSTs = two assessments |
-| `NotFoundAndOwnerTests` | I29–I33, I35, I37 | Unknown, malformed, wrong-application and other-owner IDs all give the same 404 ProblemDetails; the owner still gets 200 |
-| `ErrorHandlingTests` | I38, I39 | A 500 in Development and Production has a traceId and no exception type, message, namespace or stack |
-| `StartupTests` | I42–I46 | Invalid or missing `Affordability` options stop startup (message names the option, not the value); `/health`; OpenAPI documents MaxBorrowing; OpenAPI and Scalar are 404 in Production |
+| `ValidationTests` | I9–I18, I20, I21, I28 + messages | Each bound as a 400 naming exactly one camelCase field; limits accepted; missing/null/`{}`; Core rules wait for attribute errors; no echoed value; attribute messages don't name the C# property |
+| `JsonStrictnessTests` | I22–I24, I26 + duplicate key | Malformed JSON, unknown property, number as string and a duplicate property are 400 ProblemDetails without echo, and 415 for the wrong content type, in Development **and** Production; nothing saved |
+| `AssessmentTests` | I4–I7 + F3 | Golden E1, E2 and E18 end to end (every output, checks, summary, rate, version, scale 2); the fetched assessment is byte-for-byte the POST body; two POSTs = two assessments; loaded checks are read-only |
+| `NotFoundAndOwnerTests` | I29–I33, I35, I37 | Unknown, malformed, wrong-application and other-owner IDs all give the same 404 ProblemDetails; the other owner's host provably shares the database and its POST saves nothing; the owner still gets 200 |
+| `ErrorHandlingTests` | I38, I39 + HTML client | A 500 in Development and Production (and for an HTML client) has no exception type, message, namespace or stack |
+| `StartupTests` | I42–I46 | Invalid options, or a missing `Affordability` section with the rest of the configuration present, stop startup (message names the option, not the value); `/health`; OpenAPI documents MaxBorrowing; OpenAPI and Scalar are 404 in Production |
+| `ApiRecordsTests` | security L1 | The request and response records' `ToString` print no input or output value |
+
+**Manual smoke test** (2026-11-14, `dotnet run --project src/MortgageApplications.Api --launch-profile http`, Development, file database): the startup migration created the SQLite file; `POST /api/applications` (E1) → 201 with `Location`; `POST …/assessments` → 201 with the E1 golden values and `"limit":4.50`; `termYears` 50 → 400 with key `termYears`; unknown ID → 404 ProblemDetails with `traceId`; `/openapi/v1.json` → 200; `/scalar` → 302 (redirect to its UI). Run before the gate fixes, so the 400 message then still read "The field TermYears must be between 5 and 40." (fixed in `bb24cff`).
 
 ## Implementation notes
 
@@ -235,17 +264,74 @@ What each new test class proves:
 - **Migration.** `dotnet-ef` was missing at first (P03-02); until the migration existed, database tests failed with `SQLite Error 1: 'no such table: MortgageApplications'`. Alessandro then installed it (repo-root `dotnet-tools.json`, 10.0.15). `InitialCreate` was generated with `dotnet ef migrations add InitialCreate --project src/MortgageApplications.Infrastructure --startup-project src/MortgageApplications.Infrastructure --output-dir Persistence/Migrations` (the design-time factory means the API doesn't have to start). The generated file failed the build on IDE0161 (block namespace), so `.editorconfig` now marks `src/**/Migrations/*.cs` as generated code; the generated files were not edited.
 - **.NET 10 diagnostics.** `UseExceptionHandler` is configured with `SuppressDiagnosticsCallback = context => context.Exception is BadHttpRequestException`, so real 500s are still logged by the framework (Phase 5 adds the allowlisted log).
 
+## Security gate
+
+**`security-auditor` (P03-07): PASS.** No high or critical findings. Diff at `a446c64`.
+
+| Tool | Command | Result |
+|---|---|---|
+| Gitleaks (history) | `gitleaks git --no-banner --redact -v` | 49 commits, no leaks, exit 0 |
+| Gitleaks (tree) | `gitleaks dir --no-banner --redact .` | no leaks, exit 0; local `*.db` files are gitignored and untracked |
+| Semgrep 1.185.0 | `semgrep scan --config p/csharp --config p/secrets --error --quiet --metrics=off --json` (whole repo, and with `--baseline-commit main`) | 0 results each (counted from the JSON), exit 0; one `PartialParsing` warning on the primary constructor in `MortgageApplicationService.cs:10` (parser limit; file reviewed by hand) |
+| Vulnerable packages | `dotnet list MortgageApplications.slnx package --vulnerable --include-transitive` | none in all 5 projects (nuget.org only) |
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| L1 | API request/response records print every input in the default `ToString` | Low (real once Phase 5 logs) | **Fixed** in `bb24cff`: allowlist-only `ToString`; `ApiRecordsTests` (3 tests, red before the fix) |
+| L2 | JSON-strictness and 415 tests ran only in Development (Production writes the body through another path) | Low | **Fixed** in `8a2e80e`: every case runs in both environments (passed already; the gap was coverage) |
+| L3 | No NuGet lock files or package-source mapping | Low (existed before) | **Deferred to Phase 8** (already planned as D12); it changes CI and config, so it needs Alessandro's approval |
+| I1 | Connection string in the base `appsettings.json` | Info | **Deferred to Phase 4** (deploy/migrations ADR). Fails closed today: outside Development nothing creates tables |
+| I2 | Duplicate JSON keys accepted (last wins; validation still runs on the final value) | Info | **Fixed** in `bb24cff`: `AllowDuplicateProperties = false` (checked on Learn: exists in .NET 10, default `true`, `false` throws `JsonException`); 2 tests, red before |
+| I3 | No test with `Accept: text/html` on a 500 | Info | **Test added** in `8a2e80e`: empty 500, no exception text (passed already) |
+| — | `DevelopmentCurrentUser` in every environment, no `RequireAuthorization` | Accepted (Phase 7) | Builds before Phase 7 are not deployed or submitted (`PRODUCTION-LAYERS.md`). Same as reviewer F6 |
+
+Also noted for Phase 8 (from Alessandro's own `dotnet tool install` output, 2026-11-14): "Skipping NuGet package signature verification." Not investigated; to be checked with the lock-file work.
+
+`/security-review` on the PR: see "Review gate" and the PR comment.
+
+## Review gate
+
+**`dotnet-reviewer` (P03-08):** 1 medium, 6 low, no critical or high. It ran both test projects (74/74 and 258/258 at the time) and a throwaway probe on the real `DbContext` (in its scratchpad, not committed): `HasPendingModelChanges()` was false; money columns are stored as `"85000.0"` and read back as `85000.00`; the result JSON keeps scale 2; `decimal` comparison and `OrderBy` still translate with the converter; a tracked load stays `Unchanged`. It could not run `dotnet ef migrations has-pending-model-changes` (refused by the permission rules); the probe covered the same question.
+
+| # | Finding | Resolution |
+|---|---|---|
+| F1 (medium) | The assessment round trip compared JSON by value (`JsonNode.DeepEquals` treats `240000.0` = `240000.00`), so a dropped trailing zero after storage would pass every test | **Fixed** in `8a2e80e`: raw-text equality of POST and GET bodies; raw E18 values checked after the reload |
+| F2 | Cross-owner test didn't prove the other host shares the database, nor that the foreign POST saves nothing against EF | **Fixed** in `8a2e80e` |
+| F3 | A loaded result's `Checks` was a mutable `List`, while the comparer assumes immutability | **Fixed** in `bb24cff`: read-only copy on load; test red before |
+| F4 | The "missing section" test cleared all configuration | **Fixed** in `8a2e80e`: clears, then re-adds the connection string |
+| F5 | Same as security L2 | **Fixed** (see above) |
+| F6 | `DevelopmentCurrentUser` in every environment | **Accepted until Phase 7**, recorded in the PR's security section |
+| F7 | With the JSON-column fallback, `RulesVersion` has no column, so "fits its column" is no longer the reason for the 16-character bound | **Fixed** in `bb24cff`: documented as a sanity bound; the rule and U17 stay |
+
+**`spec-checker` (P03-09):** at `a446c64`, **26 met, 9 partial, 20 missing** (Phase 2: 1 / 28 / 26). Moved to met: R1–R18, R21–R24, R26, R27, R29. No disagreement between code and spec. Its notes: R21 ("good use of the framework") is a judgement call; R22's one-to-many has a foreign key and cascade delete but no navigation properties and no direct test; it did not run the suite. It reported `requests.http` missing: it was added after its snapshot, in `eb21d5f`. The new table is in `docs/PROGRESS.md`.
+
+`/code-review` and `/security-review` on the PR: results in the PR comment, summarised here at Checkpoint B.
+
 ## AI output corrected or rejected (REAL cases only)
 
 - The plan said SQLite can't compare or sort `decimal`. The docs check showed EF translates those operations (`ef_compare`); the plan was corrected before any code.
 - P3-D3 option (a) was recommended as likely to work. EF 10 rejected it (errors above), and the approved fallback was used.
+- The lead agent's assessment test claimed to prove scale 2 after the round trip but compared numbers by value. The `dotnet-reviewer` caught it (F1); fixed.
+- The lead agent ran the JSON-strictness tests only in Development, the path its own exception handler covers. Both the `security-auditor` (L2) and the `dotnet-reviewer` (F5) caught it independently; fixed.
+- The lead agent's first `sed` rename used `\b`, which BSD `sed` on macOS ignores; the format check caught it and the rename was redone with `[[:<:]]…[[:>:]]`.
 
 ## Optimisations considered
+
+None measured in this phase (Phase 9 measures first). Noted only: reads use `AsNoTracking`; there is an index on `OwnerId` and on `ApplicationId`.
 
 ## Open issues
 
 - `security-auditor` S6 (Phase 2): version 7 IDs reveal their creation time. Accepted: every lookup is owner-scoped and returns 404, and the 74 random bits make IDs impossible to enumerate. To mention in the README (Phase 10).
+- Phase 4: connection string location and the startup-migration ADR (security I1).
+- Phase 5: `[LoggerMessage]` with the allowlist; real 500s are logged by the framework today (`SuppressDiagnosticsCallback`), and the log-capture test must cover them.
+- Phase 6: the POST becomes 202; `AssessmentResponse.Result` is already null-able for Pending.
+- Phase 7: replace `DevelopmentCurrentUser`, add `RequireAuthorization` (reviewer F6).
+- Phase 8: NuGet lock files and source mapping (security L3); check NuGet package signature verification on macOS.
+- Docs check not done for `TimeProvider` and Scalar's `MapScalarApiReference` (both used as in their standard samples; Scalar's docs are not on Learn).
+- R22 has no direct test of cascade delete (no delete endpoint exists); left as is.
 
 ## Time spent (approx.)
+
+One working session on 2026-11-14: about 1 hour of wall-clock time, from the first scratchpad file (NuGet version check, 16:29) to the evidence commit (about 17:30), including waits for Alessandro. Not measured more precisely.
 
 ## Human review (Alessandro writes this; the agent leaves it empty)

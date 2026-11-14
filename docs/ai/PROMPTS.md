@@ -408,7 +408,7 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   Report each finding with severity, file:line, evidence, and whether it's real or a false positive with the reason. Say plainly which scanners ran and which did not.
   ```
 - **Purpose:** Phase 3 security gate.
-- **Outcome:** _pending_.
+- **Outcome:** PASS, no high or critical findings; 3 low (L1–L3) and 3 info (I1–I3). L1, L2 and I2 fixed, I3 test added, L3 and I1 deferred (phase file, "Security gate").
 
 ### P03-08 · agent→subagent (`dotnet-reviewer`) · 2026-11-14
 - **Prompt (verbatim):**
@@ -423,7 +423,7 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   Re-run any arithmetic or behaviour you doubt rather than trusting comments. You may run `dotnet test` with filters and `git` read commands. Report findings as ID | severity | file:line | problem | suggested fix, and say which concerns you checked and found fine.
   ```
 - **Purpose:** Phase 3 review gate.
-- **Outcome:** _pending_.
+- **Outcome:** 1 medium (F1, a test that compared JSON by value) and 6 low (F2–F7). F1–F5 and F7 fixed; F6 accepted until Phase 7 (phase file, "Review gate").
 
 ### P03-09 · agent→subagent (`spec-checker`) · 2026-11-14
 - **Prompt (verbatim):**
@@ -433,4 +433,4 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   Re-check every row against the repository as it is now (src/, tests/, docs/). Status key: "met" needs code or a test; design written down but not built is "partial". For each row give ID | status | where (file and test that prove it) | change since Phase 2. Rows expected to move are R1, R2, R3, R4, R5–R9, R10, R11, R12, R13, R21, R22, R23, R24, R26, R27, R29, but judge each one yourself and don't promote a row on the plan's word alone. Then give the new totals, and list any requirement where the code and the spec disagree or where you're unsure.
   ```
 - **Purpose:** Phase 3 requirement traceability.
-- **Outcome:** _pending_.
+- **Outcome:** 26 met, 9 partial, 20 missing (Phase 2: 1 / 28 / 26). New table in `docs/PROGRESS.md`.
