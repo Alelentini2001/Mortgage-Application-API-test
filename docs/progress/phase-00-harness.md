@@ -190,12 +190,12 @@ All of D1–D9 were approved by Alessandro with the recommended option (a). See 
   - `MortgageApplications.slnx` with 3 src + 2 test projects
   - `Program.cs` with `/health` and `public partial class Program`
 - **Memory:**
-  - `AGENTS.md` (46 lines), `CLAUDE.md` (39 lines)
+  - `AGENTS.md` (46 lines; 55 after PR #4 added "Commits and PRs"), `CLAUDE.md` (39 lines)
   - Nested `CLAUDE.md` in Core (8), tests (8), docs (7)
   - `.claude/rules/` backend (14), tests (10), infra (12), security (8)
   - `CLAUDE.local.md` (gitignored)
   - `docs/ai/proposed-user-claude-md.md`
-  - Lines loaded at session start: CLAUDE.md + AGENTS.md + security rule = 93. Path-scoped and nested files load on demand.
+  - Lines loaded at session start: CLAUDE.md + AGENTS.md + security rule = 93. Measured with `wc -l` after PR #4: AGENTS.md 55 + CLAUDE.md 40 + security rule 8 = 103. Path-scoped and nested files load on demand.
 - **Subagents:** `.claude/agents/` dotnet-reviewer, spec-checker, security-auditor, test-designer, parallel-implementer.
 - **Skills:** `.claude/skills/` phase, verify-all, progress, adr, retro, affordability-rules.
 - **Enforcement:**

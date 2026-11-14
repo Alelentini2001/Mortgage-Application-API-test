@@ -208,3 +208,25 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   - D1–D9 approved as recommended (D4 stays income-based), ADR 0001 Accepted.
   - PR #3 squash-merged as `d1c096a` after CI passed.
   - `security-auditor` S10 and the `spec-checker` questions were not answered, so they stay open.
+
+### P01-07 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > Also make the commits and stuff done easier to read when pushing!! Easy but technical too
+- **Purpose:** make commit messages, PR descriptions and squash-merge messages easier to read.
+- **Outcome:**
+  - New "Commits and PRs" rules in `AGENTS.md`.
+  - A PR template (`.github/pull_request_template.md`).
+  - The phase skill now squash-merges with a written message.
+  - It applies from now on. Commits already on `main` were not rewritten: that would need a force push, which the repo forbids.
+
+### P01-08 · agent→subagent (`/security-review` skill, finder sub-task, general-purpose) · 2026-11-14
+- **Prompt:** same structure as P01-05. The context paragraph, verbatim:
+  ```
+  Context: a small harness/docs change in a .NET 10 mortgage-application API repo. It adds commit and PR writing rules to AGENTS.md (instructions every coding agent loads), a GitHub PR description template (.github/pull_request_template.md), one sentence in the /phase Claude Code skill (.claude/skills/phase/SKILL.md) about squash-merging with a written message via `gh pr merge <n> --squash --subject ... --body-file <file>` (file kept in the session scratchpad), and progress/prompt-log notes. No code, workflow, hook, settings or permission changes.
+  ```
+  The method line asked it to check whether the new agent instructions would weaken a guardrail: shell injection when building the `gh pr merge` command from PR text, bypassing the `ask` permission on `gh pr merge`, or leaking secrets into commit or PR text.
+- **Purpose:** local AI security review of PR #4.
+- **Outcome:**
+  - No findings.
+  - Its below-threshold note was applied: the `--subject` value is now single-quoted in `AGENTS.md`, so a title containing `$(...)` is never expanded.
+- `/code-review` (high effort) ran inline in the lead agent: 6 findings, all fixed in `b7a06cf`.
