@@ -7,8 +7,8 @@ namespace MortgageApplications.UnitTests.Applications;
 /// <summary>U1–U3, U5–U8: the use case takes the owner and the time from its callers, and scopes every read to the owner.</summary>
 public sealed class MortgageApplicationServiceTests
 {
-    private const string OwnerA = "owner-a";
-    private const string OwnerB = "owner-b";
+    private const string _ownerA = "owner-a";
+    private const string _ownerB = "owner-b";
 
     private static readonly DateTimeOffset _now = new(2026, 11, 14, 10, 0, 0, TimeSpan.Zero);
 
@@ -26,11 +26,11 @@ public sealed class MortgageApplicationServiceTests
     [Fact]
     public async Task CreateAsync_stores_application_with_caller_owner_and_clock_time()
     {
-        var application = await _service.CreateAsync(OwnerA, TestData.E1, Ct);
+        var application = await _service.CreateAsync(_ownerA, TestData.E1, Ct);
 
         var stored = Assert.Single(_repository.Applications);
         Assert.Same(application, stored);
-        Assert.Equal(OwnerA, stored.OwnerId);
+        Assert.Equal(_ownerA, stored.OwnerId);
         Assert.Equal(_now, stored.CreatedAt);
         Assert.Equal(TestData.E1, stored.ToInputs());
     }
@@ -38,9 +38,9 @@ public sealed class MortgageApplicationServiceTests
     [Fact]
     public async Task GetAsync_own_application_returns_it()
     {
-        var created = await _service.CreateAsync(OwnerA, TestData.E1, Ct);
+        var created = await _service.CreateAsync(_ownerA, TestData.E1, Ct);
 
-        var found = await _service.GetAsync(OwnerA, created.Id, Ct);
+        var found = await _service.GetAsync(_ownerA, created.Id, Ct);
 
         Assert.Same(created, found);
     }
@@ -49,9 +49,9 @@ public sealed class MortgageApplicationServiceTests
     [Fact]
     public async Task AssessAsync_E1_stores_completed_assessment_with_clock_time_and_rules_version()
     {
-        var application = await _service.CreateAsync(OwnerA, TestData.E1, Ct);
+        var application = await _service.CreateAsync(_ownerA, TestData.E1, Ct);
 
-        var assessment = await _service.AssessAsync(OwnerA, application.Id, Ct);
+        var assessment = await _service.AssessAsync(_ownerA, application.Id, Ct);
 
         var stored = Assert.Single(_repository.Assessments);
         Assert.Same(assessment, stored);
@@ -75,9 +75,9 @@ public sealed class MortgageApplicationServiceTests
     [Fact]
     public async Task AssessAsync_E2_stores_declined_assessment()
     {
-        var application = await _service.CreateAsync(OwnerA, GoldenCases.All["E2"].Inputs, Ct);
+        var application = await _service.CreateAsync(_ownerA, GoldenCases.All["E2"].Inputs, Ct);
 
-        var assessment = await _service.AssessAsync(OwnerA, application.Id, Ct);
+        var assessment = await _service.AssessAsync(_ownerA, application.Id, Ct);
 
         Assert.Equal(AssessmentStatus.Completed, assessment!.Status);
         Assert.Equal(Decision.Declined, assessment.Result!.Decision);
@@ -88,10 +88,10 @@ public sealed class MortgageApplicationServiceTests
     [Fact]
     public async Task GetAssessmentAsync_own_assessment_returns_it()
     {
-        var application = await _service.CreateAsync(OwnerA, TestData.E1, Ct);
-        var assessment = await _service.AssessAsync(OwnerA, application.Id, Ct);
+        var application = await _service.CreateAsync(_ownerA, TestData.E1, Ct);
+        var assessment = await _service.AssessAsync(_ownerA, application.Id, Ct);
 
-        var found = await _service.GetAssessmentAsync(OwnerA, application.Id, assessment!.Id, Ct);
+        var found = await _service.GetAssessmentAsync(_ownerA, application.Id, assessment!.Id, Ct);
 
         Assert.Same(assessment, found);
     }
@@ -100,9 +100,9 @@ public sealed class MortgageApplicationServiceTests
     [Fact]
     public async Task GetAsync_other_owner_returns_null()
     {
-        var application = await _service.CreateAsync(OwnerA, TestData.E1, Ct);
+        var application = await _service.CreateAsync(_ownerA, TestData.E1, Ct);
 
-        var found = await _service.GetAsync(OwnerB, application.Id, Ct);
+        var found = await _service.GetAsync(_ownerB, application.Id, Ct);
 
         Assert.Null(found);
     }
@@ -111,9 +111,9 @@ public sealed class MortgageApplicationServiceTests
     [Fact]
     public async Task AssessAsync_other_owner_returns_null_and_saves_nothing()
     {
-        var application = await _service.CreateAsync(OwnerA, TestData.E1, Ct);
+        var application = await _service.CreateAsync(_ownerA, TestData.E1, Ct);
 
-        var assessment = await _service.AssessAsync(OwnerB, application.Id, Ct);
+        var assessment = await _service.AssessAsync(_ownerB, application.Id, Ct);
 
         Assert.Null(assessment);
         Assert.Empty(_repository.Assessments);
@@ -122,7 +122,7 @@ public sealed class MortgageApplicationServiceTests
     [Fact]
     public async Task AssessAsync_unknown_application_returns_null_and_saves_nothing()
     {
-        var assessment = await _service.AssessAsync(OwnerA, Guid.CreateVersion7(_now), Ct);
+        var assessment = await _service.AssessAsync(_ownerA, Guid.CreateVersion7(_now), Ct);
 
         Assert.Null(assessment);
         Assert.Empty(_repository.Assessments);
@@ -132,11 +132,11 @@ public sealed class MortgageApplicationServiceTests
     [Fact]
     public async Task GetAssessmentAsync_under_wrong_application_returns_null()
     {
-        var first = await _service.CreateAsync(OwnerA, TestData.E1, Ct);
-        var second = await _service.CreateAsync(OwnerA, TestData.E1, Ct);
-        var assessment = await _service.AssessAsync(OwnerA, first.Id, Ct);
+        var first = await _service.CreateAsync(_ownerA, TestData.E1, Ct);
+        var second = await _service.CreateAsync(_ownerA, TestData.E1, Ct);
+        var assessment = await _service.AssessAsync(_ownerA, first.Id, Ct);
 
-        var found = await _service.GetAssessmentAsync(OwnerA, second.Id, assessment!.Id, Ct);
+        var found = await _service.GetAssessmentAsync(_ownerA, second.Id, assessment!.Id, Ct);
 
         Assert.Null(found);
     }
@@ -145,10 +145,10 @@ public sealed class MortgageApplicationServiceTests
     [Fact]
     public async Task GetAssessmentAsync_other_owner_returns_null()
     {
-        var application = await _service.CreateAsync(OwnerA, TestData.E1, Ct);
-        var assessment = await _service.AssessAsync(OwnerA, application.Id, Ct);
+        var application = await _service.CreateAsync(_ownerA, TestData.E1, Ct);
+        var assessment = await _service.AssessAsync(_ownerA, application.Id, Ct);
 
-        var found = await _service.GetAssessmentAsync(OwnerB, application.Id, assessment!.Id, Ct);
+        var found = await _service.GetAssessmentAsync(_ownerB, application.Id, assessment!.Id, Ct);
 
         Assert.Null(found);
     }

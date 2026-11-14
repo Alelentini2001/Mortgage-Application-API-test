@@ -9,7 +9,7 @@ namespace MortgageApplications.IntegrationTests;
 /// <summary>I38, I39 (security S5): an unexpected exception is a generic 500 ProblemDetails in every environment (A4).</summary>
 public sealed class ErrorHandlingTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
-    private const string Marker = "SECRET-MARKER-123";
+    private const string _marker = "SECRET-MARKER-123";
 
     public static TheoryData<string> Environments => ["Development", "Production"];
 
@@ -26,7 +26,7 @@ public sealed class ErrorHandlingTests(ApiFactory factory) : IClassFixture<ApiFa
 
         await response.AssertProblemAsync(HttpStatusCode.InternalServerError);
         var text = await response.BodyAsync();
-        Assert.DoesNotContain(Marker, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(_marker, text, StringComparison.Ordinal);
         Assert.DoesNotContain("Exception", text, StringComparison.Ordinal);
         Assert.DoesNotContain("MortgageApplications.", text, StringComparison.Ordinal);
         Assert.DoesNotContain("stack", text, StringComparison.OrdinalIgnoreCase);
@@ -43,6 +43,6 @@ public sealed class ErrorHandlingTests(ApiFactory factory) : IClassFixture<ApiFa
         public Task<AffordabilityAssessment?> FindAssessmentAsync(
             Guid applicationId, Guid assessmentId, string ownerId, CancellationToken cancellationToken) => throw Boom();
 
-        private static InvalidOperationException Boom() => new($"{Marker} at C:\\secret\\path.cs:line 1");
+        private static InvalidOperationException Boom() => new($"{_marker} at C:\\secret\\path.cs:line 1");
     }
 }
