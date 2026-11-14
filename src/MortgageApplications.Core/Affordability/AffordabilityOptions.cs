@@ -8,6 +8,9 @@ namespace MortgageApplications.Core.Affordability;
 /// </summary>
 public sealed class AffordabilityOptions
 {
+    /// <summary>The stored column length (Phase 3); validated here so a version always fits.</summary>
+    public const int MaxRulesVersionLength = 16;
+
     /// <summary>Annual assessment rate, for example 0.06 (6%).</summary>
     public decimal AssessmentRate { get; set; }
 
@@ -39,6 +42,10 @@ public sealed class AffordabilityOptions
         if (string.IsNullOrWhiteSpace(RulesVersion))
         {
             errors.Add($"{nameof(RulesVersion)} is required.");
+        }
+        else if (RulesVersion.Length > MaxRulesVersionLength)
+        {
+            errors.Add(string.Create(CultureInfo.InvariantCulture, $"{nameof(RulesVersion)} must be at most {MaxRulesVersionLength} characters."));
         }
 
         return errors;
