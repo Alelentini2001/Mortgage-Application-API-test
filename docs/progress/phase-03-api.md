@@ -1,6 +1,6 @@
 # Phase 03: API + persistence + validation (MVP)
 
-Status: **PR open, waiting for Checkpoint B** · Branch: `phase-03-api` · PR: see `docs/PROGRESS.md` · Started: 2026-11-14 · Finished: —
+Status: **Merged** (squash `a187e29`) · Branch: `phase-03-api` · PR: [#6](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/6) · Started: 2026-11-14 · Finished: 2026-11-14
 
 ## Goal
 
@@ -91,6 +91,12 @@ Checkpoint A, 2026-11-14: Alessandro replied "approved" (P03-02) to the plan and
 Versions installed (P3-D6), checked on the NuGet registration API on 2026-11-14:
 - Microsoft packages and `dotnet-ef`: **10.0.15**, published 2026-11-10. This is 4 days old, but it is the servicing patch that matches the installed runtime (`Microsoft.AspNetCore.App 10.0.15`), as stated in the approved plan. 10.0.14 (2026-10-25) is the previous patch.
 - `Scalar.AspNetCore`: **2.18.7**, published 2026-10-30: the newest version at least two weeks old (2.19.0 is from 2026-11-05).
+
+## Checkpoint B outcome (2026-11-14)
+
+Alessandro: "Proceed" (P03-12), after "Ok, what now?" (P03-11).
+- CI "Build, test, format" passed on PR #6; the PR was squash-merged as `a187e29` with a written message.
+- No answer was given on the two open questions (keep `DevelopmentCurrentUser` until Phase 7; reword `.claude/rules/backend.md` "project to DTOs" or accept the exception) or on an optional ADR, so they stay open in `docs/PROGRESS.md`.
 
 ## Docs verified (links)
 

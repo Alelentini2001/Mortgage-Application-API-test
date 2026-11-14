@@ -443,3 +443,17 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
 - **Purpose:** local AI security review of PR #6 on Alessandro's subscription.
 - **Outcome:** no findings at confidence 8 or above (it listed 9 attack surfaces checked and why each holds), so no false-positive filter sub-tasks ran.
 - `/code-review` (high effort) on PR #6 ran inline in the lead agent, with no subagent: 7 findings, all low and none a correctness bug (1 altitude, 1 reuse, 1 conventions, 2 simplification, 2 efficiency). Resolutions in the phase file, "Review gate".
+
+### P03-11 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > Ok, what now?
+- **Purpose:** status question at Checkpoint B.
+- **Outcome:** CI had passed on PR #6; the agent listed the review, the open decisions and the `approved` step.
+
+### P03-12 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > Proceed
+- **Purpose:** Checkpoint B approval of Phase 3 (treated as `approved`, as "Proceed" was in Phase 1).
+- **Outcome:**
+  - PR #6 squash-merged as `a187e29` with a written message.
+  - The open decisions (`DevelopmentCurrentUser` until Phase 7, the `backend.md` DTO-projection rule, an optional ADR) were not answered, so they stay open.

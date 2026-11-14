@@ -1,9 +1,9 @@
 # Progress
 
 ## Resume here
-- **Phase:** 03 (API + persistence + validation, the minimum submittable product). PR [#6](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/6) is open on `phase-03-api`, **waiting for Alessandro at Checkpoint B**. Phase file: `docs/progress/phase-03-api.md`.
+- **Phase:** 03 (API + persistence + validation, the minimum submittable product) **merged** to `main` via [#6](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/6) (squash `a187e29`). Alessandro approved it with "Proceed". Phase file: `docs/progress/phase-03-api.md`.
 - **Built:** four endpoints under `/api/applications` (create 201 + `Location`, get, synchronous assess 201, get assessment), validation at the boundary over one Core rule set, strict JSON, owner-scoped EF Core SQLite persistence with an initial migration, ProblemDetails without exception text, startup options validation, OpenAPI + Scalar in Development, `requests.http`; 258 unit + 89 integration tests.
-- **Next action:** Alessandro reviews PR #6 and replies `approved` (or asks for changes). Then: squash-merge with a written message, mark Phase 3 merged here, `/clear`, and start Phase 4 ∥ Phase 6 (master prompt B5 parallel plan).
+- **Next action:** Alessandro runs `/clear`, then starts Phase 4 (Docker) and Phase 6 (background assessments) in parallel, each in its own worktree (master prompt B5 parallel plan: they must not share files; if both need `Program.cs` or compose, serialise them). Merge 4 first, rebase 6, re-run the gates, merge 6.
 - **Carry into later phases:**
   - Phase 4: connection string location and the startup-migration ADR (security I1).
   - Phase 5: `[LoggerMessage]` with allowlisted fields only + log-capture test (S1 part b); real 500s are logged by the framework today and must be covered.
@@ -18,7 +18,7 @@
   - `security-auditor` S10 (Phase 1): keep or redact local paths in the verbatim prompt logs before the repo goes public.
   - `spec-checker` questions (status wording, constraint rows R44/R50, final tag, optional scope R30–R33): see `docs/progress/phase-01-spec.md`, "Open issues".
   - Later: branch protection on `main` (require the CI check).
-- **Last verify:** `./scripts/verify.sh` full → PASSED (347 tests, 91 hook cases, clean tree) on `phase-03-api` at `acbb482`, 2026-11-14. CI on PR #6: see the PR.
+- **Last verify:** `./scripts/verify.sh` full → PASSED (347 tests, 91 hook cases, clean tree) on `phase-03-api` at `acbb482`; CI "Build, test, format" passed on PR #6, 2026-11-14.
 
 ## Phases
 
@@ -27,7 +27,7 @@
 | 00 | Harness + skeleton | Merged | `phase-00-harness` | [#1](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/1) | 2/2 + 91 hook cases | 2026-11-14 |
 | 01 | Spec + production layers | Merged | `phase-01-spec` | [#3](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/3) | docs only (18 golden examples for Phase 2) | 2026-11-14 |
 | 02 | Core domain + calculator (TDD) | Merged | `phase-02-core` | [#5](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/5) | 215 unit + 1 integration placeholder, 216/216 | 2026-11-14 |
-| 03 | API + persistence + validation (MVP) | PR open (Checkpoint B) | `phase-03-api` | [#6](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/6) | 258 unit + 89 integration, 347/347 | 2026-11-14 |
+| 03 | API + persistence + validation (MVP) | Merged | `phase-03-api` | [#6](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/6) | 258 unit + 89 integration, 347/347 | 2026-11-14 |
 | 04 | Docker | Not started | — | — | — | — |
 | 05 | Logging + instrumentation | Not started | — | — | — | — |
 | 06 | Background assessments | Not started | — | — | — | — |
