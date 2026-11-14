@@ -7,7 +7,7 @@ IMPORTANT: Resume protocol. At the start of every session, read `docs/PROGRESS.m
 ## Workflow
 - Phases run through `/phase <NN> <name>`. Stop at Checkpoint A (plan) and Checkpoint B (PR) and wait for Alessandro's `approved`.
 - For any real choice, give 2-3 options with trade-offs and a recommendation, then stop. Log who decided.
-- The author never grades its own work: reviews run in fresh-context subagents.
+- The author never grades its own work: reviews run in fresh-context subagents, plus `/code-review` and `/security-review` locally on every PR (posted as a PR comment). No AI review runs in CI.
 - Verify .NET / ASP.NET Core APIs against Microsoft Learn (learn.microsoft.com) before using them, and record the links in the phase file.
 - Log every subagent prompt verbatim in `docs/ai/PROMPTS.md`.
 - Repo docs, commits and PR text are written in plain, normal English.

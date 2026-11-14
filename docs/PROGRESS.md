@@ -6,7 +6,7 @@
 - **Open decisions / blockers for Alessandro:**
   - Add `docs/spec/ORIGINAL_SPEC.md` (blocks Phase 1).
   - Live hook proof needs one interactive Claude Code session started in the repo (accept the trust dialog; `claude` CLI login had expired).
-  - Later: `/install-github-app`, `ANTHROPIC_API_KEY` repo secret, branch protection on `main`.
+  - Later: branch protection on `main` (require the CI check).
 - **Last verify:** `./scripts/verify.sh` full → PASSED (2 tests, 73 hook cases), 2026-11-14.
 
 ## Phases

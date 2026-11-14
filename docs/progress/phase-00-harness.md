@@ -150,11 +150,20 @@ A lean, enforced agent harness (memory files, rules, subagents, skills, hooks, p
 | D11 | Protect the harness from the agent | (a) `protect-files.sh` blocks Edit/Write to `.claude/settings*.json`, `.claude/hooks/**`, `.githooks/**`, `.github/workflows/**`; harness changes then need you to approve a one-off edit · (b) leave editable; reviews + PR diff catch changes | **(a)** after Phase 0 merges, so later phases can't silently weaken guardrails |
 | D12 | Server-side supply chain + secrets | (a) Add a SHA-pinned Gitleaks job to CI, `nuget.config` (nuget.org only + source mapping), `RestorePackagesWithLockFile` + `--locked-mode` in CI, and `dependabot.yml` for actions + NuGet · (b) defer to Phase 8 | **(a) in Phase 8**: keeps Phase 0 focused. Phase 8 is the security phase |
 
+## Checkpoint B outcome (2026-11-14)
+
+Alessandro: "Ok proceed, and about the AI reviews, they should be done here with my subscription!"
+
+- **D10 applied.** The auto-approve list was narrowed to specific `dotnet`/`git`/`gh pr`/`docker` verbs (30 allow rules). Deny rules were added for `dotnet add package`/`package`/`tool`/`nuget`, `git branch -D` and `git worktree remove --force`. The message-matching `Bash(* --no-verify *)` deny was removed; the hook covers it precisely.
+- **D11 applied as permission `ask` rules, not a hard block.** Edits to `.claude/settings*.json`, `.claude/hooks/**`, `.githooks/**`, `.github/workflows/**` and `scripts/verify.sh` now always prompt Alessandro. `gh pr merge` and `gh pr comment` also prompt. A hook hard-block would have left no way to approve legitimate harness changes.
+- **D12 deferred to Phase 8.**
+- **AI reviews moved from CI to local.** `ai-code-review.yml` and `ai-security-review.yml` were deleted. No API key or secret exists anywhere. Every PR now gets local `/code-review` + `/security-review` runs on Alessandro's subscription, with the summary posted as a PR comment (phase skill step 10). Earlier mentions of those workflows in this file are kept as history.
+
 ## Prerequisites from Alessandro
 
 - [ ] **Add `docs/spec/ORIGINAL_SPEC.md`** (the PDF text). Not in the repo yet. Phase 0 can run without it; **Phase 1 is blocked until it exists.**
 - [ ] Start Docker Desktop. Needed in Phase 4; also needed sooner if the brew SDK install fails.
-- [ ] Later: `/install-github-app`, the `ANTHROPIC_API_KEY` repo secret, and branch protection on `main`.
+- [ ] Later: branch protection on `main`. (The API-key secret is no longer needed: AI reviews run locally; see Checkpoint B outcome.)
 
 ## Decisions (option chosen · alternatives · reason · decided by)
 All of D1–D9 were approved by Alessandro with the recommended option (a). See the table above and `docs/ai/DESIGN-JOURNAL.md`.
@@ -364,7 +373,7 @@ Real cases only:
 ## Open issues
 - **Live hook proof is pending.** Next interactive session started in the repo: accept the trust dialog, then repeat test (a) or (b) live and paste the block message here. Also re-login the `claude` CLI (`OAuth session expired`).
 - **`docs/spec/ORIGINAL_SPEC.md` is missing.** It blocks Phase 1.
-- **AI review workflows skip** until Alessandro adds the `ANTHROPIC_API_KEY` repo secret (and optionally runs `/install-github-app`).
+- ~~AI review workflows skip until the API key secret exists~~. Resolved at Checkpoint B: the workflows were removed and reviews run locally.
 - **Branch protection on `main`** (require CI) is for Alessandro to enable.
 - **The brew cask also installed .NET SDK 11.0.100** (unused). `global.json` pins 10.x, so builds use 10.0.404.
 

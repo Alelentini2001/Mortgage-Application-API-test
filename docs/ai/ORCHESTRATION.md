@@ -18,8 +18,8 @@ flowchart TD
     SG --> RG[Review gate<br/>dotnet-reviewer + spec-checker<br/>fresh context]
     RG --> E[Evidence<br/>phase file, PROMPTS, journal, ADRs]
     E --> PR[Pull request]
-    PR --> CI[GitHub Actions CI<br/>verify.sh]
-    PR --> AIR[AI code review +<br/>AI security review<br/>skip until API key exists]
+    PR --> CI[GitHub Actions CI<br/>verify.sh + hook tests]
+    PR --> AIR[Local /code-review +<br/>/security-review<br/>on Alessandro's subscription<br/>posted as PR comment]
     CI --> CB{{Checkpoint B}}
     AIR --> CB
     CB -->|approved| M[Squash-merge to main]
@@ -44,7 +44,8 @@ flowchart TD
 | 5 hooks | enforcement | Things that must always happen don't rely on the model remembering | Proven by script tests (see phase 0 file) |
 | Permissions (allow/deny) | enforcement | Second layer behind the hooks | Phase 0 |
 | Gitleaks pre-commit (`.githooks/`) | enforcement | Secrets never reach a commit | Phase 0 |
-| CI + 2 AI review workflows | enforcement / review | Independent check on every PR | Phase 0 |
+| CI (`ci.yml`) | enforcement | Independent `verify.sh` + hook tests on every PR | Phase 0 |
+| Local `/code-review` + `/security-review` | review | AI review on Alessandro's subscription, no API key or secret in CI; summary posted to the PR | Phase 0 onward |
 
 ## What was not installed, and why
 
@@ -58,7 +59,8 @@ flowchart TD
 ## Guardrails
 
 - Hooks: secrets, migrations and `.git` protected; destructive Bash blocked; Stop hook runs the fast verify, with a `stop_hook_active` loop guard.
-- AI review workflows: same-repo PRs only, least-privilege `permissions:`, actions pinned by commit SHA, no CI dependency on secrets.
+- CI: least-privilege `permissions:`, actions pinned by commit SHA, no secrets at all. The AI review GitHub workflows were removed (decision 2026-11-14): reviews run locally on the subscription.
+- Permissions (D10/D11): narrow auto-approve list; `ask` for harness files, `gh pr merge` and `gh pr comment`; deny for package/tool installs and destructive git.
 - Human checkpoints A and B on every phase.
 
 ## Parallel runs

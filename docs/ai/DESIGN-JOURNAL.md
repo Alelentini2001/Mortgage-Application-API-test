@@ -18,7 +18,7 @@ Chronological record of ideas, options, rejected ideas, who decided, and what ch
 - D4: whitespace-only format on each edit (~1 s). The full `dotnet format --verify-no-changes` runs in `verify.sh`.
 - D5: `.slnx` solution, the .NET 10 default.
 - D6: central package management, so package versions are audited in one file.
-- D7: AI review workflows are created now and skip until the API key secret exists.
+- D7: AI review workflows are created now and skip until the API key secret exists. **Superseded at Checkpoint B:** Alessandro wants AI reviews run on his subscription, so the workflows were removed and the reviews run locally (`/code-review`, `/security-review`), posted as PR comments.
 - D8: repo artefacts stay in normal English regardless of the chat style. `docs/PROGRESS.md` is the only progress tracker.
 - D9: the official .NET 10 SDK pkg.
 
