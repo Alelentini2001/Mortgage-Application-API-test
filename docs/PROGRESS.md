@@ -100,4 +100,4 @@ Snapshot at the end of Phase 1 (2026-11-14), produced by the `spec-checker` suba
 | R54 | Topic: assessment logic and assumptions | Follow-up | partial | Content in the rules doc; slide 2 in Phase 11 |
 | R55 | Topic: first change at scale | Follow-up | partial | Content in `PRODUCTION-LAYERS.md`, "Scaling"; slide in Phase 11 |
 
-The spec-checker's evidence for each row (the file and line it opened) is in its report, summarised in `docs/progress/phase-01-spec.md`, "Review gate".
+The spec-checker's report also had an evidence column for each row (the file and line it opened, for example `Program.cs:6` for the missing endpoints). That column was not committed. Re-run the `spec-checker` (prompt P01-03) to regenerate it. The summary is in `docs/progress/phase-01-spec.md`, "Review gate".

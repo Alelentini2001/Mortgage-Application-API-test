@@ -135,7 +135,7 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   >
   > Also proceed automatically, completing all, testing, analyzing, etc...
 - **Purpose:** run Phase 1 end to end without stopping at Checkpoint A. The scope comes from P00-09.
-- **Outcome:** the agent applied the recommended option for every decision (D1–D8, marked "decided by: agent (auto-proceed)") and still stopped before the squash-merge (Checkpoint B).
+- **Outcome:** the agent applied the recommended option for every decision (D1–D9, marked "decided by: agent (auto-proceed)") and still stopped before the squash-merge (Checkpoint B).
 
 ### P01-02 · agent→subagent (`dotnet-reviewer`) · 2026-11-14
 - **Prompt (verbatim):**
@@ -189,3 +189,13 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   ```
 - **Purpose:** the Phase 1 security gate.
 - **Outcome:** see the phase 1 file, "Security gate".
+
+### P01-05 · agent→subagent (`/security-review` skill, finder sub-task, general-purpose) · 2026-11-14
+- **Prompt:** the bundled `/security-review` instructions, shortened for a docs-only PR. It has the same structure as P00-11, with this context paragraph, verbatim:
+  ```
+  Context: Phase 1 of a .NET 10 mortgage-application API. The PR is docs only plus one Claude Code skill file: docs/spec/affordability-rules.md (calculation rules), docs/adr/0001-affordability-assessment-model.md, docs/layers/PRODUCTION-LAYERS.md (security/auth/logging design for later phases), docs/progress/phase-01-spec.md, docs/PROGRESS.md, docs/ai/PROMPTS.md, docs/ai/DESIGN-JOURNAL.md and .claude/skills/affordability-rules/SKILL.md (instructions that steer future code generation). No code, config, hook, workflow or permission changes. A security-auditor already reviewed the design (findings S1-S11 in the phase file, "Security gate").
+  ```
+  The method line also asked it to check "whether the skill file (which is loaded automatically when future code is written) would steer code into an exploitable pattern". The rest (objective, categories, exclusions, severity, confidence ≥ 0.7, output format) is word for word P00-11's text.
+- **Purpose:** local AI security review of PR #3 on Alessandro's subscription.
+- **Outcome:** no findings, so no false-positive filtering sub-tasks were needed. Its below-threshold note (`ThrowIf*` helpers put values in exception messages) was applied to rules §3 and the skill.
+- `/code-review` (high effort) ran inline in the lead agent, with no subagent. It reported 8 findings, all fixed (see the phase file, "Review gate").

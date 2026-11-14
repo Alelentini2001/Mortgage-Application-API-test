@@ -67,12 +67,12 @@ Not in scope: the test-first step (no code this phase; the `test-designer` runs 
   - `affordability-rules` was updated: it loads automatically when Core or unit-test files are touched in Phase 2.
 - **Hooks that fired:**
   - The Gitleaks pre-commit hook fired on every commit ("no leaks found").
-  - `verify-on-stop.sh` didn't need to run any build: there were no code changes.
+  - `verify-on-stop.sh`: its outcome wasn't observed in this session. By design it skips the build when only docs change, and it is still proven by script tests only (Phase 0).
 - **MCP servers:** none.
 
 ## Prompts
 
-`docs/ai/PROMPTS.md` entries P01-01 to P01-07.
+`docs/ai/PROMPTS.md` entries P01-01 to P01-05.
 
 ## What was built
 
@@ -184,7 +184,18 @@ The scanners can only prove "no secrets" for a Markdown diff. The findings come 
   - Currency isn't in the spec, so the rules say the maths is currency-agnostic and the docs assume GBP.
 - Its points left for Alessandro: see "Open issues".
 
-**PR AI reviews** (`/code-review`, `/security-review`): _filled in after the PR is opened._
+**PR AI reviews on PR #3** (local, Alessandro's subscription):
+- **`/code-review` (high, inline): 8 findings, all fixed.**
+  - §8 overclaimed that the reviewer recomputed all 18 examples (it did E1–E14).
+  - An invented "14:10" end time in "Time spent".
+  - A traceability evidence pointer that led nowhere.
+  - Two logging allowlists that disagreed (status codes and timings).
+  - A stale prompt range.
+  - No scale rule for `Checks.Limit`.
+  - A stale "D1–D8".
+  - An unobserved claim about `verify-on-stop.sh`.
+- **`/security-review` (finder sub-task P01-05): no findings.**
+  - Its below-threshold note was applied: guard-clause exceptions must not carry the value (`ThrowIf*` helpers embed it). See rules §3 and the skill.
 
 ## AI output corrected or rejected
 
@@ -192,6 +203,10 @@ Real cases only:
 1. **The lead agent wrote traceability totals without counting.** The first draft of `docs/PROGRESS.md` said "30 partial · 25 missing". A count from the table gave 27 and 28. Fixed before commit, and the line now says "(counted from the table)".
 2. **The lead agent's own spec had testability gaps, found by the fresh-context reviewer.** The first rules draft had no rounding-midpoint example. That means an implementation using banker's rounding, the exact mistake the draft warned about, would have passed every golden test (F1). The draft also had no exact summary templates and no culture rule (F3), and no scale rule for JSON (F4).
 3. **An overstated claim.** The first draft of D2 said "same outcomes as B4 for all 9 worked examples", but the recorded run covered only E1–E6 (F12). Now backed by a run over all 18.
+4. **More overclaims and an invented number in the lead agent's evidence, caught by the local `/code-review` on PR #3.**
+   - The rules said every example was recomputed by the reviewer, but E15–E18 were not.
+   - "Time spent" gave an end time ("about 14:10") that no clock reading backed.
+   - Both were fixed before Checkpoint B.
 
 ## Optimisations considered
 
@@ -223,6 +238,6 @@ Other:
 
 ## Time spent (approx.)
 
-About 25 minutes from branch to Checkpoint B, from session timestamps (13:45 branch, about 14:10 evidence). Subagent wall time: `dotnet-reviewer` about 3.3 min, `spec-checker` about 1 min.
+From commit and shell timestamps: branch created 13:45, last evidence commit 13:56 (`ff6814c`), PR #3 opened right after; the review fixes followed (see the PR). The Checkpoint B time is in the PR's last comment. Subagent wall time: `dotnet-reviewer` about 3.3 min, `spec-checker` about 1 min.
 
 ## Human review (Alessandro writes this; the agent leaves it empty)

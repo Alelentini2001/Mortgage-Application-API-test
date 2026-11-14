@@ -79,7 +79,7 @@ Three independent checks (D2). **Every check is always evaluated** and reported,
 
 **Purity:** the calculator is a pure function of (application inputs, options). It doesn't read the clock, config or the database. The use case adds `AssessedAt` from an injected `TimeProvider`.
 
-**Guard clauses:** the calculator re-checks the section 1 preconditions and throws `ArgumentOutOfRangeException` if one is broken. Validation at the API is the first layer. The guard covers other paths into the calculator, such as the Phase 6 worker re-processing stored Pending assessments (`security-auditor` S8). The exception handler returns ProblemDetails with a trace ID and no exception details outside Development.
+**Guard clauses:** the calculator re-checks the section 1 preconditions and throws `ArgumentOutOfRangeException` if one is broken. The exception names the parameter only, never its value. So don't use the `ArgumentOutOfRangeException.ThrowIf*` helpers: they put the actual value in the message. Validation at the API is the first layer. The guard covers other paths into the calculator, such as the Phase 6 worker re-processing stored Pending assessments (`security-auditor` S8). The exception handler returns ProblemDetails with a trace ID and no exception details outside Development.
 
 ## 4. Rounding and formatting
 
@@ -100,7 +100,7 @@ Three independent checks (D2). **Every check is always evaluated** and reported,
 | `LoanToIncomeMultiple` | LTI, 2 dp |
 | `MaxBorrowing` | income-based maximum borrowing (section 2), 2 dp |
 | `Decision` | `Approved` or `Declined` |
-| `Checks` | one entry per check, in the order LTV, DTI, LTI: `Name`, `Value` (2 dp), `Limit`, `Passed` |
+| `Checks` | one entry per check, in the order LTV, DTI, LTI: `Name`, `Value` (2 dp), `Limit` (the configured limit + `0.00m`, so scale 2: `4.50`, not `4.5`), `Passed` |
 | `Summary` | one sentence (section 6) |
 | `AssessmentRate` | the annual rate used, for example 0.06 |
 | `RulesVersion` | for example "1.0" |
@@ -121,7 +121,7 @@ Structured `Checks` plus one `Summary` sentence (D7). Exact templates, with `{v}
 - **Rounding edge.** If a check fails **and** its rounded value equals its rounded limit, append ` before rounding` to that check's text. This applies to any of the three checks (E11, E13). A passing value can never display above its limit: rounding is monotone and the limits have at most 2 dp.
 - Exact characters: `≤` is U+2264 and `×` is U+00D7.
 - The summary never contains the applicant's raw income, expenses, deposit or property value.
-- **Logging allowlist.** Logs, span attributes and metric tags carry only the application ID, assessment ID, decision and `RulesVersion`. They never carry an input, an output value (loan, LTV, DTI, LTI, payment, max borrowing) or the `Summary`/`Checks`: derived values reveal income, deposit and property value (`AGENTS.md`, "Never log … personal data"; `docs/layers/PRODUCTION-LAYERS.md`, "Observability").
+- **Logging allowlist.** Logs, span attributes and metric tags carry only the application ID, assessment ID, decision and `RulesVersion`. Status codes and timings are also allowed (they're not personal data). They never carry an input, an output value (loan, LTV, DTI, LTI, payment, max borrowing) or the `Summary`/`Checks`: derived values reveal income, deposit and property value (`AGENTS.md`, "Never log … personal data"; `docs/layers/PRODUCTION-LAYERS.md`, "Observability").
 
 ## 7. Assumptions
 
@@ -135,7 +135,7 @@ Structured `Checks` plus one `Summary` sentence (D7). Exact templates, with `{v}
 
 ## 8. Worked examples (golden tests for Phase 2)
 
-Inputs are income / monthly expenses / deposit / property value / term. Each row was computed with `System.Decimal` using exactly the formulas above, and independently recomputed by the `dotnet-reviewer` with Python `decimal` at 28 and 50 digits (evidence: `docs/progress/phase-01-spec.md`, "Worked-example check" and "Review gate").
+Inputs are income / monthly expenses / deposit / property value / term. Every row was computed with `System.Decimal` using exactly the formulas above. E1–E14 were also independently recomputed by the `dotnet-reviewer` with Python `decimal` at 28 and 50 digits (E10–E14 are the cases it proposed). E15–E18 were computed by the lead agent only (evidence: `docs/progress/phase-01-spec.md`, "Worked-example check" and "Review gate").
 
 | # | Inputs | Loan | LTV % | Payment | DTI % | LTI | MaxBorrowing | Decision | What it tests |
 |---|---|---|---|---|---|---|---|---|---|
