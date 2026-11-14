@@ -324,3 +324,12 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   ```
 - **Purpose:** requirement traceability at the end of Phase 2.
 - **Outcome:** see the phase 2 file, "Review gate", and `docs/PROGRESS.md`, "Requirement traceability".
+
+### P02-08 · agent→subagent (`/security-review` skill, finder sub-task, general-purpose) · 2026-11-14
+- **Prompt:** the bundled `/security-review` instructions (objective, categories, methodology, severity, confidence, hard exclusions and precedents), condensed into one prompt with the same content. The context paragraph and method line, verbatim:
+  ```
+  Context: Phase 2 of a .NET 10 mortgage-application API. The PR adds the pure domain in src/MortgageApplications.Core (AffordabilityCalculator, AffordabilityOptions.Validate, InputGuard, SummaryBuilder, DecimalMath, the MortgageApplication and AffordabilityAssessment entities, records AffordabilityInputs/AffordabilityResult/CheckResult with redacted ToString), an InternalsVisibleTo item for the unit test project, unit tests, and docs. There is no HTTP endpoint, persistence, auth or logging code yet: the API only exposes /health. A security-auditor already reviewed this diff (findings S1–S6 in docs/progress/phase-02-core.md, "Security gate"), and a dotnet-reviewer and a /code-review pass ran; their fixes are in the diff. Rules: docs/spec/affordability-rules.md (sections 1, 3, 6), .claude/rules/security.md, AGENTS.md. Method: also check whether anything in this Core code would become exploitable once Phase 3 maps it to HTTP (for example an exception message or ToString carrying personal financial data, an entity invariant that can be bypassed, an ID that leaks or can be guessed).
+  ```
+- **Purpose:** local AI security review of PR #5 on Alessandro's subscription.
+- **Outcome:** no findings at confidence 8 or above, so no false-positive filtering sub-tasks were needed.
+- `/code-review` (high effort) ran inline in the lead agent, with no subagent: 8 findings, 3 fixed in `08d86d3` (see the phase file, "Review gate").

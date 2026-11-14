@@ -110,7 +110,7 @@ Checked with WebFetch on 2026-11-14 (net-10.0 view):
 
 ## What was built
 
-Commits on `phase-02-core`: `3947624` (failing tests + stubs), `9989eb6` (calculator), `932f529` (entities), `39e0595` (review and security fixes).
+Commits on `phase-02-core`: `3947624` (failing tests + stubs), `9989eb6` (calculator), `932f529` (entities), `39e0595` (review and security fixes), `d439c3e` (evidence), `08d86d3` (`/code-review` fixes).
 
 - `src/MortgageApplications.Core/Affordability/`
   - `AffordabilityCalculator.cs`: the pure calculator (rules §2–§6).
@@ -177,7 +177,7 @@ These failures come from the stubs throwing, not from assertions. That is the "c
 
 **Green** (commits `9989eb6` calculator, `932f529` entities): 205 of 205 unit tests pass on the first full run. Full verify is in the next subsection.
 
-Added / total / passing: 205 unit tests added (the Phase 0 placeholder `HarnessSmokeTests` in the unit project was removed); 206 in the solution with the integration placeholder; 206 passing.
+Added / total / passing: 215 unit tests at the end (205 at the red commit, 8 from the gate fixes, 2 from `/code-review`) (the Phase 0 placeholder `HarnessSmokeTests` in the unit project was removed); 216 in the solution with the integration placeholder; 216 passing.
 
 What each test class proves:
 
@@ -193,19 +193,19 @@ What each test class proves:
 
 ### Verify
 
-Final run: `./scripts/verify.sh` (full), 2026-11-14, on `phase-02-core` at `39e0595` (clean tree):
+Final run: `./scripts/verify.sh` (full), 2026-11-14, on `phase-02-core` at `08d86d3` (clean tree, after the `/code-review` fixes):
 ```
     0 Warning(s)
     0 Error(s)
-  total: 214
+  total: 216
   failed: 0
-  succeeded: 214
+  succeeded: 216
   skipped: 0
-  duration: 889ms
+  duration: 989ms
 hook tests: 91 passed, 0 failed
 VERIFY PASSED (full)
 ```
-214 = 213 unit tests + 1 integration placeholder.
+216 = 215 unit tests + 1 integration placeholder. (At `39e0595`, before the `/code-review` fixes: 214 passed, 91 hook cases.)
 
 First run, before the review fixes, at `932f529`:
 ```
@@ -281,6 +281,21 @@ False positives (from the auditor): no deposit upper bound (the minimum-loan rul
 | N3 | No exact summaries for E4, E7, E10, E16 | No change: dropped as G4 at selection (P02-04) |
 
 **Test-first for the fixes.** The fixes were written before their tests. To check the tests really test them, I stashed the `src` changes and ran the new tests against the old code: 7 of 8 new tests failed. The eighth, N4, passes on both versions because the code was already correct. Then I restored the fixes: 213 of 213 pass.
+
+**`/code-review` (high effort, inline in the lead agent, on `main...phase-02-core` at `d439c3e`).** 8 findings, reported with the review tool:
+
+| # | Finding | Outcome |
+|---|---|---|
+| 1 | `Complete` stored the caller's `Checks` list by reference; it could be changed after validation | **Fixed** (`08d86d3`): store a read-only copy and validate the copy; new test fails on the old code |
+| 2 | "Approved exactly when all checks pass" exists in three places | **Partly fixed** by #5 (the summary now takes the calculator's decision). The check in `Complete` stays on purpose: it guards against hand-built results. Making `Decision` a computed property would change the record Phase 3 maps, so it is left for that phase. |
+| 3 | `RulesVersion` isn't trimmed or length-limited | **Skipped**: rules §1 says only "required, not blank". A length limit belongs with the Phase 3 column. |
+| 4 | `Complete` checks the argument before the state | **No change**: argument-first is the .NET convention; Phase 6 should check `Status` before calling `Complete`. |
+| 5 | `SummaryBuilder` re-derived the decision and picked the unit by name | **Fixed** (`08d86d3`): takes `Decision`; units follow the fixed check order. Golden summaries unchanged. |
+| 6 | `OwnerId` has no length bound or trimming | **Skipped**: belongs with Phase 7 (`sub` claim) and the Phase 3 column. |
+| 7 | `tests/CLAUDE.md` "No logic in tests beyond setup" vs the loops in the property and concurrency tests | **Skipped, for Alessandro**: P2-D4 approved these tests; whether to write the exception into `tests/CLAUDE.md` is your call. |
+| 8 | `AddPercentError` also checks the LTI multiple | **Fixed** (`08d86d3`): renamed `AddLimitError` |
+
+**`/security-review` (P02-08).** The finder sub-task reported **no findings** at confidence 8 or above, so no false-positive filter sub-tasks ran. It rejected, with reasons: value leaks in exceptions, `ToString` leaks, `Summary`, entity bypass, hand-built results (S3), v7 IDs (S6), assessment IDOR (S2, Phase 3), entity serialisation, overflow, culture, `InternalsVisibleTo`, deposit bound.
 
 **`spec-checker` (P02-07).** Two rows changed: **R28 missing → met** (Core business-logic tests) and **R29 missing → partial** (validation rules tested at domain level; the 400 `ValidationProblemDetails` tests come in Phase 3). Totals: **1 met, 28 partial, 26 missing** (was 0 / 27 / 28). It read the phase file before the results were written, so its "not run yet" note is out of date: `verify.sh` results are above. Its open questions: whether domain-level guard tests count for R29 (it said partial; so do I), R22/R24 depend on the Phase 3 abstraction choice, and R25 waits for Phase 9.
 

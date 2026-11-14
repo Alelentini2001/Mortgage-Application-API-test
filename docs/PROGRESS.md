@@ -2,7 +2,7 @@
 
 ## Resume here
 - **Phase:** 02 (core domain + calculator, TDD) on branch `phase-02-core`, PR open, **waiting for Alessandro's Checkpoint B**. Phase file: `docs/progress/phase-02-core.md`.
-- **Built:** pure `AffordabilityCalculator` (rules v1.0), `AffordabilityOptions.Validate()`, input guard, `MortgageApplication` and `AffordabilityAssessment` entities; 213 unit tests (golden E1–E19, boundaries, guard, culture, property, entities).
+- **Built:** pure `AffordabilityCalculator` (rules v1.0), `AffordabilityOptions.Validate()`, input guard, `MortgageApplication` and `AffordabilityAssessment` entities; 215 unit tests (golden E1–E19, boundaries, guard, culture, property, entities).
 - **Next action:** Alessandro reviews the PR and replies `approved` → squash-merge → `/clear` → `/phase 03 api`.
 - **Carry into later phases:**
   - Phase 3: owner scoping for assessments through the application (security S2); `ValidateOnStart` for `AffordabilityOptions` (S4); 500s without exception text (S5); EF Core mapping for `MortgageApplication` (review R4); HTTP 400 validation tests (R29).
@@ -10,10 +10,11 @@
   - Phase 6 no silent queue drops; Phase 7 secure default policy and a fail-closed dev token endpoint; Phase 8 the rate-limit decision or an accepted risk (all from Phase 1).
 - **Open decisions / blockers for Alessandro:**
   - Optional ADR for the Core domain shape (P2-D1/D2): `/adr` is user-invoked only.
+  - Whether to write the property-test exception into `tests/CLAUDE.md` ("No logic in tests beyond setup"; `/code-review` finding 7).
   - `security-auditor` S10 (Phase 1): keep or redact local paths in the verbatim prompt logs before the repo goes public.
   - `spec-checker` questions (status wording, constraint rows R44/R50, final tag, optional scope R30–R33): see `docs/progress/phase-01-spec.md`, "Open issues".
   - Later: branch protection on `main` (require the CI check).
-- **Last verify:** `./scripts/verify.sh` full → PASSED (214 tests, 91 hook cases) on `phase-02-core` at `39e0595`, 2026-11-14.
+- **Last verify:** `./scripts/verify.sh` full → PASSED (216 tests, 91 hook cases) on `phase-02-core` at `08d86d3`, 2026-11-14.
 
 ## Phases
 
@@ -21,7 +22,7 @@
 |---|---|---|---|---|---|---|
 | 00 | Harness + skeleton | Merged | `phase-00-harness` | [#1](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/1) | 2/2 + 91 hook cases | 2026-11-14 |
 | 01 | Spec + production layers | Merged | `phase-01-spec` | [#3](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/3) | docs only (18 golden examples for Phase 2) | 2026-11-14 |
-| 02 | Core domain + calculator (TDD) | PR open (Checkpoint B) | `phase-02-core` | (PR link added on merge) | 213 unit + 1 integration placeholder, 214/214 | 2026-11-14 |
+| 02 | Core domain + calculator (TDD) | PR open (Checkpoint B) | `phase-02-core` | [#5](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/5) | 215 unit + 1 integration placeholder, 216/216 | 2026-11-14 |
 | 03 | API + persistence + validation (MVP) | Not started | — | — | — | — |
 | 04 | Docker | Not started | — | — | — | — |
 | 05 | Logging + instrumentation | Not started | — | — | — | — |
