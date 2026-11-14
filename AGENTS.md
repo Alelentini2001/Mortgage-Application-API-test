@@ -37,6 +37,15 @@ Tests run on Microsoft.Testing.Platform (set in `global.json`). xUnit v3 filters
 - Conventional commits (`feat:`, `fix:`, `test:`, `build:`, `docs:`, `chore:`, `refactor:`, `ci:`).
 - Never force-push, never `--no-verify`, never commit secrets.
 
+## Commits and PRs: easy to read, still technical
+- Subject: `type(scope): what changed`, imperative, at most 72 characters. Scopes: `core`, `api`, `infra`, `tests`, `docs`, `harness`, `ci`. Example: `feat(core): add affordability calculator with LTV, DTI and LTI checks`.
+- Body: one line on **why**, then at most 5 bullets on **what changed**. One idea per bullet, one line each.
+- Name real things in backticks (`AffordabilityCalculator`, `POST /api/applications`). Give numbers with units (`45%`, `2 dp`, `1,000 GBP`).
+- No bare internal IDs. Write "reviewer: max borrowing ignored the property (F5)", not "fix F5". Spell out an acronym the first time it appears in a message (loan-to-value (LTV)).
+- One `Co-Authored-By` trailer, at the end.
+- PR descriptions follow `.github/pull_request_template.md`.
+- Squash-merge with a written message, not GitHub's list of every branch commit: `gh pr merge <n> --squash --subject "<PR title> (#<n>)" --body-file <file>`, where the file holds the PR's "What changed" bullets.
+
 ## Definition of done
 1. Tests written first where there is logic; `./scripts/verify.sh` passes and its output is shown.
 2. Security gate (Gitleaks, Semgrep, security review) and review gate (fresh-context reviewer, spec check) are run; findings are fixed or justified.

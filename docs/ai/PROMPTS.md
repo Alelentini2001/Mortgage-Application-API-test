@@ -208,3 +208,13 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   - D1–D9 approved as recommended (D4 stays income-based), ADR 0001 Accepted.
   - PR #3 squash-merged as `d1c096a` after CI passed.
   - `security-auditor` S10 and the `spec-checker` questions were not answered, so they stay open.
+
+### P01-07 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > Also make the commits and stuff done easier to read when pushing!! Easy but technical too
+- **Purpose:** make commit messages, PR descriptions and squash-merge messages easier to read.
+- **Outcome:**
+  - New "Commits and PRs" rules in `AGENTS.md`.
+  - A PR template (`.github/pull_request_template.md`).
+  - The phase skill now squash-merges with a written message.
+  - It applies from now on. Commits already on `main` were not rewritten: that would need a force push, which the repo forbids.
