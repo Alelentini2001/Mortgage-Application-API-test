@@ -1,8 +1,8 @@
 # 0001. Affordability assessment model
 
-- **Status:** Proposed (applied in Phase 1; awaiting Alessandro at Checkpoint B)
+- **Status:** Accepted (2026-11-14, Checkpoint B of Phase 1)
 - **Date:** 2026-11-14
-- **Decided by:** the agent's recommendation, applied under Alessandro's "proceed automatically" instruction for Phase 1 (P01-01). Alessandro confirms or changes it at Checkpoint B.
+- **Decided by:** Alessandro (on the agent's recommendation). The agent applied it under the "proceed automatically" instruction (P01-01), and Alessandro approved it at Checkpoint B with "Proceed" (P01-06).
 
 ## Context
 
@@ -20,7 +20,7 @@ Supporting choices:
 - One fixed assessment rate (6%) instead of a product rate plus a buffer, because there is no rate input.
 - Comparisons use full-precision `decimal`. Outputs are rounded once to 2 dp with `AwayFromZero` and normalised to scale 2.
 - The thresholds and a `RulesVersion` live in `AffordabilityOptions`. Every assessment stores the version, the rate and the limits it used.
-- MaxBorrowing is income-based and documented as ignoring the property. The `dotnet-reviewer` (F5) proposed also capping it at 90% LTV. That was not adopted for now, because it would change B4's own worked example (E1 max 381,535.82 → 270,000.00). It is listed for Alessandro at Checkpoint B.
+- MaxBorrowing is income-based and documented as ignoring the property. The `dotnet-reviewer` (F5) proposed also capping it at 90% LTV. That was not adopted for now, because it would change B4's own worked example (E1 max 381,535.82 → 270,000.00). Alessandro kept the income-based version at Checkpoint B.
 - The calculator is pure: no clock, config or database access.
 
 ## Decision

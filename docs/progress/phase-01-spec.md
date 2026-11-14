@@ -1,6 +1,6 @@
 # Phase 01: Spec + production layers
 
-Status: **Ready for Checkpoint B** · Branch: `phase-01-spec` · PR: — · Started: 2026-11-14 · Finished: —
+Status: **Merged** (squash `d1c096a`) · Branch: `phase-01-spec` · PR: [#3](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/3) · Started: 2026-11-14 · Finished: 2026-11-14
 
 ## Goal
 
@@ -28,15 +28,23 @@ Not in scope: the test-first step (no code this phase; the `test-designer` runs 
 
 | # | Question | Options | Chosen | Decided by |
 |---|---|---|---|---|
-| D1 | Which interest rate drives the payment? The spec has no rate input. | (a) One fixed **assessment rate of 6%** from `AffordabilityOptions`. (b) Add an interest-rate field to the application: the spec lists exactly five fields. (c) Product rate + 3 pp stress buffer: needs a product rate the spec doesn't give. | **(a)**. Simple, explainable, configurable. | agent (auto-proceed) |
-| D2 | Which checks decide the result? B4 has LTV ≤ 90%, DTI ≤ 45% and Loan ≤ MaxBorrowing. | (a) B4 as written. But MaxBorrowing = min(4.5 × income, the loan at which DTI is exactly 45%), so the third check repeats the DTI check: E3 and E5 fail it for the same reason twice. (b) **Three independent checks: LTV ≤ 90%, DTI ≤ 45%, loan-to-income (LTI) ≤ 4.5×.** MaxBorrowing is still reported, but it isn't a separate check. (c) Two checks: LTV and Loan ≤ MaxBorrowing; this hides the DTI reason. | **(b)**. Each failure has exactly one reason in the explanation. Same decisions as B4 on all 18 worked examples. Invariant: Approved ⇒ Loan ≤ MaxBorrowing (0 violations in 200,000 random samples). | agent (auto-proceed) |
-| D3 | Do the checks compare rounded or unrounded values? | (a) **Compare full-precision `decimal` values; round only the outputs.** (b) Round each metric to 2 dp, then compare. | **(a)**. It follows the "round once at the end" rule and keeps the D2 invariant exact. Cost: at a limit a value like 45.000128% shows as "45.00%" but fails. The summary then says "before rounding" (E11, E13). | agent (auto-proceed) |
-| D4 | What does "maximum borrowing" cover? | (a) **Income-based only**: min(LTI cap, DTI cap), floored at 0. (b) Also cap at 90% of the property value (`dotnet-reviewer` F5). | **(a), now labelled "income-based; ignores property value and deposit"**. (b) is a reasonable alternative, but it changes B4's own E1 (max 381,535.82 → 270,000.00). **Open for Alessandro.** | agent (auto-proceed) |
-| D5 | Threshold values | (a) **B4's values: LTV 90%, DTI 45%, LTI 4.5×, rate 6%**. (b) Stricter (85% / 40% / 4.0×). | **(a)**. Common UK-style limits; the spec says realism is not assessed. | agent (auto-proceed) |
-| D6 | How is the rule set versioned? | (a) **A `RulesVersion` string in `AffordabilityOptions`, stamped on every assessment; bumped by hand whenever an option changes.** (b) A hash of the thresholds. | **(a)**, plus the rate and limits stored with each assessment (F7), so a forgotten bump doesn't make old results unexplainable. | agent (auto-proceed) |
-| D7 | Explanation format | (a) **A structured list of checks (name, value, limit, passed) plus one summary sentence with exact templates.** (b) One free-text string. | **(a)**. Testable, and API clients can render it. The summary sentence meets "a short explanation". | agent (auto-proceed) |
-| D8 | Input limits the calculator can assume (enforced by validation in Phase 3) | (a) **Income 1–10,000,000; expenses 0–1,000,000 per month; property value 1,000–100,000,000 (raised from 1 when D9 was added; `security-auditor` S11 noticed an early draft of this row still said 1); term 5–40 whole years; money ≤ 2 dp.** (b) Validate only "positive" and deposit < property. | **(a)**. Clear 400s instead of absurd results, and well inside `decimal` range. These are our assumptions, not the spec's; the rules doc says so. | agent (auto-proceed) |
-| D9 | Minimum loan (`dotnet-reviewer` F11) | (a) **Loan ≥ 1,000, so deposit ≤ property − 1,000 (validation → 400).** (b) Allow any loan > 0 and list tiny loans as an assumption. | **(a)**. Without it, a 0.01 loan is "Approved" with DTI 0.00% and LTI 0.00×, which reads as nonsense. | agent (auto-proceed) |
+| D1 | Which interest rate drives the payment? The spec has no rate input. | (a) One fixed **assessment rate of 6%** from `AffordabilityOptions`. (b) Add an interest-rate field to the application: the spec lists exactly five fields. (c) Product rate + 3 pp stress buffer: needs a product rate the spec doesn't give. | **(a)**. Simple, explainable, configurable. | agent (auto-proceed); approved by Alessandro at Checkpoint B |
+| D2 | Which checks decide the result? B4 has LTV ≤ 90%, DTI ≤ 45% and Loan ≤ MaxBorrowing. | (a) B4 as written. But MaxBorrowing = min(4.5 × income, the loan at which DTI is exactly 45%), so the third check repeats the DTI check: E3 and E5 fail it for the same reason twice. (b) **Three independent checks: LTV ≤ 90%, DTI ≤ 45%, loan-to-income (LTI) ≤ 4.5×.** MaxBorrowing is still reported, but it isn't a separate check. (c) Two checks: LTV and Loan ≤ MaxBorrowing; this hides the DTI reason. | **(b)**. Each failure has exactly one reason in the explanation. Same decisions as B4 on all 18 worked examples. Invariant: Approved ⇒ Loan ≤ MaxBorrowing (0 violations in 200,000 random samples). | agent (auto-proceed); approved by Alessandro at Checkpoint B |
+| D3 | Do the checks compare rounded or unrounded values? | (a) **Compare full-precision `decimal` values; round only the outputs.** (b) Round each metric to 2 dp, then compare. | **(a)**. It follows the "round once at the end" rule and keeps the D2 invariant exact. Cost: at a limit a value like 45.000128% shows as "45.00%" but fails. The summary then says "before rounding" (E11, E13). | agent (auto-proceed); approved by Alessandro at Checkpoint B |
+| D4 | What does "maximum borrowing" cover? | (a) **Income-based only**: min(LTI cap, DTI cap), floored at 0. (b) Also cap at 90% of the property value (`dotnet-reviewer` F5). | **(a), now labelled "income-based; ignores property value and deposit"**. (b) is a reasonable alternative, but it changes B4's own E1 (max 381,535.82 → 270,000.00). **Open for Alessandro.** | agent (auto-proceed); approved by Alessandro at Checkpoint B |
+| D5 | Threshold values | (a) **B4's values: LTV 90%, DTI 45%, LTI 4.5×, rate 6%**. (b) Stricter (85% / 40% / 4.0×). | **(a)**. Common UK-style limits; the spec says realism is not assessed. | agent (auto-proceed); approved by Alessandro at Checkpoint B |
+| D6 | How is the rule set versioned? | (a) **A `RulesVersion` string in `AffordabilityOptions`, stamped on every assessment; bumped by hand whenever an option changes.** (b) A hash of the thresholds. | **(a)**, plus the rate and limits stored with each assessment (F7), so a forgotten bump doesn't make old results unexplainable. | agent (auto-proceed); approved by Alessandro at Checkpoint B |
+| D7 | Explanation format | (a) **A structured list of checks (name, value, limit, passed) plus one summary sentence with exact templates.** (b) One free-text string. | **(a)**. Testable, and API clients can render it. The summary sentence meets "a short explanation". | agent (auto-proceed); approved by Alessandro at Checkpoint B |
+| D8 | Input limits the calculator can assume (enforced by validation in Phase 3) | (a) **Income 1–10,000,000; expenses 0–1,000,000 per month; property value 1,000–100,000,000 (raised from 1 when D9 was added; `security-auditor` S11 noticed an early draft of this row still said 1); term 5–40 whole years; money ≤ 2 dp.** (b) Validate only "positive" and deposit < property. | **(a)**. Clear 400s instead of absurd results, and well inside `decimal` range. These are our assumptions, not the spec's; the rules doc says so. | agent (auto-proceed); approved by Alessandro at Checkpoint B |
+| D9 | Minimum loan (`dotnet-reviewer` F11) | (a) **Loan ≥ 1,000, so deposit ≤ property − 1,000 (validation → 400).** (b) Allow any loan > 0 and list tiny loans as an assumption. | **(a)**. Without it, a 0.01 loan is "Approved" with DTI 0.00% and LTI 0.00×, which reads as nonsense. | agent (auto-proceed); approved by Alessandro at Checkpoint B |
+
+## Checkpoint B outcome (2026-11-14)
+
+Alessandro: "Proceed" (P01-06).
+- D1–D9 were approved as recommended. D4 stays income-based: the LTV cap (`dotnet-reviewer` F5) was not adopted.
+- ADR 0001 is Accepted. The rules doc status is accepted.
+- No answer was given on `security-auditor` S10 or the `spec-checker` questions, so they stay open (see "Open issues").
+- CI "Build, test, format" passed on the PR head `ef22157`. The PR was squash-merged as `d1c096a`.
 
 ## Docs verified (links)
 
@@ -72,7 +80,7 @@ Not in scope: the test-first step (no code this phase; the `test-designer` runs 
 
 ## Prompts
 
-`docs/ai/PROMPTS.md` entries P01-01 to P01-05.
+`docs/ai/PROMPTS.md` entries P01-01 to P01-06.
 
 ## What was built
 
@@ -214,10 +222,9 @@ None. A docs-only phase.
 
 ## Open issues
 
-Decisions for Alessandro at Checkpoint B:
-- **All of D1–D9** were made by the agent under auto-proceed. Confirm, or change any of them.
-- **D4 / F5:** keep MaxBorrowing income-based, or also cap it at 90% of the property value? The second changes E1's max to 270,000.00 and E2's to 270,000.00.
-- **ADR 0001 status:** Proposed → Accepted once you confirm.
+Resolved at Checkpoint B: D1–D9 approved, D4 kept income-based, ADR 0001 Accepted.
+
+Still open for Alessandro:
 - **spec-checker questions:**
   - Keep "partial" for designed-not-built (or split it out)?
   - Do the constraint rows R44 and R50 stay in the map or move to the Phase 11 checklist?

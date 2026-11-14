@@ -1,6 +1,6 @@
 # Affordability rules
 
-Rules version: **1.0** · Status: proposed in Phase 1 (decisions D1–D9 in `docs/progress/phase-01-spec.md`, [ADR 0001](../adr/0001-affordability-assessment-model.md)) · Source: master prompt B4, changed as recorded in section 9. Reviewed before any code by the `dotnet-reviewer` (findings F1–F12 in the phase file).
+Rules version: **1.0** · Status: **accepted** at Phase 1 Checkpoint B (2026-11-14, PR #3) (decisions D1–D9 in `docs/progress/phase-01-spec.md`, [ADR 0001](../adr/0001-affordability-assessment-model.md)) · Source: master prompt B4, changed as recorded in section 9. Reviewed before any code by the `dotnet-reviewer` (findings F1–F12 in the phase file).
 
 The spec says the logic "does not need to be realistic or comprehensive" but must be "simple, reasonable" and "clearly explained". These rules are deliberately simple. Every number in an assessment can be recomputed by hand from this page and the values stored with the assessment.
 

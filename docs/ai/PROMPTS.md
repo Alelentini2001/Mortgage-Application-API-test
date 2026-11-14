@@ -199,3 +199,12 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
 - **Purpose:** local AI security review of PR #3 on Alessandro's subscription.
 - **Outcome:** no findings, so no false-positive filtering sub-tasks were needed. Its below-threshold note (`ThrowIf*` helpers put values in exception messages) was applied to rules §3 and the skill.
 - `/code-review` (high effort) ran inline in the lead agent, with no subagent. It reported 8 findings, all fixed (see the phase file, "Review gate").
+
+### P01-06 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > Proceed
+- **Purpose:** Checkpoint B approval of Phase 1.
+- **Outcome:**
+  - D1–D9 approved as recommended (D4 stays income-based), ADR 0001 Accepted.
+  - PR #3 squash-merged as `d1c096a` after CI passed.
+  - `security-auditor` S10 and the `spec-checker` questions were not answered, so they stay open.

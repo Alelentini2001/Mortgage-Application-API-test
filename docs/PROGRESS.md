@@ -1,30 +1,25 @@
 # Progress
 
 ## Resume here
-- **Phase:** 01 (spec + production layers) at **Checkpoint B** on branch `phase-01-spec`. It was run end to end under Alessandro's "proceed automatically" instruction (P01-01). Phase 00 is merged (PR #1, live hook proof PR #2).
-- **Done in Phase 1:**
-  - affordability rules v1.0 with 18 golden examples;
-  - ADR 0001;
-  - all 14 production layers;
-  - the 55-requirement traceability map below;
-  - `dotnet-reviewer` (12 findings), `security-auditor` (PASS; 11 findings) and `spec-checker` gates.
-  - Evidence: `docs/progress/phase-01-spec.md`.
-- **Next action:** Alessandro reviews the Phase 1 PR and the decisions, then says `approved`. The agent then squash-merges, and Phase 2 (`/phase 02 core`) can start.
+- **Phase:** 01 (spec + production layers) **merged** to `main` via [#3](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/3) (squash `d1c096a`). Alessandro approved it with "Proceed": D1–D9 as recommended, D4 income-based, ADR 0001 Accepted.
+- **Next action:** Alessandro runs `/clear`, then `/phase 02 core`. Phase 2 is the core domain + calculator, test-first. Its inputs:
+  - the golden cases are E1–E18 in `docs/spec/affordability-rules.md` §8;
+  - the `test-designer` proposes the remaining cases;
+  - the `affordability-rules` skill loads automatically when Core or unit-test files are touched.
+- **Carry into later phases** (from the Phase 1 security gate): Phase 3 owner scoping via `ICurrentUser`; Phase 5 allowlist log test; Phase 6 no silent queue drops; Phase 7 secure default policy and a fail-closed dev token endpoint; Phase 8 the rate-limit decision or an accepted risk.
 - **Open decisions / blockers for Alessandro:**
-  - Confirm or change D1–D9 (all decided by the agent under auto-proceed). In particular D4: is MaxBorrowing income-based, or also capped at 90% LTV?
-  - Confirm ADR 0001 (Proposed → Accepted).
   - `security-auditor` S10: keep or redact local paths in the verbatim prompt logs before the repo goes public.
-  - `spec-checker` questions (status wording, constraint rows, final tag, optional scope): see the phase file, "Open issues".
+  - `spec-checker` questions (status wording, constraint rows R44/R50, final tag, optional scope R30–R33): see `docs/progress/phase-01-spec.md`, "Open issues".
   - Later: branch protection on `main` (require the CI check).
-- **Last verify:** `./scripts/verify.sh` full → PASSED (2 tests, 91 hook cases) on `phase-01-spec` at `317c612`, 2026-11-14.
+- **Last verify:** `./scripts/verify.sh` full → PASSED (2 tests, 91 hook cases) on `phase-01-spec` at `317c612`; `--fast` passed on later commits; CI "Build, test, format" passed on PR #3 head `ef22157`, 2026-11-14.
 
 ## Phases
 
 | # | Phase | Status | Branch | PR | Tests | Date |
 |---|---|---|---|---|---|---|
 | 00 | Harness + skeleton | Merged | `phase-00-harness` | [#1](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/1) | 2/2 + 91 hook cases | 2026-11-14 |
-| 01 | Spec + production layers | Checkpoint B | `phase-01-spec` | — | docs only (18 golden examples for Phase 2) | 2026-11-14 |
-| 02 | Core domain + calculator (TDD) | Not started | — | — | — | — |
+| 01 | Spec + production layers | Merged | `phase-01-spec` | [#3](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/3) | docs only (18 golden examples for Phase 2) | 2026-11-14 |
+| 02 | Core domain + calculator (TDD) | Ready | — | — | — | — |
 | 03 | API + persistence + validation (MVP) | Not started | — | — | — | — |
 | 04 | Docker | Not started | — | — | — | — |
 | 05 | Logging + instrumentation | Not started | — | — | — | — |
