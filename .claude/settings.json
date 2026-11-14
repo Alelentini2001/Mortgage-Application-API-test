@@ -52,10 +52,13 @@
       "Bash(git reset --hard *)",
       "Bash(rm -rf *)",
       "Bash(dotnet add package *)",
-      "Bash(dotnet package *)",
+      "Bash(dotnet package add *)",
+      "Bash(dotnet package remove *)",
       "Bash(dotnet tool *)",
       "Bash(dotnet nuget *)",
       "Bash(git branch -D *)",
+      "Bash(git branch --delete --force *)",
+      "Bash(git worktree remove -f *)",
       "Bash(git worktree remove --force *)"
     ]
   },

@@ -13,15 +13,12 @@ name="$(basename "$file_path")"
 
 block() { echo "Blocked by protect-files.sh: $1 ($file_path)" >&2; exit 2; }
 
-case "$name" in
-  .env|.env.*)       block "environment files may contain secrets" ;;
-  *.pem|*.key|*.pfx) block "certificate/key files are never edited by the agent" ;;
-esac
-
-case "$file_path" in
-  */.git/*)    block "git internals are off limits" ;;
-  */secrets/*) block "secrets folders are off limits" ;;
-esac
+# Shared with block-dangerous-bash.sh: one list of protected paths.
+protected_regex="$(cat "$(dirname "$0")/protected-paths.regex")" ||
+  { echo "protect-files: protected-paths.regex missing" >&2; exit 2; }
+if grep -Eq "$protected_regex" <<<"$file_path"; then
+  block "secrets, key files and git internals are never edited by the agent"
+fi
 
 # Migrations merged to main are immutable: add a new migration instead.
 # Migrations created on the current branch can still be fixed.

@@ -9,6 +9,10 @@ set -euo pipefail
 
 command -v python3 >/dev/null || { echo "block-dangerous-bash: python3 is required" >&2; exit 2; }
 
+PROTECTED_REGEX="$(cat "$(dirname "$0")/protected-paths.regex")" ||
+  { echo "block-dangerous-bash: protected-paths.regex missing" >&2; exit 2; }
+export PROTECTED_REGEX
+
 exec python3 -I -c '
 import json, os, re, shlex, sys
 
@@ -28,10 +32,11 @@ WRAPPERS = {"sudo", "command", "builtin", "exec", "nohup", "time", "nice", "time
 WRAPPER_ARG_FLAGS = {"-n", "-I", "-L", "-P", "-d", "-E", "-s", "-u", "-g", "-C", "-k", "-o", "-e", "-i"}
 DOWNLOADERS = r"(curl|wget)"
 INTERPRETERS = r"((ba|z|da|k)?sh|python[0-9.]*|node|perl|ruby)"
-PROTECTED = re.compile(r"(^|/)(\.env(\..*)?|[^/]*\.(pem|key|pfx))$|(^|/)secrets/|(^|/)\.git/")
+# Shared with protect-files.sh: one list of protected paths.
+PROTECTED = re.compile(os.environ["PROTECTED_REGEX"])
 
 def check_whole(text):
-    if re.search(DOWNLOADERS + r"\b[^|]*\|\s*(sudo\s+)?(env\s+)?" + INTERPRETERS + r"\b", text):
+    if re.search(DOWNLOADERS + r"\b.*\|\s*(sudo\s+)?(env\s+)?" + INTERPRETERS + r"\b", text):
         block("piping a download into an interpreter is not allowed")
     if re.search(r"<\(\s*" + DOWNLOADERS + r"\b", text):
         block("executing a download via process substitution is not allowed")
@@ -46,7 +51,7 @@ def tokenize(text):
         return list(lexer)
     except ValueError:
         # Unbalanced quotes (e.g. heredoc text): fall back to a plain split.
-        return re.split(r"\s+", text.replace(";", " ; ").replace("&&", " && ").replace("||", " || "))
+        return re.sub(r"([;&|(){}<>]+)", r" \1 ", text).split()
 
 def segments(tokens):
     current = []
@@ -133,6 +138,15 @@ def check_git(args):
     elif sub in ("switch", "checkout"):
         if any(a in ("-f", "--force") or is_prefix(a, "--discard-changes", 5) for a in cleaned):
             block(f"git {sub} --force discards local changes")
+    elif sub == "branch":
+        short = "".join(a[1:] for a in cleaned if re.match(r"^-[a-zA-Z]+$", a))
+        delete = "d" in short or "D" in short or "--delete" in cleaned
+        force = "D" in short or "f" in short or "--force" in cleaned
+        if delete and force:
+            block("force-deleting a branch can lose unmerged work")
+    elif sub == "worktree":
+        if "remove" in cleaned and any(a in ("-f", "--force") for a in cleaned):
+            block("git worktree remove --force can lose uncommitted work")
     elif sub == "clean":
         if any(re.match(r"^-[a-zA-Z]*f[a-zA-Z]*$", a) or a == "--force" for a in cleaned):
             block("git clean -f deletes untracked files")
@@ -178,10 +192,12 @@ def check(text, depth=0):
         prog = os.path.basename(words[0])
         args = words[1:]
         check_writes(words, prog, args)
-        if re.fullmatch(r"(ba|z|da|k)?sh", prog) and "-c" in args:
-            idx = args.index("-c")
-            if idx + 1 < len(args):
-                check(args[idx + 1], depth + 1)
+        if re.fullmatch(r"(ba|z|da|k)?sh", prog):
+            # -c may be combined with other flags (bash -lc, sh -ec).
+            for idx, a in enumerate(args):
+                if re.match(r"^-[a-zA-Z]*c[a-zA-Z]*$", a) and idx + 1 < len(args):
+                    check(args[idx + 1], depth + 1)
+                    break
         elif prog == "git":
             check_git(args)
         elif prog == "rm":
