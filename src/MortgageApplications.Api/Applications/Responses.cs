@@ -22,6 +22,9 @@ public sealed record ApplicationResponse(
         application.PropertyValue,
         application.TermYears,
         application.CreatedAt);
+
+    /// <summary>Only the ID: the amounts are personal financial data (rules section 6, security L1).</summary>
+    public override string ToString() => $"{nameof(ApplicationResponse)} {{ Id = {Id} }}";
 }
 
 /// <summary>One assessment. <see cref="Result"/> is null unless the status is Completed (Phase 6 adds Pending).</summary>
@@ -40,6 +43,10 @@ public sealed record AssessmentResponse(
         assessment.CreatedAt,
         assessment.AssessedAt,
         assessment.Result is null ? null : AssessmentResultResponse.From(assessment.Result));
+
+    /// <summary>Logging allowlist fields only (rules section 6).</summary>
+    public override string ToString() =>
+        $"{nameof(AssessmentResponse)} {{ Id = {Id}, ApplicationId = {ApplicationId}, Status = {Status} }}";
 }
 
 /// <summary>The rules section 5 outputs. Money, percentages and the multiple have 2 decimal places.</summary>
@@ -68,7 +75,15 @@ public sealed record AssessmentResultResponse(
         result.Summary,
         result.AssessmentRate,
         result.RulesVersion);
+
+    /// <summary>Logging allowlist fields only: the values and summary reveal the inputs (rules section 6).</summary>
+    public override string ToString() =>
+        $"{nameof(AssessmentResultResponse)} {{ Decision = {Decision}, RulesVersion = {RulesVersion} }}";
 }
 
 /// <summary>One check (LTV, DTI or LTI): its value, the configured limit and whether it passed.</summary>
-public sealed record CheckResponse(string Name, decimal Value, decimal Limit, bool Passed);
+public sealed record CheckResponse(string Name, decimal Value, decimal Limit, bool Passed)
+{
+    /// <summary>Leaves out the value, which reveals the inputs (rules section 6).</summary>
+    public override string ToString() => $"{nameof(CheckResponse)} {{ Name = {Name}, Passed = {Passed} }}";
+}

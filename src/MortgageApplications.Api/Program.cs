@@ -24,11 +24,13 @@ builder.Services.AddInfrastructure(
     builder.Configuration.GetConnectionString("MortgageApplications")
     ?? throw new InvalidOperationException("Connection string 'MortgageApplications' is missing."));
 
-// Strict JSON (P3-D8): unknown properties and numbers sent as strings are 400s; enums are names, not numbers.
+// Strict JSON (P3-D8): unknown properties, numbers sent as strings and duplicate properties are 400s;
+// enums are names, not numbers.
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow;
     options.SerializerOptions.NumberHandling = JsonNumberHandling.Strict;
+    options.SerializerOptions.AllowDuplicateProperties = false;
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
 

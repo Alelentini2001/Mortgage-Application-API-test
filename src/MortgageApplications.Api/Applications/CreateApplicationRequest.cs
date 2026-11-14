@@ -13,24 +13,24 @@ namespace MortgageApplications.Api.Applications;
 public sealed record CreateApplicationRequest : IValidatableObject
 {
     /// <summary>Gross annual income, 1 to 10,000,000, at most 2 decimal places.</summary>
-    [Required]
+    [Required(ErrorMessage = RequiredMessage)]
     public decimal? AnnualIncome { get; init; }
 
     /// <summary>Existing monthly commitments (excluding the new mortgage), 0 to 1,000,000, at most 2 decimal places.</summary>
-    [Required]
+    [Required(ErrorMessage = RequiredMessage)]
     public decimal? MonthlyExpenses { get; init; }
 
     /// <summary>0 or more, at most 2 decimal places, leaving a loan of at least 1,000.</summary>
-    [Required]
+    [Required(ErrorMessage = RequiredMessage)]
     public decimal? DepositAmount { get; init; }
 
     /// <summary>1,000 to 100,000,000, at most 2 decimal places.</summary>
-    [Required]
+    [Required(ErrorMessage = RequiredMessage)]
     public decimal? PropertyValue { get; init; }
 
     /// <summary>Whole years, 5 to 40.</summary>
-    [Required]
-    [Range(5, 40)]
+    [Required(ErrorMessage = RequiredMessage)]
+    [Range(5, 40, ErrorMessage = "Must be between 5 and 40 whole years.")]
     public int? TermYears { get; init; }
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) =>
@@ -44,4 +44,10 @@ public sealed record CreateApplicationRequest : IValidatableObject
         DepositAmount.GetValueOrDefault(),
         PropertyValue.GetValueOrDefault(),
         TermYears.GetValueOrDefault());
+
+    /// <summary>Personal financial data must never reach a log (rules section 6, security L1).</summary>
+    public override string ToString() => $"{nameof(CreateApplicationRequest)} {{ redacted }}";
+
+    // Same wording style as the Core rules; the default messages name the C# property (TermYears).
+    private const string RequiredMessage = "Required.";
 }

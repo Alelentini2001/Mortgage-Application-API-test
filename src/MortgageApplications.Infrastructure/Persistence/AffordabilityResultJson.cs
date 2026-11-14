@@ -31,7 +31,12 @@ internal static class AffordabilityResultJson
 
     private static string Serialize(AffordabilityResult? result) => JsonSerializer.Serialize(result, _options);
 
-    private static AffordabilityResult? Deserialize(string json) =>
-        JsonSerializer.Deserialize<AffordabilityResult>(json, _options)
-        ?? throw new InvalidOperationException("A stored assessment result is empty.");
+    // The serializer builds Checks as a List; wrap a copy read-only, as AffordabilityAssessment.Complete does, so the
+    // comparer's "same instance" snapshot stays valid for tracked loads (review F3).
+    private static AffordabilityResult? Deserialize(string json)
+    {
+        var result = JsonSerializer.Deserialize<AffordabilityResult>(json, _options)
+            ?? throw new InvalidOperationException("A stored assessment result is empty.");
+        return result with { Checks = Array.AsReadOnly(result.Checks.ToArray()) };
+    }
 }

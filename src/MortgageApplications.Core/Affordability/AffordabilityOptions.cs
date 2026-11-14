@@ -8,7 +8,7 @@ namespace MortgageApplications.Core.Affordability;
 /// </summary>
 public sealed class AffordabilityOptions
 {
-    /// <summary>The stored column length (Phase 3); validated here so a version always fits.</summary>
+    /// <summary>A sanity bound: a rules version is a short label such as "1.0" (it is stored inside the result JSON).</summary>
     public const int MaxRulesVersionLength = 16;
 
     /// <summary>Annual assessment rate, for example 0.06 (6%).</summary>
