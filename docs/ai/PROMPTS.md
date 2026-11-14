@@ -275,3 +275,52 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   > approved
 - **Purpose:** approve the recommended test selection (including the new E19) and the answers to the `test-designer` ambiguities.
 - **Outcome:** recorded in the phase file, "Tests"; tests written next.
+
+### P02-05 · agent→subagent (`security-auditor`) · 2026-11-14
+- **Prompt (verbatim):**
+  ```
+  Run the security gate for Phase 2 of the repo at /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-02-core, diff against main: `git -C /Users/ale_ssd/Developer/Mortgage-Application-API-test diff main...HEAD`). cd into that directory first.
+
+  Phase 2 adds the pure domain in src/MortgageApplications.Core (affordability calculator, options validation, input guard, summary builder, decimal maths, MortgageApplication and AffordabilityAssessment entities), an InternalsVisibleTo item in the Core csproj, unit tests in tests/MortgageApplications.UnitTests, and docs (docs/progress/phase-02-core.md, docs/ai/PROMPTS.md). No HTTP, persistence, auth, logging, packages, workflow, hook or permission changes.
+
+  Run your scanners: gitleaks on history and working tree, semgrep with p/csharp and p/secrets (--metrics=off, --error, --json; count results from the JSON, never read $? after a pipe; add --baseline-commit main for a diff run), and the dotnet vulnerable-package scan. Then review the diff against OWASP Top 10:2025 and the repo rules in .claude/rules/security.md and docs/spec/affordability-rules.md sections 1, 3 and 6. Focus on what this code will expose once Phase 3 wires it to HTTP: whether any exception message, ToString, record print or summary can carry an applicant's input or a derived value (the guard must never include the value; rules section 6 logging allowlist); whether invalid or extreme input can crash, overflow or loop (decimal overflow, division by zero, Pow); whether the options validation fails closed; and whether entity invariants can be bypassed (public setters, state transitions). Note that records generate a ToString that prints every property: say whether that is a real risk for Phase 5 logging and what to do about it.
+
+  Output your table (tool / command / result) and findings table (id, severity, finding, file:line, recommendation), separating real findings from false positives, and a PASS/FAIL verdict.
+  ```
+- **Purpose:** the Phase 2 security gate.
+- **Outcome:** see the phase 2 file, "Security gate".
+
+### P02-06 · agent→subagent (`dotnet-reviewer`) · 2026-11-14
+- **Prompt (verbatim):**
+  ```
+  Review the Phase 2 diff of the repo at /Users/ale_ssd/Developer/Mortgage-Application-API-test: `git -C /Users/ale_ssd/Developer/Mortgage-Application-API-test diff main...HEAD` (branch phase-02-core). You have fresh context; do not trust the author's claims, check them.
+
+  What the phase is: the pure domain in src/MortgageApplications.Core, test-first. Authoritative rules: docs/spec/affordability-rules.md (rules v1.0). Approved plan, decisions P2-D1 to P2-D6, test selection and the 13 implementation answers: docs/progress/phase-02-core.md. Conventions: AGENTS.md, src/MortgageApplications.Core/CLAUDE.md, tests/CLAUDE.md, .claude/rules/tests.md.
+
+  Check, in this order:
+  1. Maths: does AffordabilityCalculator follow rules section 2 exactly (formulas, order, decimal only), section 3 (full-precision inclusive comparisons, every check evaluated), section 4 (round once, AwayFromZero, scale 2, invariant culture) and section 6 (exact summary templates, "before rounding" rule)? Recompute at least E1, E11, E13 and E19 independently (Python decimal is fine) and compare with tests/MortgageApplications.UnitTests/Affordability/GoldenCases.cs.
+  2. Guard and options: do InputGuard and AffordabilityOptions.Validate match the section 1 bounds exactly, including inclusive/exclusive edges, "at most 2 dp" by value, and the minimum loan of 1,000? Can any exception message contain an input value?
+  3. Entities: can MortgageApplication or AffordabilityAssessment reach an invalid state? Are the state transitions and UTC rules sound? Anything Phase 3 (EF Core mapping) will need that this design makes hard, without speculating?
+  4. Framework usage: Guid.CreateVersion7, Math.Round, decimal.Scale, CultureInfo, ArgumentOutOfRangeException constructors, records holding IReadOnlyList (equality, ToString).
+  5. Tests: do they prove what docs/progress/phase-02-core.md "Tests" says? Any weak assertion, vacuous property test, culture test that could pass vacuously, or missing boundary from the approved selection? Is the seeded generator really inside the section 1 bounds?
+
+  Report only correctness, security and requirement gaps, plus test gaps that matter. One line per finding: id, severity (high/medium/low), file:line, problem, suggested fix. Separate "real" from "nit / taste". Do not edit files.
+  ```
+- **Purpose:** fresh-context review gate for the Phase 2 diff.
+- **Outcome:** see the phase 2 file, "Review gate".
+
+### P02-07 · agent→subagent (`spec-checker`) · 2026-11-14
+- **Prompt (verbatim):**
+  ```
+  Re-run the requirement traceability for the repo at /Users/ale_ssd/Developer/Mortgage-Application-API-test at the end of Phase 2 (branch phase-02-core; the working tree is the branch head).
+
+  Inputs: docs/spec/ORIGINAL_SPEC.md (source of truth), the current table in docs/PROGRESS.md "Requirement traceability" (R1–R55, snapshot from Phase 1), docs/spec/affordability-rules.md, and docs/progress/phase-02-core.md (what Phase 2 claims to have built).
+
+  Phase 2 added the Core domain and calculator with unit tests: src/MortgageApplications.Core/Affordability/*.cs, src/MortgageApplications.Core/Applications/*.cs, tests/MortgageApplications.UnitTests/**. No API, persistence, validation endpoint, README or Docker work.
+
+  For every requirement R1–R55, give the status now (met / partial / missing) using the same key as docs/PROGRESS.md: "met" needs code or a test that actually does it; design alone is "partial"; a domain class that exists but is not reachable through the API is at most "partial" for an API requirement. Open the files and cite file:line or test name as evidence. Only change a row's status if Phase 2 changed it, and say why.
+
+  Output: one Markdown table with columns `ID | Requirement (short) | Status | Where (file / planned phase) | Evidence`, then the totals (met / partial / missing), then a short list of gaps or ambiguities that need a human decision. Keep requirement text under 12 words.
+  ```
+- **Purpose:** requirement traceability at the end of Phase 2.
+- **Outcome:** see the phase 2 file, "Review gate", and `docs/PROGRESS.md`, "Requirement traceability".
