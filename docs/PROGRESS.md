@@ -1,18 +1,20 @@
 # Progress
 
 ## Resume here
-- **Phase:** 01 (spec + production layers) **merged** to `main` via [#3](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/3) (squash `d1c096a`). Alessandro approved it with "Proceed": D1–D9 as recommended, D4 income-based, ADR 0001 Accepted.
-- **Commit and PR style** (PR #4): `AGENTS.md`, "Commits and PRs", plus `.github/pull_request_template.md`. Squash-merges use a written message. Applies from Phase 2 on.
-- **Next action:** Alessandro runs `/clear`, then `/phase 02 core`. Phase 2 is the core domain + calculator, test-first. Its inputs:
-  - the golden cases are E1–E18 in `docs/spec/affordability-rules.md` §8;
-  - the `test-designer` proposes the remaining cases;
-  - the `affordability-rules` skill loads automatically when Core or unit-test files are touched.
-- **Carry into later phases** (from the Phase 1 security gate): Phase 3 owner scoping via `ICurrentUser`; Phase 5 allowlist log test; Phase 6 no silent queue drops; Phase 7 secure default policy and a fail-closed dev token endpoint; Phase 8 the rate-limit decision or an accepted risk.
+- **Phase:** 02 (core domain + calculator, TDD) on branch `phase-02-core`, PR open, **waiting for Alessandro's Checkpoint B**. Phase file: `docs/progress/phase-02-core.md`.
+- **Built:** pure `AffordabilityCalculator` (rules v1.0), `AffordabilityOptions.Validate()`, input guard, `MortgageApplication` and `AffordabilityAssessment` entities; 215 unit tests (golden E1–E19, boundaries, guard, culture, property, entities).
+- **Next action:** Alessandro reviews the PR and replies `approved` → squash-merge → `/clear` → `/phase 03 api`.
+- **Carry into later phases:**
+  - Phase 3: owner scoping for assessments through the application (security S2); `ValidateOnStart` for `AffordabilityOptions` (S4); 500s without exception text (S5); EF Core mapping for `MortgageApplication` (review R4); HTTP 400 validation tests (R29).
+  - Phase 5: `[LoggerMessage]` with allowlisted fields only + log-capture test (S1 part b, from Phase 1 too).
+  - Phase 6 no silent queue drops; Phase 7 secure default policy and a fail-closed dev token endpoint; Phase 8 the rate-limit decision or an accepted risk (all from Phase 1).
 - **Open decisions / blockers for Alessandro:**
-  - `security-auditor` S10: keep or redact local paths in the verbatim prompt logs before the repo goes public.
+  - Optional ADR for the Core domain shape (P2-D1/D2): `/adr` is user-invoked only.
+  - Whether to write the property-test exception into `tests/CLAUDE.md` ("No logic in tests beyond setup"; `/code-review` finding 7).
+  - `security-auditor` S10 (Phase 1): keep or redact local paths in the verbatim prompt logs before the repo goes public.
   - `spec-checker` questions (status wording, constraint rows R44/R50, final tag, optional scope R30–R33): see `docs/progress/phase-01-spec.md`, "Open issues".
   - Later: branch protection on `main` (require the CI check).
-- **Last verify:** `./scripts/verify.sh` full → PASSED (2 tests, 91 hook cases) on `phase-01-spec` at `317c612`; `--fast` passed on later commits; CI "Build, test, format" passed on PR #3 head `ef22157`, 2026-11-14.
+- **Last verify:** `./scripts/verify.sh` full → PASSED (216 tests, 91 hook cases) on `phase-02-core` at `08d86d3`, 2026-11-14.
 
 ## Phases
 
@@ -20,7 +22,7 @@
 |---|---|---|---|---|---|---|
 | 00 | Harness + skeleton | Merged | `phase-00-harness` | [#1](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/1) | 2/2 + 91 hook cases | 2026-11-14 |
 | 01 | Spec + production layers | Merged | `phase-01-spec` | [#3](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/3) | docs only (18 golden examples for Phase 2) | 2026-11-14 |
-| 02 | Core domain + calculator (TDD) | Ready | — | — | — | — |
+| 02 | Core domain + calculator (TDD) | PR open (Checkpoint B) | `phase-02-core` | [#5](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/5) | 215 unit + 1 integration placeholder, 216/216 | 2026-11-14 |
 | 03 | API + persistence + validation (MVP) | Not started | — | — | — | — |
 | 04 | Docker | Not started | — | — | — | — |
 | 05 | Logging + instrumentation | Not started | — | — | — | — |
@@ -33,10 +35,10 @@
 
 ## Requirement traceability
 
-Snapshot at the end of Phase 1 (2026-11-14), produced by the `spec-checker` subagent (prompt P01-03) from `docs/spec/ORIGINAL_SPEC.md`. Re-run at the end of every phase.
+Snapshot at the end of Phase 2 (2026-11-14), produced by the `spec-checker` subagent (prompt P02-07) from `docs/spec/ORIGINAL_SPEC.md`. Phase 2 changed R28 and R29 only. Re-run at the end of every phase.
 
 **Status key.** "Met" needs code or a test. Design written down but not built is "partial".
-**Totals now:** 0 met · 27 partial · 28 missing (counted from the table).
+**Totals now:** 1 met · 28 partial · 26 missing (counted from the table; Phase 1 was 0 / 27 / 28).
 
 | ID | Requirement (short) | Spec section | Status | Where (file / planned phase) |
 |---|---|---|---|---|
@@ -67,8 +69,8 @@ Snapshot at the end of Phase 1 (2026-11-14), produced by the `spec-checker` suba
 | R25 | Clean and readable code | Tech | missing | Phases 2-9 (clean-up pass in Phase 9) |
 | R26 | Exposes a JSON API | Tech | partial | `/health` only; endpoints in Phase 3 |
 | R27 | Automated tests are required | Testing | partial | Placeholder smoke tests only; real tests in Phases 2-3 |
-| R28 | Tests for core business logic | Testing | missing | Phase 2 (TDD; golden cases from rules §8) |
-| R29 | Tests for critical validation rules | Testing | missing | Phase 3 |
+| R28 | Tests for core business logic | Testing | met | `tests/MortgageApplications.UnitTests/Affordability/` (golden E1–E19, boundaries, rounding, culture, property tests) |
+| R29 | Tests for critical validation rules | Testing | partial | Domain guard and options tested (`InputGuardTests`, `AffordabilityOptionsTests`); HTTP 400 tests in Phase 3 |
 | R30 | Optional: background processing | Optional | missing | Phase 6 |
 | R31 | Optional: authentication | Optional | missing | Phase 7 |
 | R32 | Optional: Docker support | Optional | missing | Phase 4 |
