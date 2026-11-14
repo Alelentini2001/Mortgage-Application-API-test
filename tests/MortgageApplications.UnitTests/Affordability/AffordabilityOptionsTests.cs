@@ -70,6 +70,28 @@ public sealed class AffordabilityOptionsTests
         Assert.Contains(nameof(AffordabilityOptions.RulesVersion), error, StringComparison.Ordinal);
     }
 
+    // U17: RulesVersion must fit its 16-character column (Phase 3).
+    [Fact]
+    public void Validate_rules_version_of_16_characters_returns_no_errors()
+    {
+        var options = TestData.Rules10();
+        options.RulesVersion = new string('v', 16);
+
+        Assert.Empty(options.Validate());
+    }
+
+    [Fact]
+    public void Validate_rules_version_of_17_characters_returns_one_error_without_the_value()
+    {
+        var options = TestData.Rules10();
+        options.RulesVersion = "SENTINEL-17-CHARS";
+
+        var error = Assert.Single(options.Validate());
+
+        Assert.Contains(nameof(AffordabilityOptions.RulesVersion), error, StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINEL", error, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Validate_null_rules_version_returns_one_error()
     {
