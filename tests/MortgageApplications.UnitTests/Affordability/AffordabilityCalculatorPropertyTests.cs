@@ -9,11 +9,11 @@ namespace MortgageApplications.UnitTests.Affordability;
 /// </summary>
 public sealed class AffordabilityCalculatorPropertyTests
 {
-    private const int Seed = 20261114;
-    private const int Samples = 10_000;
+    private const int _seed = 20261114;
+    private const int _samples = 10_000;
 
     // Calibrated from a real run (recorded in docs/progress/phase-02-core.md) so the invariant test can't pass vacuously.
-    private const int MinimumApproved = 500;
+    private const int _minimumApproved = 500;
 
     // P1: Approved ⇒ Loan ≤ MaxBorrowing (rules section 3).
     [Fact]
@@ -37,7 +37,7 @@ public sealed class AffordabilityCalculatorPropertyTests
         }
 
         Assert.Equal(0, violations);
-        Assert.True(approved >= MinimumApproved, $"Only {approved} of {Samples} samples were approved.");
+        Assert.True(approved >= _minimumApproved, $"Only {approved} of {_samples} samples were approved.");
     }
 
     // P2: total inside the bounds (no overflow, no division by zero), scale 2, MaxBorrowing ≥ 0, loan ≥ 1,000.
@@ -82,8 +82,8 @@ public sealed class AffordabilityCalculatorPropertyTests
 
     private static IEnumerable<AffordabilityInputs> Generate()
     {
-        var random = new Random(Seed);
-        for (var i = 0; i < Samples; i++)
+        var random = new Random(_seed);
+        for (var i = 0; i < _samples; i++)
         {
             yield return Next(random);
         }
