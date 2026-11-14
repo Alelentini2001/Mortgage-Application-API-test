@@ -2,6 +2,7 @@
 
 ## Resume here
 - **Phase:** 01 (spec + production layers) **merged** to `main` via [#3](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/3) (squash `d1c096a`). Alessandro approved it with "Proceed": D1–D9 as recommended, D4 income-based, ADR 0001 Accepted.
+- **Commit and PR style** (PR #4): `AGENTS.md`, "Commits and PRs", plus `.github/pull_request_template.md`. Squash-merges use a written message. Applies from Phase 2 on.
 - **Next action:** Alessandro runs `/clear`, then `/phase 02 core`. Phase 2 is the core domain + calculator, test-first. Its inputs:
   - the golden cases are E1–E18 in `docs/spec/affordability-rules.md` §8;
   - the `test-designer` proposes the remaining cases;
