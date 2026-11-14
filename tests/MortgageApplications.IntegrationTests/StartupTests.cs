@@ -23,13 +23,20 @@ public sealed class StartupTests
         Assert.DoesNotContain("0.987", failure.Message, StringComparison.Ordinal);
     }
 
-    // I43: no Affordability section at all must not start with zero limits.
+    // I43: no Affordability section must not start with zero limits. Review F4: only that section is missing;
+    // the connection string is put back, so the failure can only come from the options validation.
     [Fact]
     public void Startup_without_affordability_section_fails()
     {
         using var factory = new ApiFactory();
         using var missing = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
-            config.Sources.Clear()));
+        {
+            config.Sources.Clear();
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:MortgageApplications"] = "Data Source=:memory:",
+            });
+        }));
 
         var ex = Assert.ThrowsAny<Exception>(() => missing.CreateClient());
 

@@ -135,6 +135,25 @@ public sealed class ValidationTests(ApiFactory factory) : IClassFixture<ApiFacto
         Assert.Equal(["termYears"], await response.AssertValidationProblemAsync());
     }
 
+    // A1 follow-up: attribute messages use the same wording style as the Core rules, not the C# property name.
+    [Theory]
+    [MemberData(nameof(AttributeErrorRows))]
+    public async Task Post_attribute_error_message_does_not_name_the_csharp_property(string body)
+    {
+        var response = await _client.PostJsonAsync("/api/applications", body);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var text = await response.BodyAsync();
+        Assert.DoesNotContain("TermYears", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("AnnualIncome", text, StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string> AttributeErrorRows =>
+    [
+        Http.BodyWith("""{"termYears":4}"""),
+        Http.BodyWithout("annualIncome"),
+    ];
+
     // I28
     [Theory]
     [MemberData(nameof(SentinelRows))]

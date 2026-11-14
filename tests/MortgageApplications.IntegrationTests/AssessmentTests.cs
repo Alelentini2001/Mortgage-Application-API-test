@@ -1,6 +1,9 @@
 using System.Net;
 using System.Text.Json;
-using System.Text.Json.Nodes;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using MortgageApplications.Core.Affordability;
+using MortgageApplications.Infrastructure.Persistence;
 
 namespace MortgageApplications.IntegrationTests;
 
@@ -48,8 +51,10 @@ public sealed class AssessmentTests(ApiFactory factory) : IClassFixture<ApiFacto
 
         var fetched = await _client.GetPathAsync(response.Headers.Location!.OriginalString);
 
+        // Review F1: compare the raw text, so a dropped trailing zero after the SQLite/JSON round trip fails
+        // (JsonNode.DeepEquals treats 240000.0 and 240000.00 as equal).
         Assert.Equal(HttpStatusCode.OK, fetched.StatusCode);
-        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(text), JsonNode.Parse(await fetched.BodyAsync())));
+        Assert.Equal(text, await fetched.BodyAsync());
     }
 
     // I5: golden E2; Declined is a 201 result, not an error.
@@ -86,7 +91,11 @@ public sealed class AssessmentTests(ApiFactory factory) : IClassFixture<ApiFacto
 
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         Assert.Equal(HttpStatusCode.OK, fetched.StatusCode);
-        using var body = JsonDocument.Parse(await fetched.BodyAsync());
+        var text = await fetched.BodyAsync();
+        Assert.Contains("\"debtToIncomePercent\":3519936183.53", text, StringComparison.Ordinal);
+        Assert.Contains("\"loanToIncomeMultiple\":100000000.00", text, StringComparison.Ordinal);
+        Assert.Contains("\"maxBorrowing\":0.00", text, StringComparison.Ordinal);
+        using var body = JsonDocument.Parse(text);
         var result = body.RootElement.GetProperty("result");
         Assert.Equal(100000000.00m, result.GetProperty("loanAmount").GetDecimal());
         Assert.Equal(100.00m, result.GetProperty("loanToValuePercent").GetDecimal());
@@ -111,6 +120,23 @@ public sealed class AssessmentTests(ApiFactory factory) : IClassFixture<ApiFacto
         Assert.NotEqual(first.Headers.Location, second.Headers.Location);
         Assert.Equal(HttpStatusCode.OK, (await _client.GetPathAsync(first.Headers.Location!.OriginalString)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await _client.GetPathAsync(second.Headers.Location!.OriginalString)).StatusCode);
+    }
+
+    // Review F3: a result loaded from the database keeps read-only checks, like one stored by Complete.
+    [Fact]
+    public async Task Loaded_result_checks_are_read_only()
+    {
+        var applicationId = await _client.CreateApplicationAsync();
+        var created = await _client.PostJsonAsync($"/api/applications/{applicationId}/assessments", "");
+        using var body = JsonDocument.Parse(await created.BodyAsync());
+        var assessmentId = body.RootElement.GetProperty("id").GetGuid();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MortgageApplicationsDbContext>();
+
+        var assessment = await db.Assessments.SingleAsync(a => a.Id == assessmentId, Http.Ct);
+
+        var checks = Assert.IsAssignableFrom<ICollection<CheckResult>>(assessment.Result!.Checks);
+        Assert.True(checks.IsReadOnly);
     }
 
     private static (string Name, decimal Value, decimal Limit, bool Passed)[] Checks(JsonElement result) =>

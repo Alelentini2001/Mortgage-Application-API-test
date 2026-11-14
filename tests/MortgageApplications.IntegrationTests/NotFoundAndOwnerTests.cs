@@ -82,6 +82,9 @@ public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<Ap
             services => services.AddSingleton<ICurrentUser>(new TestUser("other-owner"))));
         var other = otherFactory.CreateClient();
         var unknown = await (await other.GetPathAsync($"/api/applications/{Guid.NewGuid()}")).AssertProblemAsync(HttpStatusCode.NotFound);
+        // Review F2: the other owner's host must see the same database, or the 404s below would prove nothing.
+        Assert.True(await ApplicationExistsAsync(otherFactory.Services, Guid.Parse(applicationId)));
+        var assessmentsBefore = await CountAssessmentsAsync();
 
         var getApplication = await other.GetPathAsync($"/api/applications/{applicationId}");
         var postAssessment = await other.PostJsonAsync($"/api/applications/{applicationId}/assessments", "");
@@ -93,6 +96,7 @@ public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<Ap
             Assert.Equal(Strip(unknown), Strip(problem));
         }
 
+        Assert.Equal(assessmentsBefore, await CountAssessmentsAsync());
         Assert.Equal(HttpStatusCode.OK, (await _client.GetPathAsync($"/api/applications/{applicationId}")).StatusCode);
         Assert.Equal(
             HttpStatusCode.OK,
@@ -131,6 +135,13 @@ public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<Ap
                 .Where(p => p.Name is not ("traceId" or "instance"))
                 .OrderBy(p => p.Name, StringComparer.Ordinal)
                 .Select(p => $"{p.Name}={p.Value.GetRawText()}"));
+
+    private static async Task<bool> ApplicationExistsAsync(IServiceProvider services, Guid applicationId)
+    {
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MortgageApplicationsDbContext>();
+        return await db.Applications.AnyAsync(a => a.Id == applicationId, Http.Ct);
+    }
 
     private async Task<int> CountAssessmentsAsync()
     {

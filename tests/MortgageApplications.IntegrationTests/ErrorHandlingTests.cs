@@ -32,6 +32,25 @@ public sealed class ErrorHandlingTests(ApiFactory factory) : IClassFixture<ApiFa
         Assert.DoesNotContain("stack", text, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Security I3: a client asking for HTML can't get the developer exception page or any exception text.
+    [Fact]
+    public async Task Unhandled_exception_for_an_html_client_returns_500_without_exception_details()
+    {
+        using var throwing = factory.WithWebHostBuilder(builder => builder
+            .ConfigureTestServices(services => services.AddScoped<IMortgageApplicationRepository, ThrowingRepository>()));
+        var client = throwing.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri($"/api/applications/{Guid.NewGuid()}", UriKind.Relative));
+        request.Headers.Accept.ParseAdd("text/html");
+
+        var response = await client.SendAsync(request, Http.Ct);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var text = await response.BodyAsync();
+        Assert.DoesNotContain(_marker, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Exception", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("stack", text, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class ThrowingRepository : IMortgageApplicationRepository
     {
         public Task AddAsync(MortgageApplication application, CancellationToken cancellationToken) => throw Boom();
