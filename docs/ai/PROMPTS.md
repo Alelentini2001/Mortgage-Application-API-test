@@ -175,3 +175,17 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   ```
 - **Purpose:** map `ORIGINAL_SPEC.md` into the traceability section of `docs/PROGRESS.md`.
 - **Outcome:** see the phase 1 file, "Review gate", and `docs/PROGRESS.md`, "Requirement traceability".
+
+### P01-04 · agent→subagent (`security-auditor`) · 2026-11-14
+- **Prompt (verbatim):**
+  ```
+  Run the security gate for Phase 1 of the repo at /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-01-spec, diff against main: `git -C /Users/ale_ssd/Developer/Mortgage-Application-API-test diff main...HEAD`). cd into that directory first.
+
+  Phase 1 is docs only plus one skill file: docs/spec/affordability-rules.md, docs/adr/0001-affordability-assessment-model.md, docs/layers/PRODUCTION-LAYERS.md, docs/progress/phase-01-spec.md, docs/PROGRESS.md, docs/ai/PROMPTS.md, docs/ai/DESIGN-JOURNAL.md and .claude/skills/affordability-rules/SKILL.md. No code, config, hook, workflow or permission changes.
+
+  Run your scanners: gitleaks on history and working tree, semgrep with p/secrets (--metrics=off, --error, --json; count results from the JSON, never read $? after a pipe), and the dotnet vulnerable-package scan. Then review the diff as a design-stage security review against OWASP Top 10:2025: the rules and layers documents now fix security-relevant design choices that Phases 3-8 will implement (input limits and validation, the minimum loan, no PII or derived ratios in logs, owner scoping with 404 for other users, JWT dev / Entra ID production, the dev token endpoint, rate limiting marked optional, data minimisation and retention). Flag design gaps that would lead to a real vulnerability once built (for example a missing authorization requirement, an unsafe default, or a data-exposure path such as returning or logging personal financial data), and anything in the skill file that would steer future code into an insecure pattern.
+
+  Output your table (tool / command / result) and findings table (id, severity, finding, file, recommendation), separating real findings from false positives, and a PASS/FAIL verdict.
+  ```
+- **Purpose:** the Phase 1 security gate.
+- **Outcome:** see the phase 1 file, "Security gate".

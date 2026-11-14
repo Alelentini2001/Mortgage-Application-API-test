@@ -14,6 +14,7 @@ Non-negotiables:
 - Compare unrounded values. Round each output once at the end: 2 dp, `MidpointRounding.AwayFromZero`, then `+ 0.00m` for scale 2.
 - Summary strings use `CultureInfo.InvariantCulture` and the exact templates in section 6.
 - The calculator is pure: no clock (the use case stamps `AssessedAt` via `TimeProvider`), no config reads, no I/O.
-- Never log `Summary` or `Checks`.
+- Logs and spans carry only application ID, assessment ID, decision and RulesVersion: never an input or any output value (including `Summary`/`Checks`).
+- Guard clauses: throw `ArgumentOutOfRangeException` when a section 1 precondition is broken.
 - Evaluate every rule; the explanation lists every check with its value and threshold.
 - Thresholds come from `AffordabilityOptions` and are stamped on the assessment as `RulesVersion`.

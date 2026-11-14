@@ -79,6 +79,8 @@ Three independent checks (D2). **Every check is always evaluated** and reported,
 
 **Purity:** the calculator is a pure function of (application inputs, options). It doesn't read the clock, config or the database. The use case adds `AssessedAt` from an injected `TimeProvider`.
 
+**Guard clauses:** the calculator re-checks the section 1 preconditions and throws `ArgumentOutOfRangeException` if one is broken. Validation at the API is the first layer. The guard covers other paths into the calculator, such as the Phase 6 worker re-processing stored Pending assessments (`security-auditor` S8). The exception handler returns ProblemDetails with a trace ID and no exception details outside Development.
+
 ## 4. Rounding and formatting
 
 - Checks compare **full-precision** values (D3). Nothing is rounded before a comparison.
@@ -119,7 +121,7 @@ Structured `Checks` plus one `Summary` sentence (D7). Exact templates, with `{v}
 - **Rounding edge.** If a check fails **and** its rounded value equals its rounded limit, append ` before rounding` to that check's text. This applies to any of the three checks (E11, E13). A passing value can never display above its limit: rounding is monotone and the limits have at most 2 dp.
 - Exact characters: `≤` is U+2264 and `×` is U+00D7.
 - The summary never contains the applicant's raw income, expenses, deposit or property value.
-- **Never log `Summary` or `Checks`.** They hold an individual's derived financial ratios. Logs carry only the application ID, assessment ID, decision and `RulesVersion` (`AGENTS.md`, "Never log … personal data").
+- **Logging allowlist.** Logs, span attributes and metric tags carry only the application ID, assessment ID, decision and `RulesVersion`. They never carry an input, an output value (loan, LTV, DTI, LTI, payment, max borrowing) or the `Summary`/`Checks`: derived values reveal income, deposit and property value (`AGENTS.md`, "Never log … personal data"; `docs/layers/PRODUCTION-LAYERS.md`, "Observability").
 
 ## 7. Assumptions
 
