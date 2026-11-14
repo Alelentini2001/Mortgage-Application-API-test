@@ -81,3 +81,48 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
 - **Purpose:** local AI security review on Alessandro's subscription.
 - **Outcome:** no findings at confidence ≥ 8, so no false-positive filtering sub-tasks were needed. One non-security note: if `protected-paths.regex` were missing, the hooks would fail open (exit 1). Fixed: they now exit 2.
 - `/code-review` (high effort) ran inline in the lead agent, with no subagent. It reported 7 findings, all fixed (see the phase file).
+
+### P00-09 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > Resume this project. Follow CLAUDE.md's resume protocol: read docs/PROGRESS.md ("Resume here") and docs/progress/phase-00-harness.md first, then tell me in 3 lines where we are.
+  >
+  > Before Phase 1, close the one open Phase 0 item: prove the harness LIVE in this session (the authoring session never loaded the repo's hooks, so they are only proven by script tests). Do each step with the real tool, quote the real output, and do not retry a step that is blocked:
+  > 1. Use the Write tool to create .env.example with "X=1". Expected: blocked by protect-files.sh.
+  > 2. Use the Bash tool to run `rm -r -f ./harness-probe-dir`. Expected: blocked by block-dangerous-bash.sh.
+  > 3. Use the Write tool to create src/MortgageApplications.Core/HarnessProbe.cs with badly formatted code, then show the file. Expected: whitespace formatted by format-on-edit.sh. Then delete the file.
+  > 4. Confirm the five project subagents (dotnet-reviewer, spec-checker, security-auditor, test-designer, parallel-implementer) are registered, and tell me how to check what /context loads.
+  > If any hook does not fire, stop and tell me; don't work around it.
+  > Record the live evidence in docs/progress/phase-00-harness.md ("Harness proof" + "Open issues"), update docs/PROGRESS.md, commit on a branch `chore/phase-00-live-proof`, and open a small PR. Run the local /code-review and /security-review on it per the phase skill, then stop for my approval.
+  >
+  > After that PR is merged, start Phase 1 with the phase loop: /phase 01 spec
+  > Phase 1 scope: docs/spec/affordability-rules.md (starting from master prompt B4 in docs/ai/prompts/00-master-prompt.md, re-checking the worked examples) and docs/layers/PRODUCTION-LAYERS.md filled in for this API. Have the dotnet-reviewer subagent critique the rules before any code, and have the spec-checker map docs/spec/ORIGINAL_SPEC.md into the traceability section of docs/PROGRESS.md. Stop at CHECKPOINT A with the decisions I need to make.
+- **Purpose:** prove the hooks live, then queue Phase 1.
+- **Outcome:** steps 2, 3 and 4 passed live. Step 1 was blocked by the `Read(**/.env*)` deny rule before the hook ran, so the agent stopped and asked how to prove `protect-files.sh`.
+
+### P00-10 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > Probe a .key file
+- **Purpose:** choose a live test for `protect-files.sh` on a path that only the hook protects.
+- **Outcome:** a `Write` to `certs/harness-probe.key` was blocked by `protect-files.sh`. Evidence recorded in the phase 0 file ("Live proof").
+
+### P00-11 · agent→subagent (`/security-review` skill, finder sub-task, general-purpose) · 2026-11-14
+- **Prompt:** the bundled `/security-review` instructions, shortened for a docs-only PR. Full text, verbatim:
+  ```
+  You are a senior security engineer doing a focused security review of a pull request. Read-only: do not write or edit any file, do not run destructive commands.
+
+  Repository: /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch chore/phase-00-live-proof). Get the diff with `git -C /Users/ale_ssd/Developer/Mortgage-Application-API-test diff main...HEAD` plus uncommitted changes with `git -C /Users/ale_ssd/Developer/Mortgage-Application-API-test diff HEAD`. That combined diff is the full scope.
+
+  Context: the PR is docs only. It records live evidence that the repo's Claude Code hooks fire (protect-files.sh, block-dangerous-bash.sh, format-on-edit.sh) in docs/progress/phase-00-harness.md, updates docs/PROGRESS.md, and logs prompts verbatim in docs/ai/PROMPTS.md. No code, config, hook, workflow or permission file changes. The quoted outputs include an absolute local path and hook error messages.
+
+  OBJECTIVE: identify HIGH-CONFIDENCE security vulnerabilities newly added by this PR that have real exploitation potential. Not a general review. Do not comment on existing concerns.
+  - Minimise false positives: only flag issues where you are >80% confident of actual exploitability. Skip theoretical issues, style, low impact.
+  - Exclusions: DoS; secrets or sensitive data stored on disk (handled elsewhere); rate limiting / resource exhaustion; insecure documentation (findings in documentation files such as markdown are excluded).
+  - Categories: input validation (SQL/command/XXE/template/NoSQL injection, path traversal); authn/authz (bypass, privilege escalation, sessions, JWT); crypto and secrets (hardcoded keys, passwords, tokens, weak crypto, key storage, randomness, cert validation); injection and code execution (deserialization, pickle, YAML, eval, XSS); data exposure (sensitive data logging, PII, endpoint leakage, debug info).
+  - Method: research repo context (security model, existing patterns), compare the changes against it, trace data flows, and assess each modified file. In particular check whether the new text discloses a real secret or token, or documents a working bypass of the hooks or permission rules that wasn't already in the repo.
+  - Severity: HIGH = directly exploitable (RCE, data breach, auth bypass); MEDIUM = significant impact under specific conditions; LOW = defense in depth. Report HIGH and MEDIUM only. Confidence 0.0-1.0; do not report below 0.7.
+
+  Output: markdown. For each finding: file, line, severity, category, description, exploit scenario, recommendation, confidence. If there are none, say "No findings" and give a 2-4 sentence rationale listing what you checked.
+  ```
+- **Purpose:** local AI security review of PR #2 on Alessandro's subscription.
+- **Outcome:** no findings. The sub-task checked for secrets, documented hook or permission bypasses, and injection through the logged prompts. No false-positive filtering sub-tasks were needed.
+- `/code-review` (high effort) ran inline in the lead agent, with no subagent. It reported 6 findings on the docs, all fixed (see the phase file, "Local AI reviews on PR #2").

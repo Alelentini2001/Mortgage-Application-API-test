@@ -2,11 +2,12 @@
 
 ## Resume here
 - **Phase:** 00 (harness + skeleton) **merged** to `main` via PR #1 (squash `b20c823`).
-- **Next action:** in a fresh session started in the repo, (1) prove the hooks live, then (2) run Phase 1 (`/phase 01 spec`) up to Checkpoint A. `docs/spec/ORIGINAL_SPEC.md` was added 2026-11-14.
+- **Live hook proof done** (2026-11-14) in [#2](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/2) (`chore/phase-00-live-proof`): `protect-files.sh`, `block-dangerous-bash.sh` and `format-on-edit.sh` fired live; all 5 subagents registered. Evidence: `docs/progress/phase-00-harness.md`, "Live proof".
+- **Next action:** Alessandro reviews and merges the live-proof PR, then types `/phase 01 spec` (the skill can only be started by a human) and Phase 1 runs up to Checkpoint A. `docs/spec/ORIGINAL_SPEC.md` was added 2026-11-14.
 - **Open decisions / blockers for Alessandro:**
-  - Live hook proof is still pending. A post-merge `Write` to `.env.example` from the authoring session was **not blocked** (that session loaded no repo hooks). First action of the next fresh session in the repo: repeat it and record the block message in the phase 0 file.
+  - Approve and merge the live-proof PR.
   - Later: branch protection on `main` (require the CI check).
-- **Last verify:** `./scripts/verify.sh` full → PASSED (2 tests, 91 hook cases), 2026-11-14.
+- **Last verify:** `./scripts/verify.sh` full → PASSED (2 tests, 91 hook cases) on `chore/phase-00-live-proof`, 2026-11-14.
 
 ## Phases
 

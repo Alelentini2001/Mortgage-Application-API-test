@@ -1,6 +1,6 @@
 # Phase 00: Harness + skeleton
 
-Status: **Approved at Checkpoint B, merging** · Branch: `phase-00-harness` · PR: [#1](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/1) · Started: 2026-11-13 · Finished: —
+Status: **Merged** (squash `b20c823`); live hook proof added afterwards in [#2](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/2) (`chore/phase-00-live-proof`) · Branch: `phase-00-harness` · PR: [#1](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/1) · Started: 2026-11-13 · Finished: 2026-11-14
 
 ## Goal
 
@@ -161,7 +161,7 @@ Alessandro: "Ok proceed, and about the AI reviews, they should be done here with
 
 ## Prerequisites from Alessandro
 
-- [ ] **Add `docs/spec/ORIGINAL_SPEC.md`** (the PDF text). Not in the repo yet. Phase 0 can run without it; **Phase 1 is blocked until it exists.**
+- [x] **Add `docs/spec/ORIGINAL_SPEC.md`** (the PDF text). Added on `main` in `67977f2`.
 - [ ] Start Docker Desktop. Needed in Phase 4; also needed sooner if the brew SDK install fails.
 - [ ] Later: branch protection on `main`. (The API-key secret is no longer needed: AI reviews run locally; see Checkpoint B outcome.)
 
@@ -174,13 +174,14 @@ All of D1–D9 were approved by Alessandro with the recommended option (a). See 
 - A1 + docs check: lead agent only (Bash, WebFetch on code.claude.com, xunit.net, learn.microsoft.com, github.com).
 - Skills: none invoked; the project skills were created this phase.
 - MCP servers: none used.
-- Subagents: `dotnet-reviewer` and `security-auditor` roles. They ran as `general-purpose` (opus) told to load the repo's agent files, because the project agents weren't registered in this session (P00-05, P00-06).
+- Subagents: `dotnet-reviewer` and `security-auditor` roles. They ran as `general-purpose` (opus) told to load the repo's agent files, because the project agents weren't registered in the authoring session (P00-05, P00-06). They are registered in a session started in the repo (see "Live proof", step 4).
 - Hooks that fired:
   - Gitleaks pre-commit fired on all 5 harness commits ("no leaks found" each time).
-  - The Claude Code hooks were proven by direct script tests (evidence below). They did **not** fire live in this session.
+  - The Claude Code hooks were proven by direct script tests (evidence below). They did **not** fire live in the authoring session.
+  - Later, in a session started in the repo, `protect-files.sh`, `block-dangerous-bash.sh` and `format-on-edit.sh` fired live. See "Live proof" below.
 
 ## Prompts
-- `docs/ai/PROMPTS.md` entries P00-01 to P00-06. The master prompt is verbatim in `docs/ai/prompts/00-master-prompt.md`.
+- `docs/ai/PROMPTS.md` entries P00-01 to P00-11 (P00-09 to P00-11 are the live-proof session). The master prompt is verbatim in `docs/ai/prompts/00-master-prompt.md`.
 
 ## What was built
 - **Skeleton:**
@@ -233,7 +234,57 @@ All of D1–D9 were approved by Alessandro with the recommended option (a). See 
 
 **How it was tested.** Each hook script was fed the same JSON Claude Code sends on stdin (fields verified in the hooks docs).
 
-**Why not live.** A live check in this session wasn't possible: the session started outside the repo, so the repo's hooks aren't loaded. A deliberate `Write` to `.env.example` **went through** (the file was then deleted). A headless `claude -p` run in the repo also failed (`OAuth session expired`, workspace not trusted). Live proof is an open item.
+**Why not live at first.** A live check in the authoring session wasn't possible: that session started outside the repo, so the repo's hooks weren't loaded. A deliberate `Write` to `.env.example` **went through** (the file was then deleted). A headless `claude -p` run in the repo also failed (`OAuth session expired`, workspace not trusted). The live proof was done later; see "Live proof" below.
+
+### Live proof (2026-11-14, Claude Desktop Code session started in the repo)
+
+Each step used the real tool. Outputs are quoted exactly. No blocked step was retried.
+
+| # | Action (real tool) | Expected | Real result |
+|---|---|---|---|
+| 1 | `Write` `.env.example` with `X=1` | blocked by `protect-files.sh` | **Blocked, but by the permission deny rule `Read(**/.env*)`, not by the hook.** The tool returned a permission error, not a hook message, so the hook was not reached. **Not verified that no file was created:** `.env.*` is gitignored, so `git status` can't show it, and `ls -la .env.example` was denied by the same rule. Alessandro can check with `ls -la .env.example`. |
+| 1b | `Write` `certs/harness-probe.key` (`*.key` is protected by the hook only; no deny rule covers it). Added with Alessandro's approval after step 1. | blocked by `protect-files.sh` | **Blocked by the hook.** No file or `certs/` folder was created. |
+| 2 | `Bash` `rm -r -f ./harness-probe-dir` | blocked by `block-dangerous-bash.sh` | **Blocked by the hook.** |
+| 3 | `Write` `src/MortgageApplications.Core/HarnessProbe.cs` with bad formatting | reformatted by `format-on-edit.sh` | **Reformatted by the hook.** The file was then deleted with a plain `rm`; `git status` was clean. |
+| 4 | Agent types listed in the session | 5 project subagents registered | **All 5 registered:** `dotnet-reviewer`, `spec-checker`, `security-auditor`, `test-designer`, `parallel-implementer`. |
+
+Step 1, tool error:
+```
+File is covered by a Read deny rule in your permission settings and cannot be written.
+```
+
+Step 1b, hook output:
+```
+PreToolUse:Write hook error: [command hook 3]: Blocked by protect-files.sh: secrets, key files and git internals are never edited by the agent (/Users/ale_ssd/Developer/Mortgage-Application-API-test/certs/harness-probe.key)
+```
+
+Step 2, hook output:
+```
+PreToolUse:Bash hook error: [command hook 4]: Blocked by block-dangerous-bash.sh: rm -rf is not allowed; delete specific paths or use 'dotnet clean'
+```
+
+Step 3, input written (tab and trailing spaces included):
+```
+namespace MortgageApplications.Core;
+        public static class HarnessProbe
+{
+            public static int   Add( int a,int b )   =>a+b;   
+	    }
+```
+Claude Code reported "PostToolUse hook modified ... HarnessProbe.cs after your edit". File after the hook (`cat -e`, `$` marks line ends):
+```
+namespace MortgageApplications.Core;$
+$
+public static class HarnessProbe$
+{$
+    public static int Add(int a, int b) => a + b;$
+}$
+```
+
+Other live observations from the same session:
+- Writing a file under `src/MortgageApplications.Core/` loaded `src/MortgageApplications.Core/CLAUDE.md`, `.claude/rules/backend.md` and the path-scoped `affordability-rules` skill on demand.
+- `phase`, `verify-all`, `progress`, `adr` and `retro` don't appear in the agent's skill list. This is expected: they use `disable-model-invocation: true`, so only Alessandro can start them (for example by typing `/phase 01 spec`).
+- Not proven live: `verify-on-stop.sh` (Stop) and `reinject-context.sh` (SessionStart on compact). Both are still covered only by the script tests in (d) and (e).
 
 **(a) protect-files.sh**
 ```
@@ -367,6 +418,21 @@ clean code tree (only docs untracked): exit=0
 
 **`/security-review`.** **No findings** (confidence ≥ 8). Non-security note: hooks failed open (exit 1) if the regex file was missing. **Fixed:** both now exit 2 (checked by moving the file away: exit 2 from both).
 
+## Local AI reviews on PR #2 (live proof)
+
+**`/code-review` (high effort, inline).** 6 findings on the docs, all **fixed**:
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | Step 1 said "No file was created" for `.env.example`, but nothing checked it (`.env.*` is gitignored, so `git status` can't show it) | Marked "not verified". `ls -la .env.example` was denied by the same deny rule, so the agent didn't work around it. |
+| 2 | The rewritten open issue dropped the still-open "re-login the `claude` CLI" item | Restored as its own open issue |
+| 3 | Open issue claimed `*.pem` behaves like `.env*` and stated the deny/hook order as fact, with no evidence | Reworded to what was observed; `*.pem` marked "not tested live" |
+| 4 | "Prompts" section still said P00-01 to P00-06 | Now P00-01 to P00-11 |
+| 5 | "Resume here" and the status line named the branch but not the PR | Linked [#2](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/2) |
+| 6 | Orchestration line still said agents "weren't registered in this session" (ambiguous) | Now "the authoring session", with a pointer to Live proof step 4 |
+
+**`/security-review`.** **No findings** (finder sub-task P00-11). Docs-only change: no secrets, no new hook or permission bypass documented.
+
 ## AI output corrected or rejected
 Real cases only:
 1. **`block-dangerous-bash.sh` v1 bugs, caught by the agent's own hook tests before commit.**
@@ -387,8 +453,10 @@ Real cases only:
 - Format-on-edit uses `dotnet format whitespace --folder` (measured ~1.0 s) instead of a full `dotnet format` per edit (it loads the workspace and runs analyzers; not measured). Full formatting is enforced by `verify.sh`.
 
 ## Open issues
-- **Live hook proof is pending.** Next interactive session started in the repo: accept the trust dialog, then repeat test (a) or (b) live and paste the block message here. Also re-login the `claude` CLI (`OAuth session expired`).
-- **`docs/spec/ORIGINAL_SPEC.md` is missing.** It blocks Phase 1.
+- ~~Live hook proof is pending.~~ Resolved 2026-11-14 in [#2](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/2): `protect-files.sh`, `block-dangerous-bash.sh` and `format-on-edit.sh` fired live (see "Live proof"). `verify-on-stop.sh` and `reinject-context.sh` are still proven by script tests only.
+- **Re-login the `claude` CLI** (`OAuth session expired` on headless `claude -p`). Still open; not checked in the live-proof session.
+- **The `.env*` deny rule hides the hook.** The live `Write` to `.env.example` returned the deny-rule error, not the hook message (Live proof, step 1). That's fine (two layers), but a live check of the hook has to use a path only the hook covers, such as `*.key`. `*.pem` also has a `Read` deny rule, so it probably behaves the same way; not tested live.
+- ~~`docs/spec/ORIGINAL_SPEC.md` is missing.~~ Added on `main` in `67977f2`.
 - ~~AI review workflows skip until the API key secret exists~~. Resolved at Checkpoint B: the workflows were removed and reviews run locally.
 - **Branch protection on `main`** (require CI) is for Alessandro to enable.
 - **The brew cask also installed .NET SDK 11.0.100** (unused). `global.json` pins 10.x, so builds use 10.0.404.
