@@ -1,0 +1,87 @@
+# Demo requests for the Mortgage Applications API (VS Code REST Client, Rider or Visual Studio).
+# Start the API first: dotnet run --project src/MortgageApplications.Api
+# Development only: the OpenAPI document is at /openapi/v1.json and the Scalar UI at /scalar.
+
+@baseUrl = http://localhost:5227
+
+### Health
+GET {{baseUrl}}/health
+
+### Create an application (golden example E1: expected Approved)
+# @name create
+POST {{baseUrl}}/api/applications
+Content-Type: application/json
+
+{
+  "annualIncome": 85000.00,
+  "monthlyExpenses": 900.00,
+  "depositAmount": 60000.00,
+  "propertyValue": 300000.00,
+  "termYears": 30
+}
+
+### Get it back (the id comes from the response above)
+GET {{baseUrl}}/api/applications/{{create.response.body.id}}
+
+### Assess affordability (201 Created; the Location header points at the assessment)
+# @name assess
+POST {{baseUrl}}/api/applications/{{create.response.body.id}}/assessments
+
+### Get the assessment
+GET {{baseUrl}}/api/applications/{{create.response.body.id}}/assessments/{{assess.response.body.id}}
+
+### Create a high-LTV application (golden example E2: deposit 20,000, expected Declined on LTV)
+# @name createDeclined
+POST {{baseUrl}}/api/applications
+Content-Type: application/json
+
+{
+  "annualIncome": 85000.00,
+  "monthlyExpenses": 900.00,
+  "depositAmount": 20000.00,
+  "propertyValue": 300000.00,
+  "termYears": 30
+}
+
+### Assess it: still 201, a Declined result is not an error
+POST {{baseUrl}}/api/applications/{{createDeclined.response.body.id}}/assessments
+
+### Invalid input: 400 ValidationProblemDetails naming termYears
+POST {{baseUrl}}/api/applications
+Content-Type: application/json
+
+{
+  "annualIncome": 85000.00,
+  "monthlyExpenses": 900.00,
+  "depositAmount": 60000.00,
+  "propertyValue": 300000.00,
+  "termYears": 50
+}
+
+### Loan below the 1,000 minimum: 400 naming depositAmount
+POST {{baseUrl}}/api/applications
+Content-Type: application/json
+
+{
+  "annualIncome": 85000.00,
+  "monthlyExpenses": 900.00,
+  "depositAmount": 299500.00,
+  "propertyValue": 300000.00,
+  "termYears": 30
+}
+
+### Unknown property (an attempt to set the owner): 400
+POST {{baseUrl}}/api/applications
+Content-Type: application/json
+
+{
+  "annualIncome": 85000.00,
+  "monthlyExpenses": 900.00,
+  "depositAmount": 60000.00,
+  "propertyValue": 300000.00,
+  "termYears": 30,
+  "ownerId": "someone-else"
+}
+
+### Unknown id: 404 ProblemDetails
+GET {{baseUrl}}/api/applications/0193a8f2-0000-7000-8000-000000000000

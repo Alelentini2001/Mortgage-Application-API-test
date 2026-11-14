@@ -1,0 +1,67 @@
+using System.Net;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using MortgageApplications.Core.Applications;
+
+namespace MortgageApplications.IntegrationTests;
+
+/// <summary>I38, I39 (security S5): an unexpected exception is a generic 500 ProblemDetails in every environment (A4).</summary>
+public sealed class ErrorHandlingTests(ApiFactory factory) : IClassFixture<ApiFactory>
+{
+    private const string _marker = "SECRET-MARKER-123";
+
+    public static TheoryData<string> Environments => ["Development", "Production"];
+
+    [Theory]
+    [MemberData(nameof(Environments))]
+    public async Task Unhandled_exception_returns_500_without_exception_details(string environment)
+    {
+        using var throwing = factory.WithWebHostBuilder(builder => builder
+            .UseEnvironment(environment)
+            .ConfigureTestServices(services => services.AddScoped<IMortgageApplicationRepository, ThrowingRepository>()));
+        var client = throwing.CreateClient();
+
+        var response = await client.GetPathAsync($"/api/applications/{Guid.NewGuid()}");
+
+        await response.AssertProblemAsync(HttpStatusCode.InternalServerError);
+        var text = await response.BodyAsync();
+        Assert.DoesNotContain(_marker, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Exception", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("MortgageApplications.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("stack", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Security I3: a client asking for HTML can't get the developer exception page or any exception text.
+    [Fact]
+    public async Task Unhandled_exception_for_an_html_client_returns_500_without_exception_details()
+    {
+        using var throwing = factory.WithWebHostBuilder(builder => builder
+            .ConfigureTestServices(services => services.AddScoped<IMortgageApplicationRepository, ThrowingRepository>()));
+        var client = throwing.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri($"/api/applications/{Guid.NewGuid()}", UriKind.Relative));
+        request.Headers.Accept.ParseAdd("text/html");
+
+        var response = await client.SendAsync(request, Http.Ct);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var text = await response.BodyAsync();
+        Assert.DoesNotContain(_marker, text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Exception", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("stack", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class ThrowingRepository : IMortgageApplicationRepository
+    {
+        public Task AddAsync(MortgageApplication application, CancellationToken cancellationToken) => throw Boom();
+
+        public Task<MortgageApplication?> FindAsync(Guid id, string ownerId, CancellationToken cancellationToken) => throw Boom();
+
+        public Task AddAssessmentAsync(AffordabilityAssessment assessment, CancellationToken cancellationToken) => throw Boom();
+
+        public Task<AffordabilityAssessment?> FindAssessmentAsync(
+            Guid applicationId, Guid assessmentId, string ownerId, CancellationToken cancellationToken) => throw Boom();
+
+        private static InvalidOperationException Boom() => new($"{_marker} at C:\\secret\\path.cs:line 1");
+    }
+}
