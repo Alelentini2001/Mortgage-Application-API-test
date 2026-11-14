@@ -230,3 +230,48 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   - No findings.
   - Its below-threshold note was applied: the `--subject` value is now single-quoted in `AGENTS.md`, so a title containing `$(...)` is never expanded.
 - `/code-review` (high effort) ran inline in the lead agent: 6 findings, all fixed in `b7a06cf`.
+
+## Phase 02: core domain + calculator
+
+### P02-01 · human→agent · 2026-11-14
+- **Prompt (verbatim):** `/phase 02 core` with the arguments:
+  > 02 core
+- **Purpose:** run Phase 2 (core domain + calculator, test-first) through the phase loop, stopping at Checkpoint A.
+- **Outcome:** plan and decisions P2-D1 to P2-D6 written to `docs/progress/phase-02-core.md`; waiting for Alessandro at Checkpoint A.
+
+### P02-02 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > approved
+- **Purpose:** Checkpoint A approval of the Phase 2 plan.
+- **Outcome:** recommended options taken for P2-D1 to P2-D6; branch `phase-02-core` created.
+
+### P02-03 · agent→subagent (`test-designer`) · 2026-11-14
+- **Prompt (verbatim):**
+  ```
+  Propose the unit test cases for Phase 2 of the repo at /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-02-core). No production code exists yet; this is the test-first step.
+
+  Read first:
+  - docs/progress/phase-02-core.md (the approved plan and decisions P2-D1 to P2-D6, and the planned Core types)
+  - docs/spec/affordability-rules.md (rules v1.0: the only source for formulas, limits, rounding, templates and the golden examples E1–E18)
+  - src/MortgageApplications.Core/CLAUDE.md and tests/CLAUDE.md (conventions)
+
+  Scope: Core only.
+  - AffordabilityCalculator.Assess(inputs) built with AffordabilityOptions; AffordabilityResult with every section 5 output, Checks and Summary.
+  - AffordabilityOptions.Validate() returning error messages for each section 1 option bound.
+  - The internal input guard (section 1 preconditions, ArgumentOutOfRangeException naming the parameter only, no value in the message), used by MortgageApplication.Create and by the calculator.
+  - MortgageApplication entity (immutable; Guid v7 id; owner id; created time passed in).
+  - AffordabilityAssessment entity (Pending -> Completed with a result, or Failed; timestamps passed in; no second completion; stores RulesVersion, rate and limits through the result).
+  - DecimalMath.Pow (exponentiation by squaring on decimal) and the 2 dp AwayFromZero rounding + scale 2.
+  - The property "Approved => Loan <= MaxBorrowing" as a seeded System.Random loop (P2-D4): propose the input generator bounds and sample count.
+  - Culture independence: InvariantGlobalization is on in this repo, so the test must use a clone of the invariant culture with ',' as decimal separator, not a named culture.
+
+  Use E1–E18 as the golden set; do not recompute them, cite them by ID and list which output fields each must assert. Only compute new expected numbers where you propose a case outside E1–E18, and show the working; flag any value you are not sure of. Mark each case must or nice, keep the list tight (no redundant cases), and group by category as your instructions say. End with a short list of anything in the rules that is ambiguous for an implementer.
+  ```
+- **Purpose:** test-first step: propose the Phase 2 unit test cases.
+- **Outcome:** about 60 cases in 11 groups plus 17 ambiguities. The lead agent recomputed every new expected number it gave (B4–B8) with `System.Decimal` in the session scratchpad: all matched. Selection by Alessandro recorded in the phase file, "Tests".
+
+### P02-04 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > approved
+- **Purpose:** approve the recommended test selection (including the new E19) and the answers to the `test-designer` ambiguities.
+- **Outcome:** recorded in the phase file, "Tests"; tests written next.

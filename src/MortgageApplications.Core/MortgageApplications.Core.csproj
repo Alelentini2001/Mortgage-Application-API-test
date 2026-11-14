@@ -2,4 +2,9 @@
 
   <!-- Domain + affordability calculator + use cases. No ASP.NET Core or EF Core references allowed. -->
 
+  <ItemGroup>
+    <!-- Lets unit tests reach the internal helpers (DecimalMath). Approved at Phase 2 (P02-04). -->
+    <InternalsVisibleTo Include="MortgageApplications.UnitTests" />
+  </ItemGroup>
+
 </Project>
