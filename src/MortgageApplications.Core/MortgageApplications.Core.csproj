@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Domain + affordability calculator + use cases. No ASP.NET Core or EF Core references allowed. -->
+
+</Project>
