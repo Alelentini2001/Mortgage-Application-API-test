@@ -1,6 +1,6 @@
 # Phase 00: Harness + skeleton
 
-Status: **In review (Checkpoint B pending)** · Branch: `phase-00-harness` · PR: _see below_ · Started: 2026-11-13 · Finished: —
+Status: **Approved at Checkpoint B, merging** · Branch: `phase-00-harness` · PR: [#1](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/1) · Started: 2026-11-13 · Finished: —
 
 ## Goal
 
@@ -350,6 +350,22 @@ clean code tree (only docs untracked): exit=0
 | No `nuget.config` source mapping / lock files | Low | **D12.** |
 
 **Reviewer conduct note.** The reviewer reported that one of its test commands accidentally ran `git -C <repo> reset --har`. The auto-mode classifier denied it, so no git state changed. It was running as `general-purpose`, so its read-only limit was an instruction, not enforced by `disallowedTools`. This is one more reason to run the real `.claude/agents/` definitions from a session started in the repo.
+
+## Local AI reviews on PR #1 (Alessandro's subscription)
+
+**`/code-review` (high effort, inline).** 7 findings, all **fixed** and covered by new regression cases (91 total):
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | `bash -lc "rm -rf x"` / `sh -ec` skipped the nested-payload check | `-c` detected inside combined flags |
+| 2 | `curl x \| tee f \| bash` passed (interpreter not the next pipe stage) | regex matches any later pipe stage |
+| 3 | Fallback tokenizer (unbalanced quotes) didn't split `(`, `)`, `&`, `\|` → `echo it's; (rm -rf x)` passed | fallback pads punctuation before splitting |
+| 4 | `git branch --delete --force`, `-df`, `git worktree remove -f` passed the narrow deny strings | hook checks branch/worktree force-delete; deny rules added |
+| 5 | Deny `dotnet package *` also blocked the documented read-only `dotnet package search` | deny narrowed to `dotnet package add/remove` |
+| 6 | Protected-path list duplicated in two hooks (drift risk) | single `.claude/hooks/protected-paths.regex` read by both |
+| 7 | No tests for the verify-on-stop / format-on-edit / reinject-context hooks | added: loop guard, jq-less fallback, no-change skip, Resume section, formatting |
+
+**`/security-review`.** **No findings** (confidence ≥ 8). Non-security note: hooks failed open (exit 1) if the regex file was missing. **Fixed:** both now exit 2 (checked by moving the file away: exit 2 from both).
 
 ## AI output corrected or rejected
 Real cases only:

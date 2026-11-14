@@ -62,3 +62,22 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   ```
 - **Purpose:** security gate for Phase 0.
 - **Outcome:** see the phase 0 file, "Security gate".
+
+### P00-07 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > Ok proceed, and about the AI reviews, they should be done here with my subscription!
+- **Purpose:** Checkpoint B approval, and redirect the AI reviews from CI (API key) to local runs.
+- **Outcome:**
+  - D10 and D11 applied, D12 deferred to Phase 8.
+  - The AI review workflows were removed.
+  - Local `/code-review` (high effort) and `/security-review` ran on PR #1 (P00-08) and their summary was posted as a PR comment.
+
+### P00-08 · agent→subagent (`/security-review` skill, finder sub-task, general-purpose) · 2026-11-14
+- **Prompt:** the bundled `/security-review` instructions, adapted for this repo. The repo context paragraph, verbatim:
+  ```
+  Context: the PR is a Phase 0 harness + empty .NET 10 skeleton: Claude Code hooks (.claude/hooks/*.sh, one embeds a Python tokenizer), permission settings (.claude/settings.json), a gitleaks git pre-commit hook (.githooks/pre-commit), a CI workflow (.github/workflows/ci.yml, pull_request + push to main, contents: read, actions pinned by SHA), scripts/verify.sh, and a minimal ASP.NET Program.cs with a /health endpoint. No business logic, no auth, no data access yet. Earlier gates already raised: broad auto-approve permissions (now narrowed), harness self-protection (now `ask` rules), no server-side gitleaks in CI and no NuGet lock files (deferred to Phase 8).
+  ```
+  The rest follows the skill's own text: objective, exclusions, categories, method and output format.
+- **Purpose:** local AI security review on Alessandro's subscription.
+- **Outcome:** no findings at confidence ≥ 8, so no false-positive filtering sub-tasks were needed. One non-security note: if `protected-paths.regex` were missing, the hooks would fail open (exit 1). Fixed: they now exit 2.
+- `/code-review` (high effort) ran inline in the lead agent, with no subagent. It reported 7 findings, all fixed (see the phase file).
