@@ -341,3 +341,57 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
 - **Outcome:**
   - CI passed on PR #5 head `871ffb0`; squash-merged as `7a579a0` with a written message.
   - The optional ADR and the `tests/CLAUDE.md` question were not answered, so they stay open.
+
+## Phase 03: API + persistence + validation
+
+### P03-01 · human→agent · 2026-11-14
+- **Prompt (verbatim):** `/phase 03 api` with the arguments:
+  > 03 api
+- **Purpose:** run Phase 3 (the minimum submittable product) through the phase loop, stopping at Checkpoint A.
+- **Outcome:** plan and decisions P3-D1 to P3-D8 written to `docs/progress/phase-03-api.md`; waited at Checkpoint A.
+
+### P03-02 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > approved
+- **Purpose:** Checkpoint A approval of the Phase 3 plan and every recommended option (P3-D1 to P3-D8).
+- **Outcome:**
+  - Branch `phase-03-api` created; packages added in `a0daa7c`.
+  - The `dotnet-ef` local tool was **not** installed: the project's permission rules deny `dotnet tool *` and the auto-mode classifier refused writing `.config/dotnet-tools.json` by hand. Left for Alessandro.
+  - Docs check done (phase file, "Docs verified").
+
+### P03-03 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > Try again
+- **Purpose:** retry after a WebFetch call returned a usage-limit error during the docs check.
+- **Outcome:** the retried page (ASP.NET Core error handling) loaded; the docs check finished.
+
+### P03-04 · agent→subagent (`test-designer`) · 2026-11-14
+- **Prompt (verbatim):**
+  ```
+  Phase 3 of a .NET 10 mortgage-application API (Minimal APIs + EF Core SQLite). Propose test cases for the approved plan; do not write code.
+
+  Read first: docs/progress/phase-03-api.md (plan, approved decisions P3-D1 to P3-D8, and "Docs verified": the framework facts there are confirmed and affect tests), docs/spec/affordability-rules.md (section 1 input bounds, sections 5-6 outputs and summary, section 8 golden examples), docs/layers/PRODUCTION-LAYERS.md ("APIs", "Auth & permissions"), .claude/rules/tests.md, tests/CLAUDE.md, .claude/rules/security.md, and the existing Core code and tests under src/MortgageApplications.Core and tests/MortgageApplications.UnitTests (Phase 2 already covers the calculator, InputGuard and entities: don't repeat those).
+
+  What will be built (not written yet):
+  - Core: a public pure rule set (ApplicationInputRules.Validate(inputs) returning (field, message) pairs) that InputGuard also uses; a MortgageApplicationService use case (create, get, assess, get assessment) over an IMortgageApplicationRepository whose read methods take the owner; RulesVersion max length 16 added to AffordabilityOptions.Validate().
+  - Api: POST /api/applications (201 + Location /api/applications/{id}), GET /api/applications/{id} (200/404), POST /api/applications/{id}/assessments (synchronous, 201 + Location /api/applications/{id}/assessments/{assessmentId}; Declined is also 201), GET /api/applications/{id}/assessments/{assessmentId} (200/404). Request DTO with nullable properties, [Required], [Range(5,40)] on TermYears, IValidatableObject mapping the Core rule errors; strict JSON (unknown properties and numbers-as-strings rejected). ICurrentUser returns one fixed development owner until Phase 7; another owner's application or assessment returns 404. AddProblemDetails + IExceptionHandler (traceId, no exception text; BadHttpRequestException keeps its own 4xx status). AffordabilityOptions bound from configuration with ValidateOnStart. OpenAPI + Scalar in Development only.
+  - Tests: unit tests (Core only: the rule set and the use case with a hand-written fake repository) and integration tests (WebApplicationFactory<Program>, in-memory SQLite per test class with migrations applied, Development environment by default).
+
+  Cover at least: 400 per field and bound (exact limit, just inside, just outside) with the expected error key per field; missing field and explicit null; deposit rule (loan exactly 1,000 vs 999.99); more than 2 dp; malformed JSON, unknown property, number as string, wrong content type; IValidatableObject not running when a [Required] error exists; 201 + Location + body for create; GET round trip including scale 2 for money in JSON; assessment response values for golden E1 and one Declined golden case (use the numbers in rules section 8, don't recompute new ones unless needed and then show the working); assessment Location resolves; 404 for an unknown id, a malformed id, an assessment under the wrong application, and another owner (S2, using ConfigureTestServices to swap ICurrentUser); ProblemDetails shape with traceId on 400, 404 and 500, and no stack trace or exception message on a 500 (S5); startup fails with invalid Affordability options (S4); response never contains ownerId; no submitted value echoed in a 400 message; the use case stamps AssessedAt from TimeProvider and stores RulesVersion.
+
+  Use the agent's output format. Mark each case must or nice, keep the list tight (no redundant cases), and list any ambiguities in the plan you need Alessandro to settle.
+  ```
+- **Purpose:** propose Phase 3 test cases before any test is written.
+- **Outcome:** 19 unit rows and 46 integration rows, plus 12 ambiguities (A1–A12). Golden numbers checked against rules §8 by the lead agent (E1, E2, E18 match). The recommended selection and answers are in the phase file ("Tests", "Proposal"); approved in P03-05.
+
+### P03-05 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > approved
+- **Purpose:** approval of the recommended test selection and the answers to A1–A12.
+- **Outcome:** red tests, then implementation (phase file, "Tests", "Results").
+
+### P03-06 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > camelCase (keep fix)
+- **Purpose:** decision on ambiguity A1, after `AddValidation` turned out to emit PascalCase keys.
+- **Outcome:** `ValidationErrorKeys` kept; Api committed. `dotnet-ef` still not installed, so the migration waits.

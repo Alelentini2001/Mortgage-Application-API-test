@@ -23,7 +23,7 @@
 | 00 | Harness + skeleton | Merged | `phase-00-harness` | [#1](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/1) | 2/2 + 91 hook cases | 2026-11-14 |
 | 01 | Spec + production layers | Merged | `phase-01-spec` | [#3](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/3) | docs only (18 golden examples for Phase 2) | 2026-11-14 |
 | 02 | Core domain + calculator (TDD) | Merged | `phase-02-core` | [#5](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/5) | 215 unit + 1 integration placeholder, 216/216 | 2026-11-14 |
-| 03 | API + persistence + validation (MVP) | Ready | — | — | — | — |
+| 03 | API + persistence + validation (MVP) | Planning (Checkpoint A) | — | — | — | — |
 | 04 | Docker | Not started | — | — | — | — |
 | 05 | Logging + instrumentation | Not started | — | — | — | — |
 | 06 | Background assessments | Not started | — | — | — | — |
