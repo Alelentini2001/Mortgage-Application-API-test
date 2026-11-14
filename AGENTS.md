@@ -44,7 +44,7 @@ Tests run on Microsoft.Testing.Platform (set in `global.json`). xUnit v3 filters
 - No bare internal IDs. Write "reviewer: max borrowing ignored the property (F5)", not "fix F5". Spell out an acronym the first time it appears in a message (loan-to-value (LTV)).
 - One `Co-Authored-By` trailer, at the end.
 - PR descriptions follow `.github/pull_request_template.md`.
-- Squash-merge with a written message, not GitHub's list of every branch commit: `gh pr merge <n> --squash --subject "<PR title> (#<n>)" --body-file <file>`, where the file holds the PR's "What changed" bullets. Write that file in the session scratchpad, never in the repo.
+- Squash-merge with a written message, not GitHub's list of every branch commit: `gh pr merge <n> --squash --subject '<PR title> (#<n>)' --body-file <file>` (single quotes, so the shell never expands the title), where the file holds the PR's "What changed" bullets. Write that file in the session scratchpad, never in the repo.
 
 ## Definition of done
 1. Tests written first where there is logic; `./scripts/verify.sh` passes and its output is shown.
