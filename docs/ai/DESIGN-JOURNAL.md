@@ -38,3 +38,15 @@ Chronological record of ideas, options, rejected ideas, who decided, and what ch
   - Also documented explicitly: the hook is a best-effort speed bump, and permission rules are the second layer.
 - **Permission narrowing (D10), harness self-protection (D11) and CI supply-chain controls (D12)** were raised by both gates. They change what Alessandro has approved to run without prompting, so they're left for his decision rather than applied by the agent.
 - **Honesty correction.** The lead agent reported "Semgrep: no findings" from a run that had actually aborted (nonexistent `p/bash` ruleset; `$?` read after a pipe). The security-auditor caught it, and the corrected run is recorded in the phase file.
+
+## 2026-11-14 · Phase 1: affordability rules
+
+- **Re-checking B4 with real decimals.** All three B4 worked examples match `System.Decimal` to the cent. The check also showed that B4's third check, "Loan ≤ MaxBorrowing", fails exactly when DTI or the 4.5× income multiple fails. The explanation would give the same reason twice.
+- **Idea → options → choice for the checks (D2).**
+  - (1) Keep B4.
+  - (2) Three independent checks: LTV, DTI and loan-to-income. **Chosen.** MaxBorrowing stays as an output.
+  - (3) Two checks.
+  - Chosen by the agent under Alessandro's "proceed automatically" instruction. It gives the same decisions as B4 on every example. A 200,000-sample random run found no approved case with Loan > MaxBorrowing.
+- **Rounding (D3).** Compare unrounded values, round outputs once. The alternative, rounding before comparing, would break the invariant above by up to a rounding step. The cost, a value like 45.004% showing as "45.00%" but failing, is handled by an explicit "before rounding" explanation.
+- **No rate field (D1).** The spec's five fields have no interest rate, so the payment uses one configurable 6% assessment rate rather than inventing a product rate.
+- **Production layers.** Filled in for all 14 layers. Caching and frontend are `N/A` with reasons. The scaling answer for the README is fixed now: SQLite and the in-process queue are the first bottleneck, so the first change is Azure SQL plus a durable queue.
