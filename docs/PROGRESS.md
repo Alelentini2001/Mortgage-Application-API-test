@@ -2,7 +2,7 @@
 
 ## Resume here
 - **Phase:** 00 (harness + skeleton) **merged** to `main` via PR #1 (squash `b20c823`).
-- **Live hook proof done** (2026-11-14) on branch `chore/phase-00-live-proof`: `protect-files.sh`, `block-dangerous-bash.sh` and `format-on-edit.sh` fired live; all 5 subagents registered. Evidence: `docs/progress/phase-00-harness.md`, "Live proof".
+- **Live hook proof done** (2026-11-14) in [#2](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/2) (`chore/phase-00-live-proof`): `protect-files.sh`, `block-dangerous-bash.sh` and `format-on-edit.sh` fired live; all 5 subagents registered. Evidence: `docs/progress/phase-00-harness.md`, "Live proof".
 - **Next action:** Alessandro reviews and merges the live-proof PR, then types `/phase 01 spec` (the skill can only be started by a human) and Phase 1 runs up to Checkpoint A. `docs/spec/ORIGINAL_SPEC.md` was added 2026-11-14.
 - **Open decisions / blockers for Alessandro:**
   - Approve and merge the live-proof PR.

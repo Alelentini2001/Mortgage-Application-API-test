@@ -104,3 +104,25 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   > Probe a .key file
 - **Purpose:** choose a live test for `protect-files.sh` on a path that only the hook protects.
 - **Outcome:** a `Write` to `certs/harness-probe.key` was blocked by `protect-files.sh`. Evidence recorded in the phase 0 file ("Live proof").
+
+### P00-11 · agent→subagent (`/security-review` skill, finder sub-task, general-purpose) · 2026-11-14
+- **Prompt:** the bundled `/security-review` instructions, shortened for a docs-only PR. Full text, verbatim:
+  ```
+  You are a senior security engineer doing a focused security review of a pull request. Read-only: do not write or edit any file, do not run destructive commands.
+
+  Repository: /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch chore/phase-00-live-proof). Get the diff with `git -C /Users/ale_ssd/Developer/Mortgage-Application-API-test diff main...HEAD` plus uncommitted changes with `git -C /Users/ale_ssd/Developer/Mortgage-Application-API-test diff HEAD`. That combined diff is the full scope.
+
+  Context: the PR is docs only. It records live evidence that the repo's Claude Code hooks fire (protect-files.sh, block-dangerous-bash.sh, format-on-edit.sh) in docs/progress/phase-00-harness.md, updates docs/PROGRESS.md, and logs prompts verbatim in docs/ai/PROMPTS.md. No code, config, hook, workflow or permission file changes. The quoted outputs include an absolute local path and hook error messages.
+
+  OBJECTIVE: identify HIGH-CONFIDENCE security vulnerabilities newly added by this PR that have real exploitation potential. Not a general review. Do not comment on existing concerns.
+  - Minimise false positives: only flag issues where you are >80% confident of actual exploitability. Skip theoretical issues, style, low impact.
+  - Exclusions: DoS; secrets or sensitive data stored on disk (handled elsewhere); rate limiting / resource exhaustion; insecure documentation (findings in documentation files such as markdown are excluded).
+  - Categories: input validation (SQL/command/XXE/template/NoSQL injection, path traversal); authn/authz (bypass, privilege escalation, sessions, JWT); crypto and secrets (hardcoded keys, passwords, tokens, weak crypto, key storage, randomness, cert validation); injection and code execution (deserialization, pickle, YAML, eval, XSS); data exposure (sensitive data logging, PII, endpoint leakage, debug info).
+  - Method: research repo context (security model, existing patterns), compare the changes against it, trace data flows, and assess each modified file. In particular check whether the new text discloses a real secret or token, or documents a working bypass of the hooks or permission rules that wasn't already in the repo.
+  - Severity: HIGH = directly exploitable (RCE, data breach, auth bypass); MEDIUM = significant impact under specific conditions; LOW = defense in depth. Report HIGH and MEDIUM only. Confidence 0.0-1.0; do not report below 0.7.
+
+  Output: markdown. For each finding: file, line, severity, category, description, exploit scenario, recommendation, confidence. If there are none, say "No findings" and give a 2-4 sentence rationale listing what you checked.
+  ```
+- **Purpose:** local AI security review of PR #2 on Alessandro's subscription.
+- **Outcome:** no findings. The sub-task checked for secrets, documented hook or permission bypasses, and injection through the logged prompts. No false-positive filtering sub-tasks were needed.
+- `/code-review` (high effort) ran inline in the lead agent, with no subagent. It reported 6 findings on the docs, all fixed (see the phase file, "Local AI reviews on PR #2").
