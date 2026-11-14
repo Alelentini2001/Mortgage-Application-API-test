@@ -1,56 +1,197 @@
 #!/usr/bin/env bash
 # PreToolUse (Bash): block destructive or verification-skipping commands.
 # Exit 2 blocks the command; stderr is shown to Claude as the reason.
-# Each command segment (split on ; && || | and newlines) is checked on its own,
-# so flags from one command never trigger a rule for another.
+#
+# This is a best-effort speed bump, not a sandbox: no text parser can catch every
+# shell trick. Permission rules in .claude/settings.json are the second layer.
+# Regression cases: .claude/hooks/tests/test-hooks.sh
 set -euo pipefail
 
-command -v jq >/dev/null || { echo "block-dangerous-bash: jq is required" >&2; exit 2; }
+command -v python3 >/dev/null || { echo "block-dangerous-bash: python3 is required" >&2; exit 2; }
 
-cmd="$(jq -r '.tool_input.command // empty')"
-[[ -z "$cmd" ]] && exit 0
+exec python3 -I -c '
+import json, os, re, shlex, sys
 
-block() { echo "Blocked by block-dangerous-bash.sh: $1" >&2; exit 2; }
+def block(reason):
+    print(f"Blocked by block-dangerous-bash.sh: {reason}", file=sys.stderr)
+    sys.exit(2)
 
-# Whole-command checks (patterns that span a pipe).
-if grep -Eq '(curl|wget)[^|]*\|[[:space:]]*(sudo[[:space:]]+)?(ba|z)?sh([[:space:]]|$)' <<<"$cmd"; then
-  block "piping a download into a shell is not allowed"
-fi
-if grep -Eq -- '--no-verify' <<<"$cmd"; then
-  block "--no-verify skips the safety hooks"
-fi
+try:
+    cmd = (json.load(sys.stdin).get("tool_input") or {}).get("command") or ""
+except Exception:
+    block("could not parse hook input")
 
-# Per-segment checks.
-while IFS= read -r segment; do
-  # Trim leading whitespace and an optional sudo/env prefix.
-  segment="$(sed -E 's/^[[:space:]]+//; s/^(sudo|command|env)[[:space:]]+//' <<<"$segment")"
-  read -r -a words <<<"$segment" || true
-  [[ ${#words[@]} -eq 0 ]] && continue
+SEPARATORS = {";", "&&", "||", "|", "&", "|&", "(", ")", "{", "}", ";;", "\n"}
+REDIRECTS = {">", ">>", ">|", "&>", "&>>"}
+WRAPPERS = {"sudo", "command", "builtin", "exec", "nohup", "time", "nice", "timeout",
+            "stdbuf", "xargs", "noglob", "env", "eval"}
+WRAPPER_ARG_FLAGS = {"-n", "-I", "-L", "-P", "-d", "-E", "-s", "-u", "-g", "-C", "-k", "-o", "-e", "-i"}
+DOWNLOADERS = r"(curl|wget)"
+INTERPRETERS = r"((ba|z|da|k)?sh|python[0-9.]*|node|perl|ruby)"
+PROTECTED = re.compile(r"(^|/)(\.env(\..*)?|[^/]*\.(pem|key|pfx))$|(^|/)secrets/|(^|/)\.git/")
 
-  case "${words[0]}" in
-    git)
-      if [[ " $segment " == *" push "* ]]; then
-        for w in "${words[@]}"; do
-          [[ "$w" == "--force" || "$w" == "-f" ]] &&
-            block "force push is not allowed (--force-with-lease only with Alessandro's approval)"
-        done
-      fi
-      if [[ " $segment " == *" reset "* && " $segment " == *" --hard"* ]]; then
-        block "git reset --hard discards work"
-      fi
-      ;;
-    rm)
-      flags=""
-      for w in "${words[@]:1}"; do
-        [[ "$w" == --recursive ]] && flags+="r"
-        [[ "$w" == --force ]] && flags+="f"
-        [[ "$w" =~ ^-[a-zA-Z]+$ ]] && flags+="${w#-}"
-      done
-      if [[ "$flags" == *[rR]* && "$flags" == *f* ]]; then
-        block "rm -rf is not allowed; delete specific paths or use 'dotnet clean'"
-      fi
-      ;;
-  esac
-done < <(sed -E 's/(\&\&|\|\||;|\|)/\n/g' <<<"$cmd")
+def check_whole(text):
+    if re.search(DOWNLOADERS + r"\b[^|]*\|\s*(sudo\s+)?(env\s+)?" + INTERPRETERS + r"\b", text):
+        block("piping a download into an interpreter is not allowed")
+    if re.search(r"<\(\s*" + DOWNLOADERS + r"\b", text):
+        block("executing a download via process substitution is not allowed")
+    if re.search(r"\b(eval|(ba|z)?sh\s+-c)\s+[\"\x27]?\$\(\s*" + DOWNLOADERS + r"\b", text):
+        block("executing a download via command substitution is not allowed")
 
-exit 0
+def tokenize(text):
+    try:
+        lexer = shlex.shlex(text, posix=True, punctuation_chars=";&|()<>")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        return list(lexer)
+    except ValueError:
+        # Unbalanced quotes (e.g. heredoc text): fall back to a plain split.
+        return re.split(r"\s+", text.replace(";", " ; ").replace("&&", " && ").replace("||", " || "))
+
+def segments(tokens):
+    current = []
+    for tok in tokens:
+        if tok in SEPARATORS:
+            if current:
+                yield current
+            current = []
+        else:
+            current.append(tok)
+    if current:
+        yield current
+
+def strip_prefix(words):
+    i = 0
+    while i < len(words):
+        w = words[i]
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w):
+            i += 1
+            continue
+        name = os.path.basename(w)
+        if name in WRAPPERS:
+            i += 1
+            while i < len(words) and (words[i].startswith("-") or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[i])):
+                i += 2 if words[i] in WRAPPER_ARG_FLAGS else 1
+            if name == "timeout" and i < len(words) and re.match(r"^[0-9.]+[smhd]?$", words[i]):
+                i += 1
+            continue
+        break
+    return words[i:]
+
+def is_prefix(arg, option, minimum):
+    return len(arg) >= minimum and option.startswith(arg)
+
+def check_git(args):
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        opt = args[i]
+        if opt in ("-c", "-C") and i + 1 < len(args):
+            if opt == "-c" and "hookspath" in args[i + 1].lower():
+                block("overriding core.hooksPath disables the gitleaks pre-commit hook")
+            i += 2
+        else:
+            if "hookspath" in opt.lower():
+                block("overriding core.hooksPath disables the gitleaks pre-commit hook")
+            i += 1
+    if i >= len(args):
+        return
+    sub, rest = args[i], args[i + 1:]
+
+    # Drop the values of message/file options so their text never matches a rule.
+    cleaned, skip = [], False
+    for a in rest:
+        if skip:
+            skip = False
+            continue
+        if a in ("-m", "-F", "--message", "--file"):
+            skip = True
+            continue
+        if a.startswith(("--message=", "--file=")) or (a.startswith("-m") and sub == "commit" and len(a) > 2 and not a.startswith("--")):
+            continue
+        cleaned.append(a)
+
+    for a in cleaned:
+        if is_prefix(a, "--no-verify", 6):
+            block("--no-verify skips the safety hooks")
+
+    if sub == "config":
+        if any("hookspath" in a.lower() for a in cleaned) and cleaned[-1:] != [".githooks"]:
+            block("core.hooksPath may only point at .githooks")
+    elif sub == "commit":
+        for a in cleaned:
+            if re.match(r"^-[a-zA-Z]*n[a-zA-Z]*$", a):
+                block("git commit -n skips the gitleaks pre-commit hook (same as --no-verify)")
+    elif sub == "push":
+        for a in cleaned:
+            if a.startswith("--force-with-lease") or a.startswith("--force-if-includes"):
+                continue
+            if a in ("--mirror",) or is_prefix(a, "--force", 4) or a.startswith("+") or re.match(r"^-[a-zA-Z]*f[a-zA-Z]*$", a):
+                block("force push is not allowed (--force-with-lease only with Alessandro\x27s approval)")
+    elif sub == "reset":
+        if any(is_prefix(a, "--hard", 4) for a in cleaned):
+            block("git reset --hard discards work")
+    elif sub in ("switch", "checkout"):
+        if any(a in ("-f", "--force") or is_prefix(a, "--discard-changes", 5) for a in cleaned):
+            block(f"git {sub} --force discards local changes")
+    elif sub == "clean":
+        if any(re.match(r"^-[a-zA-Z]*f[a-zA-Z]*$", a) or a == "--force" for a in cleaned):
+            block("git clean -f deletes untracked files")
+
+def check_rm(args):
+    recursive = force = False
+    for a in args:
+        if a == "--":
+            break
+        if a == "--recursive":
+            recursive = True
+        elif a == "--force":
+            force = True
+        elif re.match(r"^-[a-zA-Z]+$", a):
+            recursive |= ("r" in a or "R" in a)
+            force |= "f" in a
+    if recursive and force:
+        block("rm -rf is not allowed; delete specific paths or use \x27dotnet clean\x27")
+
+def check_writes(words, prog, args):
+    targets = []
+    for i, w in enumerate(words):
+        if w in REDIRECTS and i + 1 < len(words):
+            targets.append(words[i + 1])
+    if prog == "tee":
+        targets += [a for a in args if not a.startswith("-")]
+    if prog == "sed" and any(a.startswith("-i") or a == "--in-place" for a in args):
+        targets += [a for a in args[1:] if not a.startswith("-")]
+    if prog in ("cp", "mv", "ln") and args:
+        targets.append(args[-1])
+    for t in targets:
+        if PROTECTED.search(t):
+            block(f"writing to a protected path via the shell is not allowed ({t})")
+
+def check(text, depth=0):
+    if depth > 3:
+        block("command nesting too deep to check")
+    check_whole(text)
+    for seg in segments(tokenize(text)):
+        words = strip_prefix(seg)
+        if not words:
+            continue
+        prog = os.path.basename(words[0])
+        args = words[1:]
+        check_writes(words, prog, args)
+        if re.fullmatch(r"(ba|z|da|k)?sh", prog) and "-c" in args:
+            idx = args.index("-c")
+            if idx + 1 < len(args):
+                check(args[idx + 1], depth + 1)
+        elif prog == "git":
+            check_git(args)
+        elif prog == "rm":
+            check_rm(args)
+        elif prog == "find" and ("-delete" in args or any(a == "rm" for a in args)):
+            block("find -delete / -exec rm is not allowed; delete specific paths")
+    # eval and wrappers were stripped; also re-check eval payloads as a whole.
+    for m in re.finditer(r"\beval\s+([\"\x27])(.*?)\1", text):
+        check(m.group(2), depth + 1)
+
+check(cmd)
+sys.exit(0)
+'

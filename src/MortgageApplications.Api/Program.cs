@@ -8,4 +8,4 @@ app.MapGet("/health", () => TypedResults.Ok("Healthy"));
 app.Run();
 
 /// <summary>Exposed for WebApplicationFactory in integration tests.</summary>
-public partial class Program;
+public partial class Program { }

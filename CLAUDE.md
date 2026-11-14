@@ -34,6 +34,7 @@ IMPORTANT: Resume protocol. At the start of every session, read `docs/PROGRESS.m
 - `format-on-edit.sh` (PostToolUse Edit|Write): whitespace-formats the edited `.cs` file.
 - `verify-on-stop.sh` (Stop): runs `verify.sh --fast` when source changed; guarded by `stop_hook_active`.
 - `reinject-context.sh` (SessionStart compact): prints the "Resume here" section of `docs/PROGRESS.md`.
+- Hook regression tests: `.claude/hooks/tests/test-hooks.sh` (run by `verify.sh`). Add a case for every bypass or false positive found.
 
 ## Compaction
 When compacting, always keep: the current phase and step, the list of modified files, the test commands and their last result, and open decisions awaiting Alessandro.

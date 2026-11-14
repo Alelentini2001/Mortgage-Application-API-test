@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Single verification command for humans, hooks and CI.
-#   ./scripts/verify.sh          full: restore, build (warnings as errors), all tests, format check
+#   ./scripts/verify.sh          full: restore, build (warnings as errors), all tests, hook tests, format check
 #   ./scripts/verify.sh --fast   fast: restore, build, unit tests only (used by the Stop hook)
 set -euo pipefail
 
@@ -29,6 +29,9 @@ if [[ "$MODE" == "fast" ]]; then
 else
   step "all tests"
   dotnet test --solution "$SOLUTION" -c "$CONFIG" --no-build || fail "tests"
+
+  step "hook regression tests"
+  .claude/hooks/tests/test-hooks.sh || fail "hook tests"
 
   step "format check"
   dotnet format "$SOLUTION" --verify-no-changes --no-restore -v quiet || fail "format (run: dotnet format $SOLUTION)"
