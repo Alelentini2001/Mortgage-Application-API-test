@@ -1,6 +1,6 @@
 # Phase 00: Harness + skeleton
 
-Status: **Planning — awaiting Checkpoint A** · Branch: `phase-00-harness` (not created yet) · PR: — · Started: 2026-11-13 · Finished: —
+Status: **In review (Checkpoint B pending)** · Branch: `phase-00-harness` · PR: _see below_ · Started: 2026-11-13 · Finished: —
 
 ## Goal
 
@@ -52,7 +52,23 @@ A lean, enforced agent harness (memory files, rules, subagents, skills, hooks, p
   - Read rules use gitignore-style paths, e.g. `Read(./.env*)`, `Read(**/secrets/**)`.
   - **Difference from prompt:** a broad `Bash(dotnet *)` allow also allows `dotnet nuget push` etc. I'll keep it, as the prompt asks; hooks plus deny rules cover the dangerous cases.
 
-## Plan (for approval)
+## Docs verified (.NET / tooling, 2026-11-14)
+
+- xUnit v3 + MTP — https://xunit.net/docs/getting-started/v3/microsoft-testing-platform
+  - `xunit.v3` 4.x defaults to MTP v2.
+  - With the .NET 10 SDK, the `global.json` test runner replaces `TestingPlatformDotnetTestSupport`.
+  - `Microsoft.NET.Test.Sdk` isn't needed when running only on MTP.
+- `dotnet test` MTP mode — https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-with-dotnet-test
+  - Exact `global.json` `"test": {"runner": "Microsoft.Testing.Platform"}`; requires MTP ≥ 1.7.
+  - Use `--solution` / `--project` instead of positional paths.
+- claude-code-security-review — https://github.com/anthropics/claude-code-security-review
+  - Inputs `claude-api-key` and `comment-pr`; needs `pull-requests: write`.
+  - "not hardened against prompt injection": trusted (same-repo) PRs only.
+- claude-code-action — https://github.com/anthropics/claude-code-action (`docs/solutions.md`, "Automatic PR Code Review")
+  - Inputs `anthropic_api_key`, `prompt`, `claude_args`, `track_progress`.
+  - **Difference from the master prompt:** the docs don't show a "code-review plugin" input, so the workflow uses a review `prompt` instead.
+
+## Plan (approved at Checkpoint A on 2026-11-14: "i installed the 10 pkg, you can proceed")
 
 **Step 0: bootstrap `main`.** The repo is empty, so a PR needs a base branch. Make one commit on `main` (README stub + `.gitignore`) and push it. Then `git switch -c phase-00-harness`.
 
@@ -112,7 +128,7 @@ A lean, enforced agent harness (memory files, rules, subagents, skills, hooks, p
 - `security-auditor` + `dotnet-reviewer` on the diff (fresh context).
 - `/progress`, then push, PR, CI → **Checkpoint B**.
 
-## Decisions awaiting Alessandro (Checkpoint A)
+## Decisions proposed at Checkpoint A
 
 | # | Decision | Options | Recommendation |
 |---|---|---|---|
@@ -126,6 +142,14 @@ A lean, enforced agent harness (memory files, rules, subagents, skills, hooks, p
 | D9 | Getting .NET 10 (only SDK 11 installed; `net10.0` tests need the 10.x runtime) | (a) you run Microsoft's official .NET 10 SDK `.pkg` installer, side by side with 11, and `global.json` pins 10.0.x · (b) `brew install dotnet@10` formula (separate prefix, clashes with the cask's `dotnet` link) · (c) build/test only in the `sdk:10.0` container | **(a)** |
 | D8 | Global setup clash | Caveman mode, graphify and claude-mem are active globally. Repo docs, commits and PRs stay in normal English; `docs/PROGRESS.md` is the only progress source of truth (not claude-mem work-state) | Confirm |
 
+## Decisions for Checkpoint B (raised by the security and review gates)
+
+| # | Decision | Options | Recommendation |
+|---|---|---|---|
+| D10 | Narrow the auto-approve permissions in `.claude/settings.json` | (a) Replace `dotnet *` with `dotnet build/test/restore/format/run/clean/ef/new/sln *`. Replace `gh pr *` with `gh pr view/diff/checks/list/create *`. Replace `docker *` with `docker build *` + `docker compose *`. Add deny rules for `dotnet add package *`, `dotnet package *`, `dotnet tool *`, `dotnet nuget *`, `gh pr merge *`, `git branch -D *`, `git worktree remove --force *`. Remove the message-matching `Bash(* --no-verify *)` deny (the hook covers it precisely). · (b) Keep the broad allows; rely on hooks + prompts | **(a)**: removed allows fall back to a prompt, they aren't blocked |
+| D11 | Protect the harness from the agent | (a) `protect-files.sh` blocks Edit/Write to `.claude/settings*.json`, `.claude/hooks/**`, `.githooks/**`, `.github/workflows/**`; harness changes then need you to approve a one-off edit · (b) leave editable; reviews + PR diff catch changes | **(a)** after Phase 0 merges, so later phases can't silently weaken guardrails |
+| D12 | Server-side supply chain + secrets | (a) Add a SHA-pinned Gitleaks job to CI, `nuget.config` (nuget.org only + source mapping), `RestorePackagesWithLockFile` + `--locked-mode` in CI, and `dependabot.yml` for actions + NuGet · (b) defer to Phase 8 | **(a) in Phase 8**: keeps Phase 0 focused. Phase 8 is the security phase |
+
 ## Prerequisites from Alessandro
 
 - [ ] **Add `docs/spec/ORIGINAL_SPEC.md`** (the PDF text). Not in the repo yet. Phase 0 can run without it; **Phase 1 is blocked until it exists.**
@@ -133,36 +157,219 @@ A lean, enforced agent harness (memory files, rules, subagents, skills, hooks, p
 - [ ] Later: `/install-github-app`, the `ANTHROPIC_API_KEY` repo secret, and branch protection on `main`.
 
 ## Decisions (option chosen · alternatives · reason · decided by)
-_Filled after Checkpoint A._
+All of D1–D9 were approved by Alessandro with the recommended option (a). See the table above and `docs/ai/DESIGN-JOURNAL.md`.
+- D9 route: **Alessandro installed the official .NET 10 SDK pkg** himself (SDK 10.0.404, runtime 10.0.15).
+- No ADR this phase. These are harness/tooling choices, not architecture; ADRs start in Phase 1.
 
 ## Orchestration used
-- A1 + docs check: lead agent only (Bash, WebFetch). No subagents yet.
+- A1 + docs check: lead agent only (Bash, WebFetch on code.claude.com, xunit.net, learn.microsoft.com, github.com).
+- Skills: none invoked; the project skills were created this phase.
+- MCP servers: none used.
+- Subagents: `dotnet-reviewer` and `security-auditor` roles. They ran as `general-purpose` (opus) told to load the repo's agent files, because the project agents weren't registered in this session (P00-05, P00-06).
+- Hooks that fired:
+  - Gitleaks pre-commit fired on all 5 harness commits ("no leaks found" each time).
+  - The Claude Code hooks were proven by direct script tests (evidence below). They did **not** fire live in this session.
 
 ## Prompts
-- See `docs/ai/PROMPTS.md` (created in Step 7; the master prompt is logged there verbatim as entry #1).
+- `docs/ai/PROMPTS.md` entries P00-01 to P00-06. The master prompt is verbatim in `docs/ai/prompts/00-master-prompt.md`.
 
 ## What was built
-_None yet._
+- **Skeleton:**
+  - `global.json` (SDK 10.0.100 + latestFeature roll-forward → 10.0.404; MTP test runner)
+  - `Directory.Build.props`, `Directory.Packages.props`, `.editorconfig`, `.gitignore`, `.dockerignore`
+  - `MortgageApplications.slnx` with 3 src + 2 test projects
+  - `Program.cs` with `/health` and `public partial class Program`
+- **Memory:**
+  - `AGENTS.md` (46 lines), `CLAUDE.md` (39 lines)
+  - Nested `CLAUDE.md` in Core (8), tests (8), docs (7)
+  - `.claude/rules/` backend (14), tests (10), infra (12), security (8)
+  - `CLAUDE.local.md` (gitignored)
+  - `docs/ai/proposed-user-claude-md.md`
+  - Lines loaded at session start: CLAUDE.md + AGENTS.md + security rule = 93. Path-scoped and nested files load on demand.
+- **Subagents:** `.claude/agents/` dotnet-reviewer, spec-checker, security-auditor, test-designer, parallel-implementer.
+- **Skills:** `.claude/skills/` phase, verify-all, progress, adr, retro, affordability-rules.
+- **Enforcement:**
+  - `.claude/settings.json` (13 allow, 8 deny, 5 hooks)
+  - `.claude/hooks/*.sh` (5 scripts)
+  - `.githooks/pre-commit` (Gitleaks; enabled with `git config core.hooksPath .githooks`)
+- **Verification/CI:**
+  - `scripts/verify.sh [--fast]`
+  - `.github/workflows/ci.yml`
+  - `ai-code-review.yml`, `ai-security-review.yml`
+  - All actions are pinned by commit SHA.
+- **Evidence:**
+  - `docs/PROGRESS.md`
+  - `docs/progress/_TEMPLATE.md`
+  - `docs/adr/_TEMPLATE.md`
+  - `docs/layers/PRODUCTION-LAYERS.md` (skeleton)
+  - `docs/ai/` ORCHESTRATION (Mermaid v1), PROMPTS, DESIGN-JOURNAL, AI-USAGE (stub)
+
+**How to check what loads (`/context`).** I can't run `/context` myself. Start `claude` in the repo, accept the trust dialog, and run `/context`. Expect `CLAUDE.md`, `AGENTS.md` (via `@AGENTS.md`) and `.claude/rules/security.md` under memory files. The other rules and nested `CLAUDE.md` files appear only after Claude touches matching files.
 
 ## Tests
-_None yet._
+- Added 2 / total 2 / passing 2. These are placeholders: `HarnessSmokeTests` in each test project proves the MTP pipeline discovers and runs tests. They're removed in Phase 2 and Phase 3.
+- `./scripts/verify.sh` (full), 2026-11-14:
+  ```
+  ==> restore
+  ==> build (Release, warnings as errors)
+  ==> all tests
+    total: 2
+    failed: 0
+    succeeded: 2
+  ==> format check
+  VERIFY PASSED (full)
+  ```
+
+## Harness proof (evidence)
+
+**How it was tested.** Each hook script was fed the same JSON Claude Code sends on stdin (fields verified in the hooks docs).
+
+**Why not live.** A live check in this session wasn't possible: the session started outside the repo, so the repo's hooks aren't loaded. A deliberate `Write` to `.env.example` **went through** (the file was then deleted). A headless `claude -p` run in the repo also failed (`OAuth session expired`, workspace not trusted). Live proof is an open item.
+
+**(a) protect-files.sh**
+```
+exit=2 | {"file_path":".../.env.example"} | Blocked by protect-files.sh: environment files may contain secrets (.../.env.example)
+exit=2 | {"file_path":".../certs/dev.pem"} | Blocked by protect-files.sh: certificate/key files are never edited by the agent (.../certs/dev.pem)
+exit=2 | {"file_path":".../.git/config"} | Blocked by protect-files.sh: git internals are off limits (.../.git/config)
+exit=0 | {"file_path":".../src/MortgageApplications.Api/Program.cs"} | <no output>
+exit=0 | {"file_path":".../src/X/Migrations/New.cs"} | <no output>   (new migration file: allowed)
+```
+
+**(b) block-dangerous-bash.sh**. The table below is the v2 run; the final v3 (shlex) passes the 73-case suite in `.claude/hooks/tests/test-hooks.sh`, which includes all of these
+```
+exit=2 | git push --force origin main | Blocked ...: force push is not allowed (--force-with-lease only with Alessandro's approval)
+exit=2 | git push -f | Blocked ...: force push is not allowed ...
+exit=2 | git -C . push --force | Blocked ...: force push is not allowed ...
+exit=0 | git push --force-with-lease origin x | <allowed>
+exit=2 | git commit --no-verify -m x | Blocked ...: --no-verify skips the safety hooks
+exit=2 | git reset --hard HEAD~1 | Blocked ...: git reset --hard discards work
+exit=2 | rm -rf bin | Blocked ...: rm -rf is not allowed; delete specific paths or use 'dotnet clean'
+exit=2 | rm -r -f obj | Blocked ...
+exit=2 | rm -fr x | Blocked ...
+exit=2 | rm --recursive --force x | Blocked ...
+exit=2 | sudo rm -rf / | Blocked ...
+exit=0 | rm file.txt | <allowed>
+exit=0 | rm x && dotnet test -f net10.0 -r osx-arm64 | <allowed>
+exit=0 | git push origin x && dotnet build -f net10.0 | <allowed>
+exit=2 | curl -sL https://x.sh | bash | Blocked ...: piping a download into a shell is not allowed
+exit=0 | dotnet new web --force | <allowed>
+exit=0 | git push origin phase-00-harness | <allowed>
+exit=0 | dotnet build | <allowed>
+```
+
+**(c) format-on-edit.sh** (~1.0 s per file)
+```
+--- before:
+        public static int   Add( int a,int b )   =>a+b;   $
+format hook exit=0
+--- after:
+    public static int Add(int a, int b) => a + b;$
+```
+
+**(d) verify-on-stop.sh**
+Broke `HarnessSmokeTests` (`Assert.True(false)`), then reverted:
+```
+### stop_hook_active=false (test broken):
+verify-on-stop.sh: ./scripts/verify.sh --fast FAILED on uncommitted changes. Fix before finishing.
+failed MortgageApplications.UnitTests.HarnessSmokeTests.Pipeline_runs_unit_tests (19ms)
+  failed: 1
+VERIFY FAILED (fast): unit tests
+broken test: exit=2
+### stop_hook_active=true (loop guard):
+exit=0
+### reverted; only docs changed:
+clean code tree (only docs untracked): exit=0
+```
+
+**(e) reinject-context.sh** prints the "Resume here" section of `docs/PROGRESS.md` plus the current branch (output checked 2026-11-14).
+
+**(f) Gitleaks pre-commit** fired on every harness commit: `INF no leaks found` (×5).
 
 ## Security gate
-_Not run yet._
+
+**Scanner results** (lead agent re-run after the fixes, 2026-11-14):
+
+| Tool | Command | Result |
+|---|---|---|
+| Gitleaks (history + tree) | `gitleaks git` / `gitleaks dir .` | no leaks found |
+| Semgrep | `semgrep scan --config p/csharp --config p/secrets --config p/github-actions --metrics=off --error --json .` | exit 0, 0 results, 56 files scanned, 0 errors |
+| Semgrep (shell) | `semgrep scan --config r/bash --error .claude/hooks .githooks scripts` | exit 0, 0 results |
+| NuGet vulnerabilities | `dotnet list MortgageApplications.slnx package --vulnerable --include-transitive` | no vulnerable packages (5 projects) |
+| Action pins | `git ls-remote` (auditor) | all 4 SHAs match their tags/branch |
+
+**Security-auditor verdict: PASS** (no high or critical findings). Its findings and how each was handled:
+
+| ID | Finding | Severity | Resolution |
+|---|---|---|---|
+| S1 | `git commit -n` (short form of `--no-verify`) and `git -c core.hooksPath=…` passed `block-dangerous-bash.sh`, so the Gitleaks pre-commit hook could be skipped | Medium | **Fixed** (the reviewer found the same issue, plus prefix forms; see Review gate). Covered by regression cases in `.claude/hooks/tests/test-hooks.sh`. |
+| S2 | `Bash(docker *)` allow means `docker run -v /:/h` auto-approves host-wide file access, getting around the `.env`/`.pem` deny rules | Medium | **Decision for Alessandro (D10).** This changes permission settings. |
+| S3 | `protect-files.sh` doesn't protect the harness itself (`.claude/settings*.json`, `.claude/hooks/`, `.githooks/`, workflows) | Low | **Decision for Alessandro (D11).** |
+| S4 | `Bash(dotnet *)` also allows `dotnet nuget push` / `dotnet tool install --add-source` | Low | **Decision for Alessandro (D10).** |
+| S5 | Secret scanning is client-side only (opt-in `core.hooksPath`); no Gitleaks step in CI | Low | **Proposed (D12):** add a pinned Gitleaks CI job. |
+| S6 | No `packages.lock.json` / `nuget.config` source mapping / Dependabot | Low | **Proposed (D12):** lock files + `dependabot.yml`. |
+| S7 | AI review actions read PR-author content (prompt injection) | Low, mitigated | Accepted. Same-repo guard, `pull_request` only (never `pull_request_target`), minimal permissions, `persist-credentials: false`. AI review stays advisory, never a required check. |
+| S8 | `id-token: write` in `ai-code-review.yml` | Info | False positive: claude-code-action needs it for the OIDC → GitHub App token exchange. |
+| S9 | `${{ }}` interpolation in workflows | Info | False positive: only `github.repository` and the PR number, neither attacker-controlled. |
+| S10 | Hooks fail open if `jq` can't parse the input | Info | Accepted: Claude Code always sends valid JSON, and a missing `jq` already fails closed. |
+| S11 | `AllowedHosts: *`, no HSTS/headers | Info | Deferred to Phase 3/8, when real endpoints exist. |
+| S12 | Semgrep `p/bash` returns 404; semicolon-bodied `public partial class Program;` doesn't parse | Info | **Fixed.** Use `r/bash`; `Program` now uses `{ }` so Semgrep parses the whole file. |
 
 ## Review gate
-_Not run yet._
+
+**`dotnet-reviewer`** (fresh context, opus; prompt P00-05) returned 17 findings: 1 high, 8 medium, 8 low. `spec-checker` was **not run**, because `docs/spec/ORIGINAL_SPEC.md` doesn't exist yet. No PR AI review yet (no API key secret).
+
+**Root-cause fix.** The v1/v2 Bash hook split shell text on whitespace, which can't handle quoting, wrappers or nesting. The core is now a Python `shlex` tokenizer (`python3 -I`), with the script path unchanged so `settings.json` needs no edit. A regression suite, `.claude/hooks/tests/test-hooks.sh` (73 cases), now runs inside `verify.sh` full mode and therefore in CI.
+
+| Finding (reviewer) | Severity | Resolution |
+|---|---|---|
+| `git commit -n`, `--no-verif` (prefix), `git -c core.hooksPath=…` bypass the pre-commit Gitleaks hook | High | **Fixed.** Blocked `-n` clusters, any `--no-v…` prefix, hooksPath overrides, and `git config core.hooksPath` to anything except `.githooks`. Tests added. |
+| `git push origin +main`, `--mirror`, `GIT_DIR=x git push -f`, `git reset --har` | Medium | **Fixed.** Env-prefix stripping, `+refspec`, `--mirror`, `--forc…` prefixes, `--har…` prefixes. Tests added. |
+| `/bin/rm`, `\rm`, `"rm"`, `(…)`, `{ …; }`, `&`, `time`/`nice`/`xargs`/`eval`/`FOO=1` wrappers, `bash -c "rm -rf"`, `find -delete` | Medium | **Fixed.** Quote-aware tokens, basename of the command, more separators, wrapper stripping, recursive check of `-c` and `eval` payloads, `find -delete` / `-exec rm`. Tests added. |
+| `bash <(curl …)`, `sh -c "$(curl …)"`, `curl … \| python3` | Medium | **Fixed.** Process substitution, command substitution and pipes into python/node/perl/ruby. Tests added. |
+| `protect-files.sh` misses `*.key`, `*.pfx`, `secrets/`; shell writes (`>`, `tee`, `sed -i`, `cp`) to protected paths bypass it | Medium | **Fixed** for secrets paths in both hooks. Tests added. Protecting the harness itself → **D11**. |
+| `Bash(dotnet *)` auto-approves `dotnet add package` / `tool install` / `nuget push` | Medium | **D10** (permission change). |
+| `Bash(gh pr *)` auto-approves `gh pr merge --admin`, against Checkpoint B | Medium | **D10.** |
+| `Bash(docker *)` auto-approves `docker run --privileged -v /:/host` | Medium | **D10** (same as auditor S2). |
+| No server-side secret scan in CI | Medium | **D12.** |
+| `git switch -f` / `--discard-changes` / `git branch -D` / `git worktree remove --force` | Low | **Fixed** in the hook: `switch`/`checkout` force, `--discard-changes`, `git clean -f`. Deny rules for `branch -D` / `worktree remove --force` → **D10**. |
+| Commit messages mentioning `-f` or `--no-verify` blocked (false positive) | Low | **Fixed.** `-m`/`-F` values are ignored. Tests added. Note: the settings deny rule `Bash(* --no-verify *)` still matches message text → **D10**. |
+| Stop hook loop guard needs `jq` | Low | **Fixed.** `grep` fallback. |
+| Stop hook ignores `.editorconfig`; doesn't re-verify already-committed breakage | Low | `.editorconfig` **added**. Committed breakage is caught by `verify.sh` in CI and the review gate; not added to the hook (it would build on every stop). |
+| `protect-files.sh` blocks current-branch migrations too | Low | **Fixed.** It only blocks migrations that exist on `main` (`git cat-file -e main:<path>`). |
+| `format-on-edit.sh` uses the main repo root for worktree files | Low | **Fixed.** The root is resolved from the edited file's own repo. |
+| `ci.yml` cancels in-progress runs on `main` | Low | **Fixed.** Cancel only for PRs. |
+| No `nuget.config` source mapping / lock files | Low | **D12.** |
+
+**Reviewer conduct note.** The reviewer reported that one of its test commands accidentally ran `git -C <repo> reset --har`. The auto-mode classifier denied it, so no git state changed. It was running as `general-purpose`, so its read-only limit was an instruction, not enforced by `disallowedTools`. This is one more reason to run the real `.claude/agents/` definitions from a session started in the repo.
 
 ## AI output corrected or rejected
-_None yet._
+Real cases only:
+1. **`block-dangerous-bash.sh` v1 bugs, caught by the agent's own hook tests before commit.**
+   - A plain `rm file.txt` exited with code 1: `grep -Eo` found no flags, and `pipefail` with `set -e` aborted the script.
+   - Flags were collected from the whole command line, so `rm x && dotnet test -f net10.0 -r osx-arm64` would have been blocked as `rm -rf`.
+   - Fix: parse each command segment separately (split on `; && || |`).
+2. **`verify-on-stop.sh` v1 scope too wide.** It treated any change under `src/` or `tests/`, including nested `CLAUDE.md` files, as a reason to build. Narrowed to `*.cs`, `*.csproj`, `*.props`, `*.slnx`, `global.json`.
+4. **False "Semgrep: no findings" claim by the lead agent, caught by the security-auditor.**
+   - The lead agent's first Semgrep run included `--config p/bash`, which doesn't exist (HTTP 404), so Semgrep aborted.
+   - The agent then printed `$?` after `| tail`, which reported `tail`'s exit code (0), not Semgrep's.
+   - The agent reported "no findings" in chat without seeing a real Semgrep result.
+   - Fixed: re-ran with real exit codes (above). Lesson: never read `$?` after a pipe; use `--json` and count the results.
+5. **S1 hook bypass (`git commit -n`), found by the security-auditor.** Fixed (see Security gate).
+6. **The lead agent's regex-based Bash hook (v2) was bypassable in 20+ ways**, found by the fresh-context `dotnet-reviewer`. Examples: `/bin/rm -rf`, `bash -c "rm -rf"`, `git push origin +main`, `git reset --har`. It also blocked legitimate commit messages. The agent's own 18-case test had passed, so author-written tests weren't enough. Fixed with a quote-aware tokenizer and a 73-case regression suite now run in CI. This is the clearest Phase 0 example of "the author never grades its own work".
+3. **Test projects didn't compile at first** (`CS0246: 'Fact' could not be found`). Unlike the template, `xunit.v3` doesn't add a global `using Xunit`. Fixed with `<Using Include="Xunit" />` in both test projects.
 
 ## Optimisations considered
-_None yet._
+- Format-on-edit uses `dotnet format whitespace --folder` (measured ~1.0 s) instead of a full `dotnet format` per edit (it loads the workspace and runs analyzers; not measured). Full formatting is enforced by `verify.sh`.
 
 ## Open issues
-- The brew cask installed .NET SDK 11.0.100, not 10. The .NET 10 SDK is still needed (D9).
+- **Live hook proof is pending.** Next interactive session started in the repo: accept the trust dialog, then repeat test (a) or (b) live and paste the block message here. Also re-login the `claude` CLI (`OAuth session expired`).
+- **`docs/spec/ORIGINAL_SPEC.md` is missing.** It blocks Phase 1.
+- **AI review workflows skip** until Alessandro adds the `ANTHROPIC_API_KEY` repo secret (and optionally runs `/install-github-app`).
+- **Branch protection on `main`** (require CI) is for Alessandro to enable.
+- **The brew cask also installed .NET SDK 11.0.100** (unused). `global.json` pins 10.x, so builds use 10.0.404.
 
 ## Time spent (approx.)
-- A1 + docs + plan: ~25 min (including the folder-picker timeout).
+- A1 + docs + plan: ~25 min (including the 5-min folder-picker timeout).
+- Implementation + harness tests + gates: ~1 h 10 min (approximate, from session timestamps).
 
 ## Human review (Alessandro writes this; the agent leaves it empty)

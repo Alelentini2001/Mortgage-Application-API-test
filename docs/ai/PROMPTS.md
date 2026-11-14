@@ -40,3 +40,25 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   ```
 - **Purpose:** prove the hooks fire in a real Claude Code session started inside the repo. The lead session can't do this, because it started in another folder and doesn't load the repo's hooks.
 - **Outcome:** **not run.** The CLI reported `Failed to authenticate: OAuth session expired` and that the workspace is not trusted. Live proof is deferred to the next interactive session in the repo (see phase file, "Open issues").
+
+### P00-05 · agent→subagent (`dotnet-reviewer` role, run as general-purpose/opus) · 2026-11-14
+- **Note:** the repo's `.claude/agents/` definitions weren't registered in this session (it started outside the repo). The reviewer ran as a `general-purpose` subagent told to load and follow `.claude/agents/dotnet-reviewer.md`, so its read-only limit was instructed, not enforced by frontmatter.
+- **Prompt (verbatim):**
+  ```
+  You are acting as the `dotnet-reviewer` subagent. First read /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/agents/dotnet-reviewer.md and follow its instructions and output format exactly. You are read-only: never use Write, Edit or any command that modifies files or git state.
+
+  Review the Phase 0 diff of the repo at /Users/ale_ssd/Developer/Mortgage-Application-API-test: `git -C /Users/ale_ssd/Developer/Mortgage-Application-API-test diff main...phase-00-harness`. Phase 0 is a harness + empty .NET 10 solution skeleton (no business logic yet). Focus on: (1) correctness of the hook scripts in .claude/hooks/ against their stated purpose (can a dangerous command or protected file slip through? can a hook wrongly block normal work? can the Stop hook loop?), (2) .claude/settings.json permission rules and hook wiring, (3) scripts/verify.sh failing correctly (non-zero exit on any failure), (4) the GitHub workflows' security (permissions, fork PRs, secret handling, pinned actions), (5) build configuration (global.json, Directory.Build.props, Directory.Packages.props, test projects on Microsoft.Testing.Platform), (6) any requirement in AGENTS.md that the skeleton already violates. You may run read-only commands and you may pipe sample JSON into the hook scripts to test them (protect-files.sh and block-dangerous-bash.sh only read stdin; do not run verify-on-stop.sh or format-on-edit.sh). Output only the finding list in your required format, or "No findings." with the files reviewed.
+  ```
+- **Purpose:** fresh-context review gate for Phase 0.
+- **Outcome:** see the phase 0 file, "Review gate".
+
+### P00-06 · agent→subagent (`security-auditor` role, run as general-purpose/opus) · 2026-11-14
+- **Note:** same registration limit as P00-05.
+- **Prompt (verbatim):**
+  ```
+  You are acting as the `security-auditor` subagent. First read /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/agents/security-auditor.md and follow its instructions and output format exactly. You are read-only: never use Write, Edit or any command that modifies files or git state.
+
+  Run the security gate for Phase 0 of the repo at /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-00-harness, diff against main). cd into that directory first. Run your scanners (gitleaks history + working tree, semgrep with p/csharp, p/secrets, p/github-actions and p/bash using --metrics=off, dotnet vulnerable-package scan) and review the diff against the OWASP Top 10:2025 checklist. Phase 0 contains no business logic: the relevant attack surface is the GitHub Actions workflows (.github/workflows/), the Claude Code hooks and permission settings (.claude/), the git pre-commit hook (.githooks/), scripts/verify.sh, and the minimal Program.cs. Pay particular attention to A08 (workflow permissions, untrusted PR code, prompt injection into the AI review actions) and A03 (pinned actions and packages). Output your table and verdict.
+  ```
+- **Purpose:** security gate for Phase 0.
+- **Outcome:** see the phase 0 file, "Security gate".

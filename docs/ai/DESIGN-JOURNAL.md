@@ -27,3 +27,14 @@ Chronological record of ideas, options, rejected ideas, who decided, and what ch
 - **xUnit v3 packaging.** Checked the xUnit docs: `xunit.v3` 4.x defaults to Microsoft Testing Platform v2, and with the .NET 10 SDK the `global.json` `test.runner` setting replaces `TestingPlatformDotnetTestSupport`. Chose the plain `xunit.v3` package, with no `Microsoft.NET.Test.Sdk`, because the project is MTP-only.
 - **Stop hook scope.** The first version ran verify whenever anything under `src/` or `tests/` changed, including nested `CLAUDE.md` files. Narrowed it to code and build files (`*.cs`, `*.csproj`, `*.props`, `*.slnx`, `global.json`), so doc edits never trigger a build.
 - **Dangerous-bash hook rewrite.** The agent's first version had two bugs, both caught by its own hook tests (see the phase file): a plain `rm file.txt` exited with code 1, and flags were read from the whole command line. The rewrite parses each command segment separately.
+
+## 2026-11-14 · Phase 0 gates
+
+- **The fresh-context review justified itself on day one.** The agent's own 18-case hook test passed, yet the independent reviewer found 20+ bypasses and a false positive in the Bash hook.
+- **Idea → options → choice for the Bash hook.**
+  - (1) Keep patching regexes. Rejected: whitespace splitting can't model quoting or nesting.
+  - (2) Write a real shell parser. Rejected: too heavy for a harness.
+  - (3) Use Python's `shlex` tokenizer with `punctuation_chars`, plus a regression table. **Chosen by the agent, pending Alessandro's review at Checkpoint B.**
+  - Also documented explicitly: the hook is a best-effort speed bump, and permission rules are the second layer.
+- **Permission narrowing (D10), harness self-protection (D11) and CI supply-chain controls (D12)** were raised by both gates. They change what Alessandro has approved to run without prompting, so they're left for his decision rather than applied by the agent.
+- **Honesty correction.** The lead agent reported "Semgrep: no findings" from a run that had actually aborted (nonexistent `p/bash` ruleset; `$?` read after a pipe). The security-auditor caught it, and the corrected run is recorded in the phase file.

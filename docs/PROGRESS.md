@@ -1,13 +1,13 @@
 # Progress
 
 ## Resume here
-- **Phase:** 00 (harness + skeleton). Implementation done on `phase-00-harness`; gates and PR in progress.
-- **Next action:** finish the Phase 0 gates, open the PR, then **Checkpoint B**.
+- **Phase:** 00 (harness + skeleton). Implementation and gates done on `phase-00-harness`; PR open.
+- **Next action:** **Checkpoint B**. Alessandro reviews the PR and decides D10–D12 (see the phase 0 file), then squash-merge.
 - **Open decisions / blockers for Alessandro:**
   - Add `docs/spec/ORIGINAL_SPEC.md` (blocks Phase 1).
   - Live hook proof needs one interactive Claude Code session started in the repo (accept the trust dialog; `claude` CLI login had expired).
   - Later: `/install-github-app`, `ANTHROPIC_API_KEY` repo secret, branch protection on `main`.
-- **Last verify:** `./scripts/verify.sh` full → PASSED (2 tests), 2026-11-14.
+- **Last verify:** `./scripts/verify.sh` full → PASSED (2 tests, 73 hook cases), 2026-11-14.
 
 ## Phases
 
