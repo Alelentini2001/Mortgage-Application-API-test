@@ -126,3 +126,76 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
 - **Purpose:** local AI security review of PR #2 on Alessandro's subscription.
 - **Outcome:** no findings. The sub-task checked for secrets, documented hook or permission bypasses, and injection through the logged prompts. No false-positive filtering sub-tasks were needed.
 - `/code-review` (high effort) ran inline in the lead agent, with no subagent. It reported 6 findings on the docs, all fixed (see the phase file, "Local AI reviews on PR #2").
+
+## Phase 01: spec + production layers
+
+### P01-01 · human→agent · 2026-11-14
+- **Prompt (verbatim):** `/phase 01 spec` with the arguments:
+  > 01 spec
+  >
+  > Also proceed automatically, completing all, testing, analyzing, etc...
+- **Purpose:** run Phase 1 end to end without stopping at Checkpoint A. The scope comes from P00-09.
+- **Outcome:** the agent applied the recommended option for every decision (D1–D9, marked "decided by: agent (auto-proceed)") and still stopped before the squash-merge (Checkpoint B).
+
+### P01-02 · agent→subagent (`dotnet-reviewer`) · 2026-11-14
+- **Prompt (verbatim):**
+  ```
+  Critique the affordability spec for Phase 1 of the repo at /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-01-spec). No code exists yet: this review happens before any code is written, so your job is to find problems in the rules that would cause wrong, untestable or unexplainable behaviour once implemented.
+
+  Read: docs/spec/ORIGINAL_SPEC.md (requirements, source of truth), docs/spec/affordability-rules.md (the rules under review), docs/adr/0001-affordability-assessment-model.md, the decisions table and "Worked-example check" in docs/progress/phase-01-spec.md, and AGENTS.md plus src/MortgageApplications.Core/CLAUDE.md (engineering rules: decimal only, round once at the end with AwayFromZero, evaluate every rule, thresholds in AffordabilityOptions stamped as RulesVersion).
+
+  Check in particular:
+  1. Maths: are the formulas correct (annuity payment, DTI, the DTI-based max borrowing inversion, LTI)? Recompute at least E1, E3, E5 and E8 independently (by hand or a short script with Python's decimal module at 28+ digits of precision; do not modify any repo file). Report any value that differs at 2 dp.
+  2. Consistency: do the checks, the invariant "Approved ⇒ Loan ≤ MaxBorrowing", the rounding rules and the explanation formats agree with each other? Any case where the explanation could contradict the shown numbers?
+  3. Edge cases and decimal behaviour: zero expenses, zero deposit, deposit near property value, expenses above the DTI limit, minimum/maximum inputs from section 1, term 5 and 40, precision loss or overflow in (1+r)^n with decimal, division by zero.
+  4. Spec fit: does the output cover everything ORIGINAL_SPEC.md requirement 3 asks for? Are assumptions stated clearly enough for "clearly explained"?
+  5. Testability: can Phase 2 write deterministic golden tests from section 8? Anything ambiguous an implementer would have to guess?
+  6. Anything in the rules that conflicts with AGENTS.md or the Core CLAUDE.md.
+
+  Output: a table of findings (id, severity high/medium/low, section, problem, concrete failing example, suggested fix), then your recomputed values for the examples you checked. Flag only correctness, requirement and testability gaps; no style comments.
+  ```
+- **Purpose:** fresh-context critique of the rules before any code (B5, Phase 1).
+- **Outcome:** see the phase 1 file, "Review gate".
+
+### P01-03 · agent→subagent (`spec-checker`) · 2026-11-14
+- **Prompt (verbatim):**
+  ```
+  Build the requirement traceability map for the repo at /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-01-spec). We are at the end of Phase 1 of 12; almost nothing is implemented yet, so most requirements will be "missing" or "planned". That's expected: the goal is a complete map that later phases fill in.
+
+  Source of truth: docs/spec/ORIGINAL_SPEC.md. Split it into atomic, numbered requirements (R1, R2, ...) covering every section: Scenario, Requirements 1-3 (each listed field and each "You should" bullet, each assessment output), Technical Expectations, Testing, Optional Enhancements, Documentation, Design & Reflection (each of the 4 questions), Submission, Follow-Up Discussion (fresh clone/build/run/demo, max 3 slides, the suggested topics).
+
+  For each requirement give:
+  - Status now: met / partial / missing.
+  - Where it is met or will be met: the existing file(s) that address it today (for example docs/spec/affordability-rules.md, docs/layers/PRODUCTION-LAYERS.md, src/..., tests/...), and the planned phase from the phase list in docs/PROGRESS.md and the plan in docs/ai/prompts/00-master-prompt.md section B5.
+  - Evidence: for "met" or "partial", the specific file and section (or test name) you checked. Never mark something met without having opened the file.
+
+  Also read docs/spec/affordability-rules.md and check Requirement 3 specifically: does the rules document define every assessment output the spec asks for (LTV, debt-to-income, approved/declined decision, max borrowing estimate, short explanation) and state its assumptions? Report gaps.
+
+  Output: one Markdown table with columns `ID | Requirement (short) | Spec section | Status | Where (file / planned phase) | Evidence`, followed by a short list of gaps or ambiguities in the spec mapping that need a human decision. Keep requirement text short (under 12 words each).
+  ```
+- **Purpose:** map `ORIGINAL_SPEC.md` into the traceability section of `docs/PROGRESS.md`.
+- **Outcome:** see the phase 1 file, "Review gate", and `docs/PROGRESS.md`, "Requirement traceability".
+
+### P01-04 · agent→subagent (`security-auditor`) · 2026-11-14
+- **Prompt (verbatim):**
+  ```
+  Run the security gate for Phase 1 of the repo at /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-01-spec, diff against main: `git -C /Users/ale_ssd/Developer/Mortgage-Application-API-test diff main...HEAD`). cd into that directory first.
+
+  Phase 1 is docs only plus one skill file: docs/spec/affordability-rules.md, docs/adr/0001-affordability-assessment-model.md, docs/layers/PRODUCTION-LAYERS.md, docs/progress/phase-01-spec.md, docs/PROGRESS.md, docs/ai/PROMPTS.md, docs/ai/DESIGN-JOURNAL.md and .claude/skills/affordability-rules/SKILL.md. No code, config, hook, workflow or permission changes.
+
+  Run your scanners: gitleaks on history and working tree, semgrep with p/secrets (--metrics=off, --error, --json; count results from the JSON, never read $? after a pipe), and the dotnet vulnerable-package scan. Then review the diff as a design-stage security review against OWASP Top 10:2025: the rules and layers documents now fix security-relevant design choices that Phases 3-8 will implement (input limits and validation, the minimum loan, no PII or derived ratios in logs, owner scoping with 404 for other users, JWT dev / Entra ID production, the dev token endpoint, rate limiting marked optional, data minimisation and retention). Flag design gaps that would lead to a real vulnerability once built (for example a missing authorization requirement, an unsafe default, or a data-exposure path such as returning or logging personal financial data), and anything in the skill file that would steer future code into an insecure pattern.
+
+  Output your table (tool / command / result) and findings table (id, severity, finding, file, recommendation), separating real findings from false positives, and a PASS/FAIL verdict.
+  ```
+- **Purpose:** the Phase 1 security gate.
+- **Outcome:** see the phase 1 file, "Security gate".
+
+### P01-05 · agent→subagent (`/security-review` skill, finder sub-task, general-purpose) · 2026-11-14
+- **Prompt:** the bundled `/security-review` instructions, shortened for a docs-only PR. It has the same structure as P00-11, with this context paragraph, verbatim:
+  ```
+  Context: Phase 1 of a .NET 10 mortgage-application API. The PR is docs only plus one Claude Code skill file: docs/spec/affordability-rules.md (calculation rules), docs/adr/0001-affordability-assessment-model.md, docs/layers/PRODUCTION-LAYERS.md (security/auth/logging design for later phases), docs/progress/phase-01-spec.md, docs/PROGRESS.md, docs/ai/PROMPTS.md, docs/ai/DESIGN-JOURNAL.md and .claude/skills/affordability-rules/SKILL.md (instructions that steer future code generation). No code, config, hook, workflow or permission changes. A security-auditor already reviewed the design (findings S1-S11 in the phase file, "Security gate").
+  ```
+  The method line also asked it to check "whether the skill file (which is loaded automatically when future code is written) would steer code into an exploitable pattern". The rest (objective, categories, exclusions, severity, confidence ≥ 0.7, output format) is word for word P00-11's text.
+- **Purpose:** local AI security review of PR #3 on Alessandro's subscription.
+- **Outcome:** no findings, so no false-positive filtering sub-tasks were needed. Its below-threshold note (`ThrowIf*` helpers put values in exception messages) was applied to rules §3 and the skill.
+- `/code-review` (high effort) ran inline in the lead agent, with no subagent. It reported 8 findings, all fixed (see the phase file, "Review gate").
