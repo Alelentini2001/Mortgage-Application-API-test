@@ -305,7 +305,19 @@ Also noted for Phase 8 (from Alessandro's own `dotnet tool install` output, 2026
 
 **`spec-checker` (P03-09):** at `a446c64`, **26 met, 9 partial, 20 missing** (Phase 2: 1 / 28 / 26). Moved to met: R1–R18, R21–R24, R26, R27, R29. No disagreement between code and spec. Its notes: R21 ("good use of the framework") is a judgement call; R22's one-to-many has a foreign key and cascade delete but no navigation properties and no direct test; it did not run the suite. It reported `requests.http` missing: it was added after its snapshot, in `eb21d5f`. The new table is in `docs/PROGRESS.md`.
 
-`/code-review` and `/security-review` on the PR: results in the PR comment, summarised here at Checkpoint B.
+**`/security-review` (P03-10) on PR #6:** the finder sub-task reported **no findings** at confidence 8 or above, so no false-positive filter sub-tasks ran. It checked injection, owner scoping, mass assignment, validation, deserialization, error exposure, personal data in logs, secrets and dependencies.
+
+**`/code-review` (high, inline) on PR #6:** 7 findings, all low; none is a correctness bug. None changed in this PR, each for a stated reason:
+
+| # | Finding | Resolution |
+|---|---|---|
+| 1 (altitude) | `ProblemExceptionHandler` special-cases `BadHttpRequestException`; `RouteHandlerOptions.ThrowOnBadRequest = false` everywhere would give one error path | **Not changed:** both paths are now tested in both environments; changing the framework default also changes Development diagnostics. Candidate for the Phase 9 clean-up |
+| 2 (reuse) | `[Range(5, 40)]` repeats the Core term bounds | **Not changed:** the attribute is part of the approved P3-D2; the HTTP bound tests (I13) catch a drift at the boundary |
+| 3 (conventions) | `.claude/rules/backend.md` says reads "project to DTOs"; the repository returns entities | **Decision for Alessandro:** P3-D1 chose entities through a Core port (DTOs live in Api). Either reword the rule or accept the exception |
+| 4 (simplification) | camelCase conversion in both `Validate` and `ValidationErrorKeys` | **Not changed:** harmless; the request stays correct on its own if the hook ever changes |
+| 5 (simplification) | 2 dp restored both in the entity constructor and by `MinimumScaleTwoConverter` | **Not changed:** Phase 9 clean-up (removing the converter needs a model-snapshot check) |
+| 6 (efficiency) | The result comparer serialises on every compare | **Not changed:** reads are no-tracking today; revisit in Phase 6, where the worker tracks assessments |
+| 7 (efficiency) | `JsonStrictnessTests` builds a host per theory row (suite ~3 s → ~8 s) | **Not changed:** Phase 9 measures first |
 
 ## AI output corrected or rejected (REAL cases only)
 

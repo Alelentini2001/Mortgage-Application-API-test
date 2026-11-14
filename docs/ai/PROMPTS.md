@@ -434,3 +434,12 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
   ```
 - **Purpose:** Phase 3 requirement traceability.
 - **Outcome:** 26 met, 9 partial, 20 missing (Phase 2: 1 / 28 / 26). New table in `docs/PROGRESS.md`.
+
+### P03-10 · agent→subagent (`/security-review` skill, finder sub-task, general-purpose) · 2026-11-14
+- **Prompt:** the bundled `/security-review` instructions (objective, critical instructions, categories, methodology, output, confidence scoring), condensed into one prompt with the same content. The context paragraph, verbatim:
+  ```
+  Context: Phase 3 of a .NET 10 mortgage-application API. The PR adds EF Core SQLite persistence (src/MortgageApplications.Infrastructure: DbContext, configurations, owner-scoped repository, a JSON value converter for the assessment result, a decimal scale converter, the initial migration, a design-time factory), the Core use case MortgageApplicationService and ApplicationInputRules, and the HTTP API (src/MortgageApplications.Api: POST/GET /api/applications, POST/GET /api/applications/{id}/assessments, a request record with AddValidation + IValidatableObject, strict JSON options, ProblemExceptionHandler, ValidationErrorKeys, startup options validation, DevelopmentCurrentUser as a fixed owner until Phase 7, OpenAPI + Scalar and startup migrations in Development only), packages, and tests. A security-auditor subagent and a dotnet-reviewer already reviewed this branch (docs/progress/phase-03-api.md, "Security gate" and "Review gate"); their fixes are in the diff. Accepted and documented, do not report: the fixed DevelopmentCurrentUser with no RequireAuthorization until Phase 7 (builds before Phase 7 are not deployed), no rate limiting until Phase 8, version 7 IDs revealing creation time. Rules: .claude/rules/security.md, AGENTS.md, docs/spec/affordability-rules.md section 6.
+  ```
+- **Purpose:** local AI security review of PR #6 on Alessandro's subscription.
+- **Outcome:** no findings at confidence 8 or above (it listed 9 attack surfaces checked and why each holds), so no false-positive filter sub-tasks ran.
+- `/code-review` (high effort) on PR #6 ran inline in the lead agent, with no subagent: 7 findings, all low and none a correctness bug (1 altitude, 1 reuse, 1 conventions, 2 simplification, 2 efficiency). Resolutions in the phase file, "Review gate".
