@@ -74,6 +74,29 @@ public sealed class AffordabilityAssessmentTests
         Assert.Throws<ArgumentException>(() => assessment.Complete(tampered, _finishedAt));
     }
 
+    // /code-review finding 1: the stored checks are a copy, so changing the caller's list later has no effect.
+    [Fact]
+    public void Complete_keeps_a_copy_of_the_checks()
+    {
+        var assessment = Pending();
+        var valid = TestData.Calculator().Assess(TestData.E1);
+        var callerList = valid.Checks.ToList();
+
+        assessment.Complete(valid with { Checks = callerList }, _finishedAt);
+        callerList[0] = callerList[0] with { Passed = false };
+
+        Assert.True(assessment.Result!.Checks[0].Passed);
+    }
+
+    [Fact]
+    public void Complete_result_with_null_checks_throws()
+    {
+        var assessment = Pending();
+        var tampered = TestData.Calculator().Assess(TestData.E1) with { Checks = null! };
+
+        Assert.Throws<ArgumentException>(() => assessment.Complete(tampered, _finishedAt));
+    }
+
     // A2: the result carries the rules version, rate and limits used.
     [Fact]
     public void Complete_pending_stores_result_and_time()
@@ -84,7 +107,9 @@ public sealed class AffordabilityAssessmentTests
         assessment.Complete(result, _finishedAt);
 
         Assert.Equal(AssessmentStatus.Completed, assessment.Status);
-        Assert.Same(result, assessment.Result);
+        Assert.Equal(result.Decision, assessment.Result!.Decision);
+        Assert.Equal(result.Summary, assessment.Result.Summary);
+        Assert.Equal(result.Checks, assessment.Result.Checks);
         Assert.Equal(_finishedAt, assessment.AssessedAt);
         Assert.Null(assessment.FailedAt);
         Assert.Equal("1.0", assessment.Result!.RulesVersion);
@@ -118,7 +143,7 @@ public sealed class AffordabilityAssessmentTests
         Assert.Throws<InvalidOperationException>(() => assessment.Complete(second, _finishedAt.AddSeconds(1)));
 
         Assert.Equal(AssessmentStatus.Completed, assessment.Status);
-        Assert.Same(first, assessment.Result);
+        Assert.Equal(first.Summary, assessment.Result!.Summary);
         Assert.Equal(_finishedAt, assessment.AssessedAt);
     }
 

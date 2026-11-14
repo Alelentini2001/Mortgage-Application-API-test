@@ -77,7 +77,7 @@ public sealed class AffordabilityCalculator
             MaxBorrowing: DecimalMath.Round2(maxBorrowing),
             Decision: decision,
             Checks: Array.AsReadOnly(checks),
-            Summary: SummaryBuilder.Build(checks),
+            Summary: SummaryBuilder.Build(decision, checks),
             AssessmentRate: _assessmentRate,
             RulesVersion: _rulesVersion);
     }

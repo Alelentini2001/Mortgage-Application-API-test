@@ -48,11 +48,14 @@ public sealed class AffordabilityAssessment
     public void Complete(AffordabilityResult result, DateTimeOffset assessedAt)
     {
         ArgumentNullException.ThrowIfNull(result);
-        EnsureConsistent(result);
+
+        // Copy the checks first, so a caller can't change them after they are validated.
+        var stored = result with { Checks = Array.AsReadOnly(result.Checks?.ToArray() ?? []) };
+        EnsureConsistent(stored);
         EnsureFinishTime(assessedAt, nameof(assessedAt));
         EnsurePending();
 
-        Result = result;
+        Result = stored;
         AssessedAt = assessedAt;
         Status = AssessmentStatus.Completed;
     }
@@ -81,7 +84,7 @@ public sealed class AffordabilityAssessment
     private static void EnsureConsistent(AffordabilityResult result)
     {
         var checks = result.Checks;
-        var consistent = checks is { Count: 3 }
+        var consistent = checks.Count == 3
             && checks.All(c => c is not null)
             && (result.Decision == Decision.Approved) == checks.All(c => c.Passed);
         if (!consistent)

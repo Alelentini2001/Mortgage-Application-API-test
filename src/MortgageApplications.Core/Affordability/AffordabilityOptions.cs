@@ -32,9 +32,9 @@ public sealed class AffordabilityOptions
             errors.Add($"{nameof(AssessmentRate)} must be between 0.001 and 0.25 with at most 4 decimal places.");
         }
 
-        AddPercentError(errors, nameof(MaxLoanToValuePercent), MaxLoanToValuePercent, 100m);
-        AddPercentError(errors, nameof(MaxDebtToIncomePercent), MaxDebtToIncomePercent, 100m);
-        AddPercentError(errors, nameof(MaxLoanToIncomeMultiple), MaxLoanToIncomeMultiple, 10m);
+        AddLimitError(errors, nameof(MaxLoanToValuePercent), MaxLoanToValuePercent, 100m);
+        AddLimitError(errors, nameof(MaxDebtToIncomePercent), MaxDebtToIncomePercent, 100m);
+        AddLimitError(errors, nameof(MaxLoanToIncomeMultiple), MaxLoanToIncomeMultiple, 10m);
 
         if (string.IsNullOrWhiteSpace(RulesVersion))
         {
@@ -44,7 +44,7 @@ public sealed class AffordabilityOptions
         return errors;
     }
 
-    private static void AddPercentError(List<string> errors, string name, decimal value, decimal max)
+    private static void AddLimitError(List<string> errors, string name, decimal value, decimal max)
     {
         if (value <= 0m || value > max || !DecimalMath.HasAtMostDecimals(value, 2))
         {
