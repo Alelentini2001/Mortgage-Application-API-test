@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MortgageApplications.Api/MortgageApplications.Api.csproj" />
+    <Project Path="src/MortgageApplications.Core/MortgageApplications.Core.csproj" />
+    <Project Path="src/MortgageApplications.Infrastructure/MortgageApplications.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MortgageApplications.IntegrationTests/MortgageApplications.IntegrationTests.csproj" />
+    <Project Path="tests/MortgageApplications.UnitTests/MortgageApplications.UnitTests.csproj" />
+  </Folder>
+</Solution>
