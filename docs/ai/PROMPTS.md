@@ -394,4 +394,43 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
 - **Prompt (verbatim):**
   > camelCase (keep fix)
 - **Purpose:** decision on ambiguity A1, after `AddValidation` turned out to emit PascalCase keys.
-- **Outcome:** `ValidationErrorKeys` kept; Api committed. `dotnet-ef` still not installed, so the migration waits.
+- **Outcome:** `ValidationErrorKeys` kept; Api committed. Alessandro then installed `dotnet-ef` (repo-root `dotnet-tools.json`); migration generated, all 332 tests pass, full verify passed at `bf2920c`.
+
+### P03-07 · agent→subagent (`security-auditor`) · 2026-11-14
+- **Prompt (verbatim):**
+  ```
+  Security gate for Phase 3 of a .NET 10 mortgage-application API. Review the diff `git diff main...phase-03-api` (branch phase-03-api, HEAD a446c64). It adds: EF Core SQLite persistence (src/MortgageApplications.Infrastructure: DbContext, configurations, owner-scoped repository, AffordabilityResultJson value converter, MinimumScaleTwoConverter, initial migration, design-time factory), the Core use case MortgageApplicationService and ApplicationInputRules, and the HTTP API (src/MortgageApplications.Api: four endpoints under /api/applications, CreateApplicationRequest with AddValidation + IValidatableObject, strict JSON options, ProblemExceptionHandler, ValidationErrorKeys, AffordabilityOptionsValidator with ValidateOnStart, DevelopmentCurrentUser, OpenAPI + Scalar in Development only, startup migration in Development only), new packages in Directory.Packages.props, a repo-root dotnet-tools.json, and tests.
+
+  Run your scanners: gitleaks on history and working tree, semgrep with p/csharp and p/secrets (--metrics=off, --error, --json; count results from the JSON, never read $? after a pipe; add --baseline-commit main for the diff run), and the dotnet vulnerable-package scan including transitive packages. Then review the diff against OWASP Top 10:2025 and the repo rules in .claude/rules/security.md, AGENTS.md and docs/spec/affordability-rules.md sections 1 and 6.
+
+  Focus on: broken access control (every read scoped to the owner, assessments only through the owner's application, identical 404 bodies for unknown and foreign IDs, owner never taken from or returned in a body); mass assignment and input handling (strict JSON, numbers as strings, decimal overflow or extreme values reaching the calculator, the minimum-loan rule); information leaks (exception text, stack traces or submitted values in 400/404/415/500 bodies in Development and Production; ToString or JSON serialisation of entities; anything personal in logs, noting Phase 5 owns logging); configuration (options fail closed at startup, connection string, OpenAPI/Scalar exposure outside Development, startup migrations outside Development); the BadHttpRequestException status mapping and the SuppressDiagnosticsCallback choice; supply chain (the five new packages and their versions, the dotnet-ef tool manifest). Known accepted items, don't re-raise unless the code makes them worse: DevelopmentCurrentUser is a fixed owner until Phase 7 (builds before Phase 7 are not deployed), no rate limiting until Phase 8 (security-auditor S6 accepted risk), version 7 IDs reveal creation time (Phase 2 S6).
+
+  Report each finding with severity, file:line, evidence, and whether it's real or a false positive with the reason. Say plainly which scanners ran and which did not.
+  ```
+- **Purpose:** Phase 3 security gate.
+- **Outcome:** _pending_.
+
+### P03-08 · agent→subagent (`dotnet-reviewer`) · 2026-11-14
+- **Prompt (verbatim):**
+  ```
+  Fresh-context review of Phase 3 of a .NET 10 mortgage-application API: `git diff main...phase-03-api` (HEAD a446c64). Read docs/progress/phase-03-api.md first (plan, approved decisions P3-D1 to P3-D8, the A1–A12 answers, "Docs verified", and "Implementation notes", which explain why the assessment result is a JSON value-converter column instead of an EF complex type). Rules: AGENTS.md, .claude/rules/backend.md, .claude/rules/tests.md, tests/CLAUDE.md, src/MortgageApplications.Core/CLAUDE.md, docs/spec/affordability-rules.md.
+
+  Flag only correctness, security, framework-misuse and requirement gaps, plus test gaps where an approved case isn't really proven. Specifically check:
+  1. EF Core: the value converter and comparer for AffordabilityResult (null handling, decimal scale and enum round trip, change tracking), MinimumScaleTwoConverter applied to every decimal (any value it could change, any query it could break), constructor binding of MortgageApplication, the repository's owner filter and the assessment subquery, AsNoTracking use, cascade delete, the migration vs the configurations, DateTimeOffset on SQLite.
+  2. Minimal APIs: AddValidation behaviour with nullable value-type properties, IValidatableObject running only after attribute validation, the ValidationErrorKeys rename (does it hit every validation response, any key collision), TypedResults and Results unions, Created Location values, the {id:guid} constraint, ProblemExceptionHandler (BadHttpRequestException status, nothing leaked, the response already started case), UseStatusCodePages ordering, SuppressDiagnosticsCallback, strict JSON options and their effect on OpenAPI or other bodies, DI lifetimes (calculator singleton from IOptions, scoped service and DbContext), ValidateOnStart wiring.
+  3. Core: ApplicationInputRules vs InputGuard parity and the A6 rule, the service reading the clock once, any way an invalid or foreign request can create rows.
+  4. Tests: does each approved case (phase file "Proposal" selection) actually prove what it claims? In particular the cross-owner test sharing one in-memory database across WithWebHostBuilder hosts, the startup-failure tests (does Sources.Clear really remove the Affordability section, or do they pass for another reason?), the raw-JSON scale asserts, and the 500 tests in both environments.
+  Re-run any arithmetic or behaviour you doubt rather than trusting comments. You may run `dotnet test` with filters and `git` read commands. Report findings as ID | severity | file:line | problem | suggested fix, and say which concerns you checked and found fine.
+  ```
+- **Purpose:** Phase 3 review gate.
+- **Outcome:** _pending_.
+
+### P03-09 · agent→subagent (`spec-checker`) · 2026-11-14
+- **Prompt (verbatim):**
+  ```
+  Requirement traceability at the end of Phase 3 (branch phase-03-api, HEAD a446c64). Source of truth: docs/spec/ORIGINAL_SPEC.md. Previous snapshot: the "Requirement traceability" table in docs/PROGRESS.md (R1–R55, end of Phase 2: 1 met, 28 partial, 26 missing). Phase 3 plan and results: docs/progress/phase-03-api.md.
+
+  Re-check every row against the repository as it is now (src/, tests/, docs/). Status key: "met" needs code or a test; design written down but not built is "partial". For each row give ID | status | where (file and test that prove it) | change since Phase 2. Rows expected to move are R1, R2, R3, R4, R5–R9, R10, R11, R12, R13, R21, R22, R23, R24, R26, R27, R29, but judge each one yourself and don't promote a row on the plan's word alone. Then give the new totals, and list any requirement where the code and the spec disagree or where you're unsure.
+  ```
+- **Purpose:** Phase 3 requirement traceability.
+- **Outcome:** _pending_.
