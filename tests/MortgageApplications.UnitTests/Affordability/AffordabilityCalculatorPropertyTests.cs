@@ -4,7 +4,8 @@ namespace MortgageApplications.UnitTests.Affordability;
 
 /// <summary>
 /// Seeded property tests (P2-D4). The generator stays inside the rules section 1 bounds, uses whole cents
-/// (integer arithmetic, no double), and picks an exact bound for a field 10% of the time.
+/// (integer arithmetic, no double), and picks an exact bound for income, property, deposit, expenses and term
+/// 10% of the time each. Small incomes clamp many properties to 1,000 (tiny loans); that is expected.
 /// Assertions never depend on specific generated values, only on the invariants.
 /// </summary>
 public sealed class AffordabilityCalculatorPropertyTests
@@ -97,8 +98,9 @@ public sealed class AffordabilityCalculatorPropertyTests
         var income = Cents(random.NextInt64(low, (low * 10) + 1));
         income = Bias(random, income, 1m, 10_000_000m);
 
-        // Property: income × 0.50–9.00, inside 1,000–100,000,000.
+        // Property: income × 0.50–9.00, inside 1,000–100,000,000; 10% of the time an exact bound.
         var property = Clamp(Math.Round(income * Percent(random, 50, 900), 2), 1_000m, 100_000_000m);
+        property = Bias(random, property, 1_000m, 100_000_000m);
 
         // Deposit: 0–40% of the property, always leaving a loan of at least 1,000.
         var deposit = Math.Round(property * Percent(random, 0, 40), 2);

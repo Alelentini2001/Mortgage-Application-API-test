@@ -82,6 +82,26 @@ public sealed class AffordabilityOptionsTests
     }
 
     [Fact]
+    public void Validate_errors_do_not_contain_the_configured_values()
+    {
+        var options = new AffordabilityOptions
+        {
+            AssessmentRate = 0.98765m,
+            MaxLoanToValuePercent = 123.45m,
+            MaxDebtToIncomePercent = 678.91m,
+            MaxLoanToIncomeMultiple = 23.45m,
+            RulesVersion = "1.0",
+        };
+
+        var errors = string.Join(" ", options.Validate());
+
+        Assert.DoesNotContain("98765", errors, StringComparison.Ordinal);
+        Assert.DoesNotContain("123.45", errors, StringComparison.Ordinal);
+        Assert.DoesNotContain("678.91", errors, StringComparison.Ordinal);
+        Assert.DoesNotContain("23.45", errors, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validate_rules_10_returns_no_errors()
     {
         Assert.Empty(TestData.Rules10().Validate());

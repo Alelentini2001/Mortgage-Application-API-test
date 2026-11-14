@@ -85,6 +85,31 @@ public sealed class MortgageApplicationTests
         Assert.Equal("createdAt", ex.ParamName);
     }
 
+    // Review R1: Guid.CreateVersion7 would reject these with the value in its message.
+    [Fact]
+    public void Create_default_time_throws_without_the_value()
+    {
+        var ex = Assert.Throws<ArgumentException>(() => MortgageApplication.Create("owner-1", TestData.E1, default));
+
+        Assert.Equal("createdAt", ex.ParamName);
+        Assert.DoesNotContain("Actual value", ex.Message, StringComparison.Ordinal);
+    }
+
+    // Review N6: inputs are stored with scale 2 even when submitted as 100.500.
+    [Fact]
+    public void Create_stores_money_with_scale_2()
+    {
+        var inputs = TestData.E1 with { AnnualIncome = 100.500m, MonthlyExpenses = 0m };
+
+        var application = MortgageApplication.Create("owner-1", inputs, TestData.CreatedAt);
+
+        Assert.Equal(100.50m, application.AnnualIncome);
+        TestData.AssertScale2(application.AnnualIncome);
+        TestData.AssertScale2(application.MonthlyExpenses);
+        TestData.AssertScale2(application.DepositAmount);
+        TestData.AssertScale2(application.PropertyValue);
+    }
+
     [Fact]
     public void Create_valid_inputs_can_be_assessed()
     {

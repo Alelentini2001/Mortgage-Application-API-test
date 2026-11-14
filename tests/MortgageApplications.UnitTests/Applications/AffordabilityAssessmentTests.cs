@@ -43,6 +43,37 @@ public sealed class AffordabilityAssessmentTests
         Assert.Equal("createdAt", ex.ParamName);
     }
 
+    [Fact]
+    public void CreatePending_default_time_throws()
+    {
+        var ex = Assert.Throws<ArgumentException>(() => AffordabilityAssessment.CreatePending(_applicationId, default));
+
+        Assert.Equal("createdAt", ex.ParamName);
+    }
+
+    // Review R3: a hand-built result whose decision contradicts its checks is rejected.
+    [Fact]
+    public void Complete_result_with_decision_not_matching_checks_throws_and_stays_pending()
+    {
+        var assessment = Pending();
+        var tampered = TestData.Calculator().Assess(TestData.E1) with { Decision = Decision.Declined };
+
+        var ex = Assert.Throws<ArgumentException>(() => assessment.Complete(tampered, _finishedAt));
+
+        Assert.Equal("result", ex.ParamName);
+        Assert.Equal(AssessmentStatus.Pending, assessment.Status);
+    }
+
+    [Fact]
+    public void Complete_result_without_three_checks_throws()
+    {
+        var assessment = Pending();
+        var valid = TestData.Calculator().Assess(TestData.E1);
+        var tampered = valid with { Checks = valid.Checks.Take(2).ToArray() };
+
+        Assert.Throws<ArgumentException>(() => assessment.Complete(tampered, _finishedAt));
+    }
+
     // A2: the result carries the rules version, rate and limits used.
     [Fact]
     public void Complete_pending_stores_result_and_time()

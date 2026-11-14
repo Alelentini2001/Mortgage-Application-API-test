@@ -12,10 +12,12 @@ public sealed class MortgageApplication
     {
         Id = id;
         OwnerId = ownerId;
-        AnnualIncome = inputs.AnnualIncome;
-        MonthlyExpenses = inputs.MonthlyExpenses;
-        DepositAmount = inputs.DepositAmount;
-        PropertyValue = inputs.PropertyValue;
+        // The guard allows at most 2 dp by value, so Round2 never changes the value; it only normalises the scale
+        // (100.500 → 100.50), so the stored and returned values always show 2 dp.
+        AnnualIncome = DecimalMath.Round2(inputs.AnnualIncome);
+        MonthlyExpenses = DecimalMath.Round2(inputs.MonthlyExpenses);
+        DepositAmount = DecimalMath.Round2(inputs.DepositAmount);
+        PropertyValue = DecimalMath.Round2(inputs.PropertyValue);
         TermYears = inputs.TermYears;
         CreatedAt = createdAt;
     }

@@ -165,13 +165,34 @@ public sealed class AffordabilityCalculatorTests
         var options = TestData.Rules10();
         var calculator = new AffordabilityCalculator(options);
 
+        options.AssessmentRate = 0.25m;
         options.MaxLoanToValuePercent = 10m;
+        options.MaxDebtToIncomePercent = 10m;
+        options.MaxLoanToIncomeMultiple = 1m;
         options.RulesVersion = "changed";
         var result = calculator.Assess(TestData.E1);
 
         Assert.Equal(Decision.Approved, result.Decision);
-        Assert.Equal(90.00m, result.Checks[0].Limit);
+        Assert.Equal(0.06m, result.AssessmentRate);
+        Assert.Equal(1_438.92m, result.MonthlyPayment);
+        Assert.Equal([90.00m, 45.00m, 4.50m], result.Checks.Select(c => c.Limit));
         Assert.Equal("1.0", result.RulesVersion);
+    }
+
+    // Security gate S1 / review R2: record ToString must not print inputs or derived values (rules section 6).
+    [Fact]
+    public void ToString_of_inputs_contains_no_values()
+    {
+        Assert.Equal("AffordabilityInputs { redacted }", TestData.E1.ToString());
+    }
+
+    [Fact]
+    public void ToString_of_result_prints_only_decision_and_rules_version()
+    {
+        var result = TestData.Calculator().Assess(TestData.E1);
+
+        Assert.Equal("AffordabilityResult { Decision = Approved, RulesVersion = 1.0 }", result.ToString());
+        Assert.Equal("CheckResult { Name = LTV, Passed = True }", result.Checks[0].ToString());
     }
 
     // C1: summary is culture-independent. Named cultures are unavailable under InvariantGlobalization,

@@ -48,6 +48,7 @@ public sealed class AffordabilityAssessment
     public void Complete(AffordabilityResult result, DateTimeOffset assessedAt)
     {
         ArgumentNullException.ThrowIfNull(result);
+        EnsureConsistent(result);
         EnsureFinishTime(assessedAt, nameof(assessedAt));
         EnsurePending();
 
@@ -72,6 +73,20 @@ public sealed class AffordabilityAssessment
         if (value < CreatedAt)
         {
             throw new ArgumentException("Must not be before the assessment was created.", paramName);
+        }
+    }
+
+    // AffordabilityResult is a public record, so a caller could build one by hand. Only accept results with the
+    // three checks and a decision that matches them (Approved exactly when all pass).
+    private static void EnsureConsistent(AffordabilityResult result)
+    {
+        var checks = result.Checks;
+        var consistent = checks is { Count: 3 }
+            && checks.All(c => c is not null)
+            && (result.Decision == Decision.Approved) == checks.All(c => c.Passed);
+        if (!consistent)
+        {
+            throw new ArgumentException("Must have three checks and a decision that matches them.", nameof(result));
         }
     }
 
