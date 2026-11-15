@@ -25,6 +25,9 @@ internal sealed class FakeRepository : IMortgageApplicationRepository
     /// <summary>When set, <see cref="UpdateAssessmentAsync"/> throws it (a failed save).</summary>
     public Exception? UpdateFailure { get; set; }
 
+    /// <summary>Every call to <see cref="UpdateAssessmentAsync"/>, counted before <see cref="UpdateFailure"/> is thrown.</summary>
+    public int UpdateAttempts { get; private set; }
+
     public Task AddAsync(MortgageApplication application, CancellationToken cancellationToken)
     {
         Applications.Add(application);
@@ -58,6 +61,7 @@ internal sealed class FakeRepository : IMortgageApplicationRepository
 
     public Task UpdateAssessmentAsync(AffordabilityAssessment assessment, CancellationToken cancellationToken)
     {
+        UpdateAttempts++;
         if (UpdateFailure is not null)
         {
             throw UpdateFailure;

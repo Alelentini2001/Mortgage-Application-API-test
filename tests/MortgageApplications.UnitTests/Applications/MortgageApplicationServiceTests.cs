@@ -295,6 +295,10 @@ public sealed class MortgageApplicationServiceTests
             () => _service.ProcessAssessmentAsync(assessment.Id, Ct));
 
         Assert.Same(failure, thrown);
+        // One save attempt, of the Completed assessment; the use case does not fall back to Fail.
+        Assert.Equal(1, _repository.UpdateAttempts);
+        Assert.Equal(AssessmentStatus.Completed, assessment.Status);
+        Assert.Null(assessment.FailedAt);
     }
 
     // U-P11: the startup re-enqueue lists only Pending assessments.
