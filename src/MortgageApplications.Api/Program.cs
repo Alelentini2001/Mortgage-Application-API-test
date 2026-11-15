@@ -5,9 +5,14 @@ using MortgageApplications.Api.Assessments;
 using MortgageApplications.Api.Configuration;
 using MortgageApplications.Api.Errors;
 using MortgageApplications.Api.Identity;
+using MortgageApplications.Api.Observability;
 using MortgageApplications.Core.Affordability;
 using MortgageApplications.Core.Applications;
 using MortgageApplications.Infrastructure;
+using OpenTelemetry;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,6 +32,34 @@ builder.Services.AddOptions<AssessmentQueueOptions>()
 builder.Services.AddSingleton<ChannelAssessmentQueue>();
 builder.Services.AddSingleton<IAssessmentQueue>(sp => sp.GetRequiredService<ChannelAssessmentQueue>());
 builder.Services.AddHostedService<AssessmentWorker>();
+
+// Telemetry (Phase 5, P5-D1 A): ASP.NET Core server spans and meters, our worker's span and metrics
+// (AssessmentTelemetry), and logs, through the OpenTelemetry SDK. The OTLP exporter is added only when
+// OTEL_EXPORTER_OTLP_ENDPOINT is set (read from configuration, which includes environment variables), so tests, CI
+// and a plain `dotnet run` never try to connect. The ASP.NET Core instrumentation redacts query-string values.
+builder.Services.AddSingleton<AssessmentTelemetry>();
+var openTelemetry = builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource =>
+    {
+        // AddService would override OTEL_SERVICE_NAME, so the default name applies only when that is not set.
+        if (string.IsNullOrWhiteSpace(builder.Configuration["OTEL_SERVICE_NAME"]))
+        {
+            resource.AddService("mortgage-applications");
+        }
+    })
+    .WithTracing(tracing => tracing
+        .AddAspNetCoreInstrumentation()
+        .AddSource(AssessmentTelemetry.Name))
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddMeter(AssessmentTelemetry.Name)
+        .AddMeter("Microsoft.AspNetCore.Hosting")
+        .AddMeter("Microsoft.AspNetCore.Server.Kestrel"))
+    .WithLogging();
+if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+{
+    openTelemetry.UseOtlpExporter();
+}
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ICurrentUser, DevelopmentCurrentUser>();
@@ -62,7 +95,7 @@ app.UseStatusCodePages();
 
 if (app.Environment.IsDevelopment())
 {
-    // Development only: production runs migrations as a separate step (ADR in Phase 4).
+    // Development only: production runs migrations as a separate step (ADR 0002).
     await app.Services.MigrateDatabaseAsync();
     app.MapOpenApi();
     app.MapScalarApiReference();
