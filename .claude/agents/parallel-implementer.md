@@ -17,7 +17,3 @@ You implement exactly one approved phase plan, in your own worktree and branch.
 6. Report: files changed, commits, the verify output (trimmed), and anything in the plan you could not do and why.
 
 If the plan is ambiguous or a step fails three times, stop and report instead of guessing.
-
-## Context and handover
-- Start from your brief (added at the top of your context by the `SubagentStart` hook; the lead prints the same text with `scripts/context/brief.sh <agent>`) and from `docs/ai/context/CONTEXT-INDEX.md`. Read only the files and sections they point to.
-- End your report with the headings in `docs/ai/context/HANDOVER-TEMPLATE.md` (Task ID, Responsibility, Context references, Work done, Files, Discoveries, Concerns, Verification, Next action). The lead saves it as a handover.

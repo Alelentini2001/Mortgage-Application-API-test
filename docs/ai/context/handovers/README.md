@@ -1,1 +1,0 @@
-One file per delegated task, named `H<phase>-<NNN>-<agent>.md`, written by the lead from the agent's report with [../HANDOVER-TEMPLATE.md](../HANDOVER-TEMPLATE.md); the newest 5 appear in every brief (path and task line only).

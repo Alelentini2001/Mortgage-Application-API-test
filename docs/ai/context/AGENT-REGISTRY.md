@@ -1,12 +1,12 @@
 # Agent registry
 
-Who does what, and why each agent has its model. The tools and the model are set in `.claude/agents/<name>.md`; this page explains them and does not change them. `scripts/context/brief.sh` reads the Kind, Responsibility, Boundaries and Model lines below, so keep those labels and one `## <agent>` heading per agent file.
+Who does what, and why each agent has its model. The tools and the model are set in `.claude/agents/<name>.md`; this page explains them and does not change them.
 
 Rules for every agent:
 - Never downgrade a security or review model to save usage. When usage is "approaching", the lead cuts extra delegation and context loading first.
 - Reviewers (`dotnet-reviewer`, `security-auditor`, `spec-checker`) do not get earlier reviewers' findings by default. They review the diff and the spec on their own. The lead passes earlier findings only when the task is a re-check of named fixes, and says so in the prompt.
 - Decisions reserved for Alessandro are never made by an agent: plan approval (Checkpoint A), merge approval (Checkpoint B), scope changes, new packages, tools, MCP servers, permissions or secrets, accepting a risk, and any choice listed as "for Alessandro" in a phase file.
-- Every agent ends its report with the headings in [HANDOVER-TEMPLATE.md](HANDOVER-TEMPLATE.md). Read-only agents cannot write files, so the lead saves the handover.
+- Subagents do not see the lead's conversation. The lead's prompt gives each one its task, the files to read and what is out of scope, and the lead records the prompt and the outcome in the phase file.
 
 ## dotnet-reviewer
 - **Kind:** reviewer
@@ -21,7 +21,7 @@ Rules for every agent:
 - **Responsibility:** implements one approved plan in its own git worktree, test-first, in small conventional commits.
 - **Boundaries:** may use Write and Edit, only inside the approved plan's scope; never pushes, never force-pushes, never uses `--no-verify`; stops after the same step fails 3 times.
 - **Model:** opus. Reason: it writes production code and tests; mistakes here are expensive to find later.
-- **Context it needs:** the phase file ("Plan", "Decisions", the approved test proposal), `AGENTS.md`, `CLAUDE.md`, `docs/ai/context/CURRENT-WORK.md`.
+- **Context it needs:** the phase file ("Plan", "Decisions", the approved test proposal), `AGENTS.md`, `CLAUDE.md`.
 - **Reserved for Alessandro:** any change to the approved plan, any new package, the merge.
 
 ## security-auditor
@@ -47,3 +47,18 @@ Rules for every agent:
 - **Model:** sonnet. Reason: structured reading of the plan and spec into a list of cases; the arithmetic is shown so it can be checked.
 - **Context it needs:** the phase "Plan", the spec, the code under test if it exists.
 - **Reserved for Alessandro:** which cases are approved.
+
+## Choosing a model for other work
+
+The five agents above keep their models. For work outside them, the lead picks the cheapest option that is still safe for the task:
+
+| Work | Use | Why |
+|---|---|---|
+| Production code, tests, security, review, money maths | the five agents above (Opus where set) or the lead itself | correctness first; never trade these for usage |
+| Broad read-only search in the repo | `Explore` (or `general-purpose`) with a smaller model | locating code needs little reasoning |
+| Claude Code or Anthropic docs questions | `claude-code-guide` | knows where the docs are |
+| A short edit the lead already understands | the lead, no subagent | a subagent re-reads everything from scratch |
+
+- Resume an agent that already has the context (`SendMessage`) instead of starting a new one for follow-ups.
+- Brief subagents with paths and section names, not pasted file contents.
+

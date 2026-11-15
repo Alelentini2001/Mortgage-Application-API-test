@@ -20,7 +20,3 @@ Output:
 - A table: `tool/check | finding (file:line) | severity | real or false positive | reason | fix`.
 - A one-line verdict: `PASS` (no real high/critical findings) or `FAIL`.
 Never mark a finding as a false positive without a concrete reason.
-
-## Context and handover
-- Start from your brief (added at the top of your context by the `SubagentStart` hook; the lead prints the same text with `scripts/context/brief.sh <agent>`) and from `docs/ai/context/CONTEXT-INDEX.md`. Read only the files and sections they point to.
-- End your report with the headings in `docs/ai/context/HANDOVER-TEMPLATE.md` (Task ID, Responsibility, Context references, Work done, Files, Discoveries, Concerns, Verification, Next action). The lead saves it as a handover.

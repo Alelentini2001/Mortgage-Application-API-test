@@ -33,9 +33,6 @@ else
   step "hook regression tests"
   .claude/hooks/tests/test-hooks.sh || fail "hook tests"
 
-  step "context index check"
-  CLAUDE_PROJECT_DIR="$PWD" scripts/context/index.sh --check || fail "context index (run: scripts/context/index.sh)"
-
   step "format check"
   dotnet format "$SOLUTION" --verify-no-changes --no-restore -v quiet || fail "format (run: dotnet format $SOLUTION)"
 fi

@@ -491,7 +491,6 @@ $RECYCLE.BIN/
 CLAUDE.local.md
 .claude/settings.local.json
 .claude/worktrees/
-.claude/state/
 # Local SQLite databases
 *.db
 *.db-shm
