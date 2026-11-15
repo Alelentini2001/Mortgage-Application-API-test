@@ -1,0 +1,16 @@
+# Local development and demo only. Production configuration comes from environment variables.
+services:
+  api:
+    build: .
+    ports:
+      # Loopback only: there is no authentication until Phase 7.
+      - "127.0.0.1:8080:8080"
+    environment:
+      # Development, so the existing Development-only startup migration creates the schema (P4-D1, ADR 0002).
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__MortgageApplications: Data Source=/app/data/mortgage-applications.db
+    volumes:
+      - data:/app/data
+
+volumes:
+  data:
