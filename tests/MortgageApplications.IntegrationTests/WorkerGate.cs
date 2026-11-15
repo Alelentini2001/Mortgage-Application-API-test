@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using MortgageApplications.Api.Assessments;
 using MortgageApplications.Core.Applications;
 
 namespace MortgageApplications.IntegrationTests;
@@ -48,6 +49,23 @@ public static class WorkerGateServices
     /// <summary>Wraps the app's repository so the first <c>ListPendingAssessmentIdsAsync</c> throws (a failed sweep).</summary>
     public static IServiceCollection FailFirstSweep(this IServiceCollection services, FailFirstSaveState state) =>
         services.DecorateRepository(inner => new FailFirstSweepRepository(inner, state));
+
+    /// <summary>Wraps the app's repository so every <c>ListPendingAssessmentIdsAsync</c> throws (a sweep that never succeeds).</summary>
+    public static IServiceCollection FailEverySweep(this IServiceCollection services) =>
+        services.DecorateRepository(inner => new FailEverySweepRepository(inner));
+
+    /// <summary>
+    /// Wraps the app's queue so <paramref name="waiting"/> completes when an enqueue has to wait for room (the
+    /// channel write did not finish at once), which proves a POST is blocked inside the enqueue (review R9).
+    /// </summary>
+    public static IServiceCollection SignalWhenEnqueueWaits(this IServiceCollection services, TaskCompletionSource waiting)
+    {
+        var original = services.Single(d => d.ServiceType == typeof(IAssessmentQueue));
+        services.Remove(original);
+        services.AddSingleton<IAssessmentQueue>(
+            sp => new EnqueueWaitSignal(sp.GetRequiredService<ChannelAssessmentQueue>(), waiting));
+        return services;
+    }
 
     private static IServiceCollection DecorateRepository(
         this IServiceCollection services, Func<IMortgageApplicationRepository, IMortgageApplicationRepository> decorate)
@@ -99,6 +117,26 @@ public static class WorkerGateServices
             state.TryTakeFailure()
                 ? throw new InvalidOperationException("Simulated sweep failure.")
                 : base.ListPendingAssessmentIdsAsync(cancellationToken);
+    }
+
+    private sealed class FailEverySweepRepository(IMortgageApplicationRepository inner) : DelegatingRepository(inner)
+    {
+        public override Task<IReadOnlyList<Guid>> ListPendingAssessmentIdsAsync(CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Simulated sweep failure.");
+    }
+
+    private sealed class EnqueueWaitSignal(IAssessmentQueue inner, TaskCompletionSource waiting) : IAssessmentQueue
+    {
+        public ValueTask EnqueueAsync(Guid assessmentId, CancellationToken cancellationToken)
+        {
+            var write = inner.EnqueueAsync(assessmentId, cancellationToken);
+            if (!write.IsCompleted)
+            {
+                waiting.TrySetResult();
+            }
+
+            return write;
+        }
     }
 
     private abstract class DelegatingRepository(IMortgageApplicationRepository inner) : IMortgageApplicationRepository

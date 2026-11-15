@@ -103,7 +103,9 @@ public sealed class AssessmentWorkerTests
     {
         await using var factory = new ApiFactory();
         var gate = new WorkerGate();
-        var (host, client) = await StartWithCapacityOneAsync(factory, gate);
+        var enqueueWaiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var (_, client) = await StartWithCapacityOneAsync(
+            factory, gate, services => services.SignalWhenEnqueueWaits(enqueueWaiting));
         var applicationId = await client.CreateApplicationAsync();
         var first = await client.PostAssessmentAsync(applicationId);
         await gate.Entered.WaitAsync(_wait, TestContext.Current.CancellationToken);
@@ -111,11 +113,9 @@ public sealed class AssessmentWorkerTests
 
         var third = client.PostAssessmentAsync(applicationId);
 
-        // The third row is saved before the enqueue, so once it exists the POST has reached the full queue.
-        await Http.EventuallyAsync(async () => await CountAssessmentsAsync(host.Services) == 3, () => "third assessment saved");
-        // Review R9: the only slot is taken (by the second ID), so the third POST can only be waiting in WriteAsync.
-        var queue = host.Services.GetRequiredService<ChannelAssessmentQueue>();
-        await Http.EventuallyAsync(() => Task.FromResult(queue.Reader.Count == 1), () => "one ID waiting in the queue");
+        // Review R9 (re-review): the signal fires only when an enqueue could not finish at once, so the third POST
+        // is proven to be waiting inside the enqueue, not somewhere before it.
+        await enqueueWaiting.Task.WaitAsync(_wait, TestContext.Current.CancellationToken);
         Assert.False(third.IsCompleted);
         gate.Open();
         var thirdResponse = await third.WaitAsync(_wait, TestContext.Current.CancellationToken);
@@ -345,6 +345,30 @@ public sealed class AssessmentWorkerTests
         Assert.DoesNotContain(factory.Logs.Entries, e => e.Level >= LogLevel.Error);
     }
 
+    // Re-review: stopping while the sweep waits to retry (the normal case with the 30 s default) returns quickly,
+    // ends the loop normally and does not retry again.
+    [Fact]
+    public async Task Stopping_during_the_sweep_retry_delay_returns_within_5_seconds()
+    {
+        await using var factory = new ApiFactory();
+        var host = factory.WithWebHostBuilder(
+            builder => builder
+                .ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
+                    new Dictionary<string, string?> { ["Assessments:RequeueRetryDelaySeconds"] = "3600" }))
+                .ConfigureTestServices(services => services.FailEverySweep()),
+            runWorker: true);
+        _ = host.CreateClient();
+        await Http.EventuallyAsync(
+            () => Task.FromResult(factory.Logs.Entries.Any(e => e.EventName == "RequeueFailed")),
+            () => "the first failed sweep");
+        var worker = host.Services.GetServices<IHostedService>().OfType<AssessmentWorker>().Single();
+
+        await worker.StopAsync(Http.Ct).WaitAsync(TimeSpan.FromSeconds(5), Http.Ct);
+
+        Assert.True(worker.ExecuteTask!.IsCompletedSuccessfully);
+        Assert.Single(factory.Logs.Entries, e => e.EventName == "RequeueFailed");
+    }
+
     private static async Task<HttpClient> StartAsync(ApiFactory factory, WorkerGate gate)
     {
         var host = factory.WithWebHostBuilder(
@@ -355,13 +379,17 @@ public sealed class AssessmentWorkerTests
     }
 
     private static async Task<(WebApplicationFactory<Program> Host, HttpClient Client)> StartWithCapacityOneAsync(
-        ApiFactory factory, WorkerGate gate)
+        ApiFactory factory, WorkerGate gate, Action<IServiceCollection>? configureServices = null)
     {
         var host = factory.WithWebHostBuilder(
             builder => builder
                 .ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
                     new Dictionary<string, string?> { ["Assessments:QueueCapacity"] = "1" }))
-                .ConfigureTestServices(services => services.HoldWorkerAt(gate)),
+                .ConfigureTestServices(services =>
+                {
+                    services.HoldWorkerAt(gate);
+                    configureServices?.Invoke(services);
+                }),
             runWorker: true);
         var client = host.CreateClient();
         await WaitForStartupRequeueAsync(factory);

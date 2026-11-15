@@ -45,7 +45,8 @@ public sealed partial class AssessmentWorker(
         }
     }
 
-    // A retry may queue an ID a second time; processing is idempotent, so the second run is skipped.
+    // A POST made while the sweep runs (or before a retry) can also be listed here, so its ID is queued twice;
+    // processing is idempotent, so the second run is skipped.
     private async Task<bool> TryRequeuePendingAsync(CancellationToken stoppingToken)
     {
         try

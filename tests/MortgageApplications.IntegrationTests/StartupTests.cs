@@ -76,6 +76,23 @@ public sealed class StartupTests
 
     public static TheoryData<string> InvalidRetryDelays => ["0", "3601"];
 
+    // Re-review: the exact limits of the retry delay start the app.
+    [Theory]
+    [MemberData(nameof(ValidRetryDelayLimits))]
+    public async Task Startup_with_requeue_retry_delay_at_a_limit_starts(string seconds)
+    {
+        using var factory = new ApiFactory();
+        using var valid = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Assessments:RequeueRetryDelaySeconds"] = seconds })));
+
+        var response = await valid.CreateClient().GetPathAsync("/health");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    public static TheoryData<string> ValidRetryDelayLimits => ["1", "3600"];
+
     // I44 (replaces the Phase 0 placeholder)
     [Fact]
     public async Task Health_returns_200()
