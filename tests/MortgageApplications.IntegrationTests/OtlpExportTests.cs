@@ -9,7 +9,9 @@ namespace MortgageApplications.IntegrationTests;
 /// <summary>
 /// Phase 5 export: the OTLP exporter is added only when <c>OTEL_EXPORTER_OTLP_ENDPOINT</c> is set (read from
 /// configuration, Q8). The tests use OTLP/HTTP protobuf (<c>OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf</c>), so a
-/// plain loopback <see cref="HttpListener"/> can stand in for the collector; disposing the host flushes every signal.
+/// plain loopback <see cref="HttpListener"/> can stand in for the collector. The export intervals are set to 100 ms and
+/// each test waits (bounded) for the data while the host is still running, then disposes it: relying on the flush at
+/// shutdown alone failed on the Linux CI runner, where the three positive tests received nothing.
 /// <para>
 /// The settings go in with <c>UseSetting</c> (per host, never an environment variable): <c>Program</c> reads them
 /// before <c>Build()</c>, and <c>WebApplicationFactory</c> applies <c>ConfigureAppConfiguration</c> sources only at
@@ -54,6 +56,7 @@ public sealed class OtlpExportTests
         var host = ExportingHost(factory, ("OTEL_EXPORTER_OTLP_ENDPOINT", collector.Endpoint));
 
         await Telemetry.AssessAsync(host.CreateClient(), Http.BaseBody);
+        await collector.WaitForAsync(r => r.Select(x => x.Path).Distinct().Count() == 3, "logs, metrics and traces");
         await host.DisposeAsync();
 
         var paths = collector.Requests.Select(r => r.Path).Distinct().Order(StringComparer.Ordinal);
@@ -70,9 +73,14 @@ public sealed class OtlpExportTests
         var host = ExportingHost(factory, ("OTEL_EXPORTER_OTLP_ENDPOINT", collector.Endpoint));
 
         await Telemetry.AssessAsync(host.CreateClient(), Http.BaseBody);
+        await collector.WaitForAsync(
+            r => Text(r).Contains("assessment.process", StringComparison.Ordinal)
+                && Text(r).Contains(Telemetry.Counter, StringComparison.Ordinal)
+                && Text(r).Contains(Telemetry.Histogram, StringComparison.Ordinal),
+            "the worker span and both instruments");
         await host.DisposeAsync();
 
-        var exported = string.Concat(collector.Requests.Select(r => Encoding.UTF8.GetString(r.Body)));
+        var exported = Text(collector.Requests);
         Assert.Contains("assessment.process", exported, StringComparison.Ordinal);
         Assert.Contains(Telemetry.Counter, exported, StringComparison.Ordinal);
         Assert.Contains(Telemetry.Histogram, exported, StringComparison.Ordinal);
@@ -90,6 +98,9 @@ public sealed class OtlpExportTests
         var host = ExportingHost(factory, ("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", $"{collector.Endpoint}/v1/traces"));
 
         await Telemetry.AssessAsync(host.CreateClient(), Http.BaseBody);
+        await collector.WaitForAsync(
+            r => Text(r.Where(x => x.Path == "/v1/traces")).Contains("assessment.process", StringComparison.Ordinal),
+            "the worker span on /v1/traces");
         await host.DisposeAsync();
 
         var traces = collector.Requests.Where(r => r.Path == "/v1/traces").ToList();
@@ -114,9 +125,10 @@ public sealed class OtlpExportTests
         var host = ExportingHost(factory, ("OTEL_EXPORTER_OTLP_ENDPOINT", collector.Endpoint), (key, value));
 
         Assert.Equal(HttpStatusCode.OK, (await host.CreateClient().GetPathAsync("/health")).StatusCode);
+        await collector.WaitForAsync(r => Text(r).Contains(expected, StringComparison.Ordinal), $"the service name {expected}");
         await host.DisposeAsync();
 
-        var exported = string.Concat(collector.Requests.Select(r => Encoding.UTF8.GetString(r.Body)));
+        var exported = Text(collector.Requests);
         Assert.Contains(expected, exported, StringComparison.Ordinal);
         Assert.DoesNotContain("mortgage-applications", exported, StringComparison.Ordinal);
     }
@@ -124,7 +136,15 @@ public sealed class OtlpExportTests
     private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> ExportingHost(
         ApiFactory factory, params (string Key, string Value)[] extra)
     {
-        var settings = new Dictionary<string, string?> { ["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf" };
+        // Short export intervals (traces, logs, metrics; package README "Environment Variables"), so data leaves while
+        // the host runs and the tests do not depend on the flush at shutdown.
+        var settings = new Dictionary<string, string?>
+        {
+            ["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf",
+            ["OTEL_BSP_SCHEDULE_DELAY"] = "100",
+            ["OTEL_BLRP_SCHEDULE_DELAY"] = "100",
+            ["OTEL_METRIC_EXPORT_INTERVAL"] = "100",
+        };
         foreach (var (key, value) in extra)
         {
             settings[key] = value;
@@ -140,6 +160,9 @@ public sealed class OtlpExportTests
             },
             runWorker: true);
     }
+
+    private static string Text(IEnumerable<(string Path, byte[] Body)> requests) =>
+        string.Concat(requests.Select(r => Encoding.UTF8.GetString(r.Body)));
 
     private static TcpListener? TryListen(IPAddress address, int port)
     {
@@ -174,6 +197,13 @@ public sealed class OtlpExportTests
         public string Endpoint { get; }
 
         public IReadOnlyList<(string Path, byte[] Body)> Requests => [.. _requests];
+
+        /// <summary>Waits (bounded) until the received requests satisfy <paramref name="condition"/>.</summary>
+        public Task WaitForAsync(Func<IReadOnlyList<(string Path, byte[] Body)>, bool> condition, string what) =>
+            Http.EventuallyAsync(
+                () => Task.FromResult(condition(Requests)),
+                () => $"the collector to receive {what}; received {_requests.Count} request(s) on "
+                    + string.Join(", ", Requests.Select(r => r.Path).Distinct()));
 
         public void Dispose()
         {
