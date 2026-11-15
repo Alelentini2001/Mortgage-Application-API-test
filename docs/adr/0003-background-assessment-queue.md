@@ -1,6 +1,6 @@
 # 0003. Background assessment queue
 
-- **Status:** Proposed (draft written by the agent; Alessandro accepts or changes it at Phase 6 Checkpoint B)
+- **Status:** Accepted (2026-11-15, by Alessandro: "Yes and proceed" at Phase 6 Checkpoint B, answering whether ADR 0002 and ADR 0003 can be marked Accepted)
 - **Date:** 2026-11-15
 - **Decided by:** Alessandro (on the agent's recommendation): P6-D1 to P6-D4 at Phase 6 Checkpoint A ("Proceed"); the review-gate follow-ups and "the agent writes ADR 0003 as a draft" on 2026-11-15 ("Proceed").
 

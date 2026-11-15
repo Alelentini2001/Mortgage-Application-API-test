@@ -1,6 +1,6 @@
 # Phase 06: Background assessments
 
-Status: **Checkpoint B: PR open, waiting for Alessandro** · Branch: `phase-06-background` (worktree) · PR: [#8](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/8) · Started: 2026-11-14 · Finished: —
+Status: **Merged** (squash `4141af1`) · Branch: `phase-06-background` (worktree) · PR: [#8](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/8) · Started: 2026-11-14 · Finished: 2026-11-15
 
 ## Goal
 
@@ -67,6 +67,14 @@ Alessandro approved the plan with "Proceed" on 2026-11-15, after the agent recom
 | P6-D2 | A: bounded channel, `BoundedChannelFullMode.Wait` + `WriteAsync`, capacity from config (default 100) | B `TryWrite` + 503; C unbounded | No silent drops; a saved Pending item is recovered by the startup re-enqueue (ADR 0003) | Alessandro |
 | P6-D3 | A: named shared-cache in-memory SQLite per factory, one keep-alive connection, one connection per `DbContext` | B temporary file per factory | A SQLite connection must not be used by two threads; stays fast and isolated | Alessandro |
 | P6-D4 | A: `GET …/assessments/{assessmentId}` always 200, `status` field tells the state | B 202 while Pending | Simple to poll; response shape already supports it | Alessandro |
+
+## Checkpoint B outcome (2026-11-15)
+
+Alessandro: "Yes and proceed... but we should do phase by phase..." (P06-12).
+- CI "Build, test, format" and "Docker image build and smoke test" passed on `552d410`; PR #8 was squash-merged as `4141af1` with a written message.
+- ADR 0003 (and ADR 0002 from Phase 4) marked Accepted.
+- PR `/code-review` findings 1–3 and 5 carried to Phase 9; finding 4 (`Retry-After`) skipped for now.
+- From now on, phases run one at a time (no more parallel worktrees).
 
 ## Docs verified (links)
 
@@ -282,6 +290,12 @@ Logged here during the parallel run and copied to `docs/ai/PROMPTS.md` on `main`
   ```
 - **Purpose:** the find step of the local `/security-review` on PR #8.
 - **Outcome:** no HIGH or MEDIUM candidates (hand review only), so the skill's false-positive filter step had nothing to run on.
+
+### P06-12 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Yes and proceed... but we should do phase by phase...
+- **Purpose:** Checkpoint B approval of Phase 6. The agent had asked three things in one message: merge PR #8, mark ADR 0002 and ADR 0003 Accepted, and move the five PR `/code-review` findings to Phase 9. "Yes" is read as yes to all three. "Phase by phase" is read as: no more parallel phases; one phase at a time from now on.
+- **Outcome:** PR #8 squash-merged as `4141af1` after both CI jobs passed on `552d410`; ADR 0002 and 0003 marked Accepted; the five findings carried to Phase 9 (4, `Retry-After`, skipped for now); Phase 5 started on its own.
 
 The human prompts for this phase (Checkpoint A approval, test approval, the usage-limit resume and the approval of the review-gate decisions) are in `phase-04-docker.md`, "Prompts" (P04-01 to P04-13), and in `docs/ai/PROMPTS.md`.
 

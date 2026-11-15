@@ -611,3 +611,193 @@ Copied from `docs/progress/phase-04-docker.md` after the merge. The human prompt
   > Yes proceed! What about phase 5?
 - **Purpose:** Checkpoint B approval of Phase 4, and a question on when Phase 5 runs.
 - **Outcome:** PR #7 squash-merged as `ede3605` after both CI jobs passed on `4651e34`; Phase 6 is rebased next. Phase 5 answered in chat.
+
+## Phase 06: Background assessments (run in parallel with Phase 4)
+
+Copied from `docs/progress/phase-06-background.md` after the merge. The human prompts for planning and approval are P04-01 to P04-13 above.
+
+### P06-01 · agent→subagent (`test-designer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Phase 6 (background assessments) of a .NET 10 mortgage-application API (Minimal APIs + EF Core SQLite). Propose test cases for the approved plan; do not write code.
+
+  Read first: docs/progress/phase-06-background.md (goal, plan, approved decisions P6-D1 to P6-D4), docs/spec/affordability-rules.md (section 8 golden examples), .claude/rules/tests.md, tests/CLAUDE.md, .claude/rules/security.md, and the current code and tests: src/MortgageApplications.Core/Applications/ (MortgageApplicationService, AffordabilityAssessment, IMortgageApplicationRepository), src/MortgageApplications.Infrastructure/Persistence/EfMortgageApplicationRepository.cs, src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs, src/MortgageApplications.Api/Program.cs, tests/MortgageApplications.IntegrationTests/ (ApiFactory, AssessmentTests, NotFoundAndOwnerTests) and tests/MortgageApplications.UnitTests/Applications/ (Fakes, MortgageApplicationServiceTests, AffordabilityAssessmentTests). Phase 2 and 3 already cover the calculator, the entity state machine and the synchronous endpoint: don't repeat those, but say which existing tests must change.
+
+  What will be built (not written yet):
+  - Core: IAssessmentQueue (port) with an async enqueue of an assessment ID; MortgageApplicationService.AssessAsync saves a Pending assessment, then enqueues its ID, and returns the Pending assessment; a new use case ProcessAssessmentAsync(Guid assessmentId) that loads the assessment and its application's inputs without an owner filter (the ID comes from our own queue), returns without change unless the assessment is Pending, otherwise calls Complete with the calculator result, or Fail when the calculation throws, and saves; repository additions for that load, an update, and listing Pending assessment IDs.
+  - Api: ChannelAssessmentQueue (singleton, Channel.CreateBounded with BoundedChannelFullMode.Wait, WriteAsync honouring the request's cancellation token, capacity from configuration, default 100); AssessmentWorker : BackgroundService that first re-enqueues every Pending assessment from the database, then reads the channel one item at a time with a new DI scope per item, catches and logs per-item exceptions without personal data and keeps going, and stops on the stopping token; POST /api/applications/{id}/assessments returns 202 Accepted + Location of GET /api/applications/{id}/assessments/{assessmentId} with body status Pending and result null; GET of an assessment is always 200 with a status field (P6-D4).
+  - Tests: ApiFactory moves to a named shared-cache in-memory SQLite database per factory with one keep-alive connection and one connection per DbContext (P6-D3); integration tests poll the Location with a timeout.
+
+  Cover at least: 202 + Location + Pending body; polling reaches Completed with golden E1 values within a timeout; a Declined case completes (not Failed); unknown, malformed or another owner's application id → 404 and nothing queued and nothing saved; idempotency (the same ID processed twice, or an already Completed or Failed assessment, is not changed); calculation exception → Failed with FailedAt, and the worker processes the next item afterwards; Pending rows present at startup are processed; enqueue order (save before enqueue, so a crash between them leaves a recoverable Pending row); full queue: WriteAsync waits and nothing is dropped; cancellation of the POST while waiting leaves the saved row Pending; shutdown during processing does not mark the item Failed; ProcessAssessmentAsync with an unknown ID does nothing and does not throw; no income, expenses, deposit or property value in worker log messages; tests are not timing-flaky (say how: polling helper, TimeProvider, deterministic fakes). Say which cases belong in unit tests (Core with fakes) versus integration tests.
+
+  Use the agent's output format. Mark each case must or nice, keep the list tight (no redundant cases), and list any ambiguities in the plan you need Alessandro to settle.
+  ```
+- **Purpose:** propose Phase 6 test cases before any test is written.
+- **Outcome:** 17 unit, 4 repository, 15 integration and 6 worker-level cases, a list of existing tests that must change, and 12 questions (Q1–Q12). The lead agent checked Q8, Q10 and Q11 against the code and Learn (see "Tests", "Proposal"). Q10's claim that a busy timeout does not cover shared-cache locks is contradicted by Learn: Microsoft.Data.Sqlite retries both busy and locked errors until the command timeout.
+
+### P06-02 · agent→subagent (`parallel-implementer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Implement Phase 6 (background assessments) of this .NET 10 mortgage-application API, exactly as approved.
+
+  Branch: switch to the existing branch phase-06-background (it holds one commit with the approved plan). Do not create another branch. Never push.
+
+  Scope: docs/progress/phase-06-background.md. The sections "Plan (approved at Checkpoint A)", "Decisions" (P6-D1 to P6-D4), "Docs verified" and "Tests > Proposal" (the recommended selection and the answers to Q1-Q12, all approved) are your scope. Read AGENTS.md, CLAUDE.md, .claude/rules/*.md, tests/CLAUDE.md and src/MortgageApplications.Core/CLAUDE.md first.
+
+  Key points from the approved answers (the phase file is the source of truth if anything differs):
+  - IAssessmentQueue in Core; ChannelAssessmentQueue and AssessmentWorker in Api. Bounded channel, BoundedChannelFullMode.Wait, WriteAsync with the request's cancellation token. Capacity from `Assessments:QueueCapacity` (default 100, validated at startup 1 to 10,000, like AffordabilityOptions).
+  - AssessAsync saves Pending, then enqueues (in that order). ProcessAssessmentAsync(Guid) loads the assessment plus the application's AffordabilityInputs without an owner filter, returns unless Pending, catches only the calculation (Fail on a calculation error), saves. A failure while saving propagates to the worker, which logs it and leaves the row Pending. No new calculator interface (Q1).
+  - The worker re-enqueues all Pending IDs at startup, then reads one item at a time with a new async DI scope per item, catches and logs per item (assessment ID only, never amounts or owner ID), and treats cancellation on the stopping token as shutdown, never as Failed. An exception escaping ExecuteAsync stops the host (Learn link in the phase file), so nothing but shutdown may leave the loop.
+  - POST /api/applications/{id}/assessments → 202 Accepted (TypedResults.Accepted<AssessmentResponse>) + Location of GET …/assessments/{assessmentId}. GET is always 200. AssessmentResponse gains nullable failedAt; no failure reason.
+  - ApiFactory: named shared-cache in-memory SQLite (`Data Source=<guid>;Mode=Memory;Cache=Shared`), one keep-alive connection, one connection per DbContext. The worker runs in the factory's default host; WithWebHostBuilder-derived hosts remove it unless a test opts in.
+  - If ListPending needs an index, add a new migration; never edit InitialCreate (a hook blocks it).
+  - No new packages. No logging of income, expenses, deposit, property value, tokens or the owner ID.
+
+  Do not edit: Dockerfile, compose.yaml, .dockerignore, .github/, docs/PROGRESS.md, docs/ai/*, any ADR file (ADR 0003 is written later by the lead agent). Only the phase file under docs/.
+
+  Process:
+  1. Test-first: write the approved tests and the changes to existing tests; run them and confirm the new ones fail for the right reason. Keep that output.
+  2. Implement until green. Small conventional commits (AGENTS.md "Commits and PRs"; scopes core, api, infra, tests). End each commit message with: Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+  3. Run ./scripts/verify.sh (full) and keep the final output. Then run the integration tests 5 times in a row (dotnet test --project tests/MortgageApplications.IntegrationTests) and record pass/fail for each run. If any run flakes on SQLite locking, stop and report (Q10 says that goes back to Alessandro); do not switch to a temp-file database yourself.
+  4. In the phase file, fill "What was built (files)", "Tests" > a new "Results" subsection (added/total/passing, the red-then-green evidence, the 5-run result) and "Open issues" for anything you could not do. Commit that.
+
+  Report: files changed, commits, trimmed verify output, the 5-run result, every place you deviated from the phase file and why, and anything you could not do. If the plan is ambiguous or a step fails three times, stop and report instead of guessing.
+  ```
+- **Purpose:** implement the approved Phase 6 plan, test-first, in its own worktree.
+- **Outcome:** stopped at its 60-turn limit after 4 commits (`4a8ed68`, `e531691`, `d249652`, `7215f8d`) with a clean tree.
+
+### P06-03 · agent→subagent (`parallel-implementer`, resumed) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Finish Phase 6: you hit the turn limit after 4 commits (4a8ed68, e531691, d249652, 7215f8d) and a clean tree. Do only the remaining steps from your original instructions, with no new features:
+  1. If any approved must-case from the phase file is still missing, list it (do not write it now unless it is a few lines).
+  2. Run ./scripts/verify.sh (full) and keep the final output.
+  3. Run the integration tests 5 times in a row and record pass/fail for each run. If a run flakes on SQLite locking, stop and report.
+  4. Fill the phase file: "What was built (files)", "Tests" > "Results" (added/total/passing, red-then-green evidence if you kept it, otherwise say it was not kept, plus the 5-run result), and "Open issues". Commit that.
+  5. Deliver your report: files changed, commits, trimmed verify output, the 5-run result, every deviation from the phase file and why, and anything not done. Keep tool use tight; you have limited turns.
+  ```
+- **Purpose:** finish the remaining steps after the turn limit, with no new features.
+- **Outcome:** full verify passed (373 tests); integration tests passed 5 runs in a row; phase-file sections "What was built", "Results" and "Open issues" written (commit `850a3a8`).
+
+### P06-04 · agent→subagent (`security-auditor`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security gate for Phase 6 (background assessments) of a .NET 10 mortgage-application API. Review only the branch diff: run `git diff main...phase-06-background` from the repository root (the branch is checked out in another worktree; do not switch branches here; read branch files with `git show phase-06-background:<path>`).
+
+  Read first: .claude/rules/security.md, AGENTS.md, docs/progress/phase-06-background.md on the branch (plan, decisions P6-D1 to P6-D4, approved answers Q1-Q12, "Open issues" with the implementer's deviations).
+
+  Check at least: the non-owner-scoped processing load (`ProcessAssessmentAsync` and the repository method behind it) is reachable only from `AssessmentWorker`, never from an endpoint or with a caller-supplied ID; POST and GET keep owner scoping and return identical 404s for unknown, other-owner and malformed IDs, with nothing saved or queued on 404; no log message, log state, exception message or ProblemDetails carries income, expenses, deposit, property value or the owner ID (check every `[LoggerMessage]` and every logged exception path); `AssessmentResponse.failedAt` exposes no failure reason; the bounded queue cannot grow without limit and `Assessments:QueueCapacity` is validated at startup; a POST waiting on a full queue cannot be used to exhaust resources beyond what the capacity and request cancellation allow (say what the remaining denial-of-service exposure is and whether it belongs to Phase 8 rate limiting); the worker cannot be stopped by one bad item; shutdown never marks Failed; any `CA1711` or other analyzer suppressions are justified. Run Gitleaks on the branch commits (`gitleaks git --log-opts="main..phase-06-background"` or closest form), Semgrep (`p/csharp`, `p/secrets`) on the changed `.cs` files from the branch worktree at /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-acd40a009ddf8a3cd, and `dotnet list package --vulnerable --include-transitive` there; say which tools ran and which were not available. Do not install anything.
+
+  Use your output format: each finding with severity, file:line, evidence, real or false positive, and a proposed fix or justification. Do not edit files.
+  ```
+- **Purpose:** security gate on the branch diff.
+- **Outcome:** PASS. One medium finding (S1), two low and three info notes. See "Security gate".
+
+### P06-05 · agent→subagent (`dotnet-reviewer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Fresh-context review of Phase 6 (background assessments) of a .NET 10 mortgage-application API. Review only the branch diff: run `git diff main...phase-06-background` from the repository root (the branch is checked out in the worktree /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-acd40a009ddf8a3cd; read files there; do not switch branches or edit anything).
+
+  Read first: AGENTS.md, .claude/rules/backend.md, .claude/rules/tests.md, tests/CLAUDE.md, and docs/progress/phase-06-background.md on the branch (goal, plan, decisions P6-D1 to P6-D4, "Docs verified", approved tests and answers Q1-Q12, "Results" and "Open issues" with the implementer's six deviations).
+
+  Flag only correctness, security and requirement gaps, for example: EF Core change tracking in the update path (is the loaded assessment tracked, or attached, so `SaveChangesAsync` writes Status, Result, AssessedAt and FailedAt; what the result value comparer costs); whether save-then-enqueue really leaves a recoverable Pending row on every failure path, including a POST cancelled while `WriteAsync` waits; the re-enqueue running alongside the read loop (deviation 5): can it double-process or reorder in a way that breaks idempotency, and is the duplicate skip correct; whether `ProcessAssessmentAsync` catches only the calculation and lets save failures propagate as approved (Q5); whether the worker can ever leave its loop except on shutdown; the clock-before-CreatedAt bug the implementer found (both `Complete` and `Fail` throw): confirm it, and say how likely it is in practice; the `ApiFactory.WithWebHostBuilder` `new` hiding (deviation 4): can a test silently get the wrong host type through the base-class reference; tests that can be timing-flaky despite the 5 clean runs (fixed sleeps, negative waits, races with the worker), and the reduced `[Fact(Timeout)]` coverage (deviation 2); whether every approved must-case from the phase file really has a test that would fail if the behaviour broke; whether the 202 response, `Location` and `failedAt` match P6-D4 and Q11; the `CA1711` suppressions. Report each finding with severity, file:line, evidence and a proposed fix.
+  ```
+- **Purpose:** fresh-context review gate on the branch diff.
+- **Outcome:** no critical or high findings; three medium and seven low (R1–R10). See "Review gate".
+
+### P06-06 · agent→subagent (`parallel-implementer`, resumed) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Phase 6 review gate: fix these five findings on phase-06-background, test-first where a behaviour changes, then run ./scripts/verify.sh (full) and the integration tests 3 times. Do nothing else: no other refactors, no clock fix, no sweep, no concurrency token (those wait for Alessandro).
+  R1 (medium): no test drives an exception into AssessmentWorker's per-item catch (AssessmentWorker.cs ~:95). Add an integration test with a repository wrapper whose UpdateAssessmentAsync throws once: the row stays Pending, a ProcessingError log entry has the assessment ID and no amounts or owner ID, and a following POST in the same host still completes.
+  R2 (medium, real bug): ChannelAssessmentQueue.EnqueueAsync passes the request token to WriteAsync, which returns cancelled at once if the token is already cancelled, even with free capacity, stranding a saved Pending row. Change to `TryWrite` first, `WriteAsync(id, ct)` only when full. Add a ChannelAssessmentQueueTests case: already-cancelled token, empty queue → the ID is queued.
+  R5 (low): I-11 holds the worker before FindForProcessingAsync, so nothing is in memory at shutdown. Add a gate point after Complete has run in memory and before the save (in the update path), stop the host there, assert the row is Pending with AssessedAt and FailedAt null and nothing logged at Error.
+  R9 (low): AssessmentWorkerTests ~:116 `Assert.False(third.IsCompleted)` does not prove the POST reached WriteAsync. Also assert the queue's Reader.Count == 1 via a bounded EventuallyAsync.
+  R10 (low): U-P10 must also assert exactly one update attempt and that Fail was never called (count attempts in the fake before throwing).
+  Commit in small conventional commits (scope tests or api) ending with: Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>. Do not edit the phase file. Report: commits, which new tests failed before the fix (R2 at least), trimmed verify output, the 3-run result.
+  ```
+- **Purpose:** fix the review findings that needed no decision (R1, R2, R5, R9, R10).
+- **Outcome:** the run stopped on the user's usage limit before making any change.
+
+### P06-07 · agent→subagent (`parallel-implementer`, resumed) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Your last run stopped on a rate limit before any change (worktree clean at 850a3a8). Please do the five fixes from my previous message now (R1, R2, R5, R9, R10), exactly as specified there: test-first where behaviour changes, small commits, full verify, integration tests 3 times, no phase-file edits, then report. Keep tool use tight.
+  ```
+- **Purpose:** restart the P06-06 fixes after the usage limit reset.
+- **Outcome:** commits `8339c95` (R10), `37b28b2` (R2) and `b505133` (R1, R5, R9). Only the R2 test failed before its fix (`TaskCanceledException`). Full verify passed (376 tests); integration tests passed 3 runs in a row.
+
+### P06-08 · agent→subagent (`spec-checker`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Spec check for Phase 6 (background assessments) of a .NET 10 mortgage-application API. Read only; do not edit anything.
+
+  Read the branch files in the worktree /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-acd40a009ddf8a3cd (branch phase-06-background): docs/spec/ORIGINAL_SPEC.md, docs/spec/affordability-rules.md, docs/progress/phase-06-background.md (goal, plan, decisions P6-D1 to P6-D4, the approved test list and answers Q1-Q12, the security and review gates), docs/adr/0003-background-assessment-queue.md, the traceability notes in docs/progress/phase-01-spec.md and phase-03-api.md for the requirement IDs, and the code under src/ and tests/ that the phase file names.
+
+  Map every spec requirement and every Phase 6 goal and approved must-case this phase touches (assess endpoint now 202 + Location, polling GET, Pending/Completed/Failed, no silent drops, startup recovery, owner scoping and 404s, no personal data in logs, validation at the boundary unchanged) to the file and test that meet it. Mark each met / partial / missing with a one-line reason and the file:line or test name. Check that the spec's original wording about the assessment endpoint is still satisfied by a 202 + polling flow, and say plainly if it is not. List anything the phase file claims that you could not find. Keep it short: one table plus at most 5 notes.
+  ```
+- **Purpose:** requirement traceability before the PR.
+- **Outcome:** see "Review gate", spec check.
+
+### P06-09 · agent→subagent (`security-auditor`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security gate re-run for Phase 6 (background assessments) after the rebase on main. Read only: do not edit files or switch branches.
+
+  Worktree: /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-acd40a009ddf8a3cd (branch phase-06-background, HEAD 45537a2, rebased on origin/main ede3605 + 6859276, which now include Phase 4: Dockerfile, compose.yaml, CI docker job). The first gate (docs/progress/phase-06-background.md, "Security gate", S1-S6) reviewed the diff at the old 850a3a8. Since then: a56a2e3 (TryWrite before WriteAsync), b234be6 and c352351 (tests), 9eae1f1 (clock: finish at the later of now and CreatedAt), 0773b2b (startup re-enqueue retried every Assessments:RequeueRetryDelaySeconds, new validated option, injected TimeProvider and IOptions, changed RequeueFailed log message), and docs.
+
+  Do:
+  1. Gitleaks on the branch commits (git log range origin/main..HEAD) and Semgrep (p/csharp, p/secrets) on the files changed in that range; dependency scan with dotnet list package --vulnerable --include-transitive. Say which tools ran; do not install anything.
+  2. Review the new commits for: personal data or amounts in any log message or exception that reaches a log (AGENTS.md: never log income, expenses, deposit, property value, tokens or personal data); the retry loop (can it spin, hide errors, or run after shutdown); the new option's validation; owner scoping unchanged; and how Phase 6 behaves in the Phase 4 container (compose runs as Development; the worker runs there; anything in Program.cs that changes what compose exposes).
+  3. Re-state S1-S6 only if their status changed.
+
+  Output: a findings table (tool/check, finding with file:line, severity, real or false positive, reason, fix) and a one-word verdict (PASS or FAIL). Keep it short.
+  ```
+- **Purpose:** security gate re-run after the rebase on `main` (plan step 9).
+- **Outcome:** PASS. No new finding above Info; the phase file cited pre-rebase hashes (fixed with the table under "Tests").
+
+### P06-10 · agent→subagent (`dotnet-reviewer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Fresh-context review re-run for Phase 6 (background assessments) after the rebase on main. Read only: do not edit files or switch branches.
+
+  Worktree: /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-acd40a009ddf8a3cd (branch phase-06-background, HEAD 45537a2, rebased on origin/main, which now includes Phase 4: Dockerfile, compose.yaml, CI docker job). The first review (docs/progress/phase-06-background.md, "Review gate", R1-R10) covered the diff at the old 850a3a8. Review only what changed since: a56a2e3, b234be6, c352351, 9eae1f1, 0773b2b (run git show for each), plus any interaction between Phase 6 and the Phase 4 files now on main.
+
+  Check at least:
+  - 9eae1f1: the later-of(now, CreatedAt) finish time in MortgageApplicationService.ProcessAssessmentAsync and its two unit tests.
+  - 0773b2b: AssessmentWorker.RequeuePendingAsync / TryRequeuePendingAsync retry loop: shutdown during the delay or during a retry, exceptions that escape, duplicates queued by a retry, Task.Delay(TimeSpan, TimeProvider, CancellationToken) use, the option's [Range(1, 3600)] and its startup test, and the integration test Startup_sweep_failure_is_retried_and_completes_pending_assessment (could it pass without the retry? is it timing-flaky?).
+  - That the R1, R2, R5, R9, R10 fixes do what the phase file says.
+  - Whether the rebased branch still matches the Phase 4 smoke test in .github/workflows/ci.yml (the CI job only POSTs and GETs an application; say whether it should also cover the 202 assessment flow).
+
+  Output: findings, most severe first, each as file:line | severity | problem | fix. Then a list of what you checked and found fine. Say plainly that you did not build or run tests, if you did not.
+  ```
+- **Purpose:** review gate re-run after the rebase, on the commits made after the first review.
+- **Outcome:** no critical, high or medium findings; six low (RR1–RR6). See "Review gate".
+
+### P06-11 · agent→subagent (`general-purpose`, from the `/security-review` skill) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security review sub-task for PR #8 (Phase 6, background assessments) of a .NET 10 mortgage-application API. Read only: do not edit files and do not run Docker.
+
+  Repository worktree: /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-acd40a009ddf8a3cd (branch phase-06-background). The diff to review: run `git diff origin/main...HEAD` there (31 files: a background worker, a bounded in-process queue, a 202 assess endpoint, repository methods for the worker that are not owner-scoped, tests, the CI docker job, docs). Accepted and documented, do not report: no rate limit or request timeout until Phase 8 (security S1), the fixed DevelopmentCurrentUser until Phase 7, the worker-only methods being public on the shared service (S2). Context to read: docs/progress/phase-06-background.md ("Security gate"), .claude/rules/security.md, AGENTS.md.
+
+  OBJECTIVE: identify HIGH-CONFIDENCE security vulnerabilities newly added by this PR that could have real exploitation potential. Not a general code review. Do not comment on existing security concerns.
+  1. Minimise false positives: only flag issues where you are >80% confident of actual exploitability.
+  2. Skip theoretical issues, style concerns and low-impact findings.
+  3. Prioritise vulnerabilities that could lead to unauthorized access, data breaches or system compromise.
+  4. Do NOT report: denial of service; secrets or sensitive data stored on disk; rate limiting or resource exhaustion.
+
+  Categories to examine: input validation (SQL/command/XXE/template/NoSQL injection, path traversal); authentication and authorization (bypass, privilege escalation, sessions, JWT); crypto and secrets (hardcoded keys, weak crypto, key storage, randomness, certificate validation); injection and code execution (deserialization, YAML, eval, XSS); data exposure (sensitive data logging or storage, PII, endpoint data leakage, debug information exposure). Even if only exploitable from the local network, it can be HIGH.
+
+  Method: (1) research the repository's security model and existing patterns; (2) compare the new changes against them and look for new attack surface; (3) assess each modified file, trace data from inputs to sensitive operations, look for privilege boundaries crossed unsafely.
+
+  For each candidate give: file, line, severity (HIGH / MEDIUM / LOW), category slug, description, exploit scenario, fix recommendation, and a confidence from 1 to 10. Focus on HIGH and MEDIUM; MEDIUM only if obvious and concrete. If there are no candidates, say so plainly. Keep the report short.
+  ```
+- **Purpose:** the find step of the local `/security-review` on PR #8.
+- **Outcome:** no HIGH or MEDIUM candidates (hand review only), so the skill's false-positive filter step had nothing to run on.
+
+### P06-12 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Yes and proceed... but we should do phase by phase...
+- **Purpose:** Checkpoint B approval of Phase 6. The agent had asked three things in one message: merge PR #8, mark ADR 0002 and ADR 0003 Accepted, and move the five PR `/code-review` findings to Phase 9. "Yes" is read as yes to all three. "Phase by phase" is read as: no more parallel phases; one phase at a time from now on.
+- **Outcome:** PR #8 squash-merged as `4141af1` after both CI jobs passed on `552d410`; ADR 0002 and 0003 marked Accepted; the five findings carried to Phase 9 (4, `Retry-After`, skipped for now); Phase 5 started on its own.

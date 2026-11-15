@@ -1,6 +1,6 @@
 # 0002. Container runtime and startup migrations
 
-- **Status:** Proposed (draft written by the agent; Alessandro accepts or changes it at Phase 4 Checkpoint B)
+- **Status:** Accepted (2026-11-15, by Alessandro: "Yes and proceed" at Phase 6 Checkpoint B, answering whether ADR 0002 and ADR 0003 can be marked Accepted)
 - **Date:** 2026-11-15
 - **Decided by:** Alessandro (on the agent's recommendation): P4-D1 option A at Phase 4 Checkpoint A ("Proceed"), and "the agent writes ADR 0002 as a draft" on 2026-11-15 ("Proceed").
 
