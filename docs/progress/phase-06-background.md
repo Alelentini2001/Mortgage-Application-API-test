@@ -1,6 +1,6 @@
 # Phase 06: Background assessments
 
-Status: **In progress: rebased on `main`, gates re-run; PR next** · Branch: `phase-06-background` (worktree) · PR: — · Started: 2026-11-14 · Finished: —
+Status: **Checkpoint B: PR open, waiting for Alessandro** · Branch: `phase-06-background` (worktree) · PR: [#8](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/8) · Started: 2026-11-14 · Finished: —
 
 ## Goal
 
@@ -261,6 +261,28 @@ Logged here during the parallel run and copied to `docs/ai/PROMPTS.md` on `main`
 - **Purpose:** review gate re-run after the rebase, on the commits made after the first review.
 - **Outcome:** no critical, high or medium findings; six low (RR1–RR6). See "Review gate".
 
+### P06-11 · agent→subagent (`general-purpose`, from the `/security-review` skill) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security review sub-task for PR #8 (Phase 6, background assessments) of a .NET 10 mortgage-application API. Read only: do not edit files and do not run Docker.
+
+  Repository worktree: /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-acd40a009ddf8a3cd (branch phase-06-background). The diff to review: run `git diff origin/main...HEAD` there (31 files: a background worker, a bounded in-process queue, a 202 assess endpoint, repository methods for the worker that are not owner-scoped, tests, the CI docker job, docs). Accepted and documented, do not report: no rate limit or request timeout until Phase 8 (security S1), the fixed DevelopmentCurrentUser until Phase 7, the worker-only methods being public on the shared service (S2). Context to read: docs/progress/phase-06-background.md ("Security gate"), .claude/rules/security.md, AGENTS.md.
+
+  OBJECTIVE: identify HIGH-CONFIDENCE security vulnerabilities newly added by this PR that could have real exploitation potential. Not a general code review. Do not comment on existing security concerns.
+  1. Minimise false positives: only flag issues where you are >80% confident of actual exploitability.
+  2. Skip theoretical issues, style concerns and low-impact findings.
+  3. Prioritise vulnerabilities that could lead to unauthorized access, data breaches or system compromise.
+  4. Do NOT report: denial of service; secrets or sensitive data stored on disk; rate limiting or resource exhaustion.
+
+  Categories to examine: input validation (SQL/command/XXE/template/NoSQL injection, path traversal); authentication and authorization (bypass, privilege escalation, sessions, JWT); crypto and secrets (hardcoded keys, weak crypto, key storage, randomness, certificate validation); injection and code execution (deserialization, YAML, eval, XSS); data exposure (sensitive data logging or storage, PII, endpoint data leakage, debug information exposure). Even if only exploitable from the local network, it can be HIGH.
+
+  Method: (1) research the repository's security model and existing patterns; (2) compare the new changes against them and look for new attack surface; (3) assess each modified file, trace data from inputs to sensitive operations, look for privilege boundaries crossed unsafely.
+
+  For each candidate give: file, line, severity (HIGH / MEDIUM / LOW), category slug, description, exploit scenario, fix recommendation, and a confidence from 1 to 10. Focus on HIGH and MEDIUM; MEDIUM only if obvious and concrete. If there are no candidates, say so plainly. Keep the report short.
+  ```
+- **Purpose:** the find step of the local `/security-review` on PR #8.
+- **Outcome:** no HIGH or MEDIUM candidates (hand review only), so the skill's false-positive filter step had nothing to run on.
+
 The human prompts for this phase (Checkpoint A approval, test approval, the usage-limit resume and the approval of the review-gate decisions) are in `phase-04-docker.md`, "Prompts" (P04-01 to P04-13), and in `docs/ai/PROMPTS.md`.
 
 ## What was built (files)
@@ -490,6 +512,10 @@ Checked and found no problem: EF Core tracking of the processing load, the Q5 ca
 
 It also noted that the worker comment gave the wrong source for duplicate IDs (fixed in `1055677`) and found the R4 fix, the retry loop's shutdown and error paths, the option validation, R1, R2, R5 and R10, and the Phase 4 interaction correct.
 
+**Local PR reviews** on PR #8 at `7f4488f`, posted as [one PR comment](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/8#issuecomment-6894435276). CI on `7f4488f`: "Build, test, format" and "Docker image build and smoke test" (with the new 202 step) passed.
+- `/code-review` (high effort, run by the lead agent in its own context): 5 low findings, none fixed in this PR, each with a proposed handling for Alessandro: (1) a row whose load or save always fails stays Pending forever (attempt counter or age cut-off, needs a migration); (2) the sweep loads every Pending ID into one list (stream it, Phase 9); (3) the processing load tracks the application and `Update` rewrites every column (measure first, Phase 9); (4) no `Retry-After` on the 202 or a Pending GET (optional, changes the response); (5) I-13/I-14 is one test with three behaviours and loops, against `tests/CLAUDE.md` (split in Phase 9, or accept as approved in the test plan).
+- `/security-review`: no findings (P06-11).
+
 **`spec-checker` (P06-08)** at `cce8f49`, read-only, 2026-11-15. It did not build, run tests or open every test body. Spec requirement 3 (assess endpoint) and R30 (optional background processing): **met**. All 17 Phase 6 goals and must-cases it listed are met, except "the non-owner-scoped load is worker-only", which is **partial**: nothing in the code enforces it (accepted, S2 and ADR 0003). Its notes:
 - **202 and polling against the spec wording.** The spec says only "Provide an endpoint to assess affordability for a given application" and does not require a synchronous call, so the 202 + `Location` + polling flow meets it. The caveat: the POST response no longer holds the result, only a Pending body. Background processing is an optional enhancement in the spec.
 - It did not find the R3 test by grep. The test is `Startup_sweep_failure_is_retried_and_completes_pending_assessment` in `AssessmentWorkerTests.cs`.
@@ -519,7 +545,8 @@ Implementation notes and deviations, for the reviewers:
 - **EF Core change tracking** (flagged in "Docs verified"): the processing load is tracked, and `UpdateAssessmentAsync` calls `Update` before `SaveChangesAsync`. I-R2 and I-R3 prove the change survives a reload. Checked on Learn afterwards by the lead agent (see "Docs verified").
 - **APIs not checked on Learn by the implementer** (no web access): `ValidateDataAnnotations`, `ChannelReader<T>.Count`, `BackgroundService.ExecuteTask` and `SqliteConnection.ClearPool` were checked afterwards by the lead agent (see "Docs verified"). `ExecuteUpdateAsync` (tests only) was not checked.
 - **Clock going backwards:** fixed after the review gate (R4, `e164567`).
-- **Not done yet:** the PR and Checkpoint B.
+- **Not done yet:** Checkpoint B and the merge.
+- **PR `/code-review` findings 1–5** (all low): proposed handling in "Review gate"; waiting for Alessandro.
 - **RR5:** the sweep retry test does not prove the delay is waited. Fix: timestamp `CapturingLoggerProvider` entries and assert the gap between `RequeueFailed` and `PendingRequeued`.
 - **Optional:** `stop_grace_period: 30s` in `compose.yaml` so a container stop lets an item in progress finish (security re-run, Info).
 
