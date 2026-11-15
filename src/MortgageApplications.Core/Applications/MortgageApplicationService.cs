@@ -55,18 +55,18 @@ public sealed class MortgageApplicationService(
     /// Only the calculation is caught (it marks the assessment Failed); a failure to load or save reaches the caller,
     /// and the row stays Pending until the next startup re-enqueue.
     /// </summary>
-    public async Task<AssessmentProcessingOutcome> ProcessAssessmentAsync(Guid assessmentId, CancellationToken cancellationToken)
+    public async Task<AssessmentProcessingResult> ProcessAssessmentAsync(Guid assessmentId, CancellationToken cancellationToken)
     {
         var work = await repository.FindForProcessingAsync(assessmentId, cancellationToken);
         if (work is null)
         {
-            return AssessmentProcessingOutcome.NotFound;
+            return new AssessmentProcessingResult(AssessmentProcessingOutcome.NotFound, null, null);
         }
 
         var assessment = work.Assessment;
         if (assessment.Status != AssessmentStatus.Pending)
         {
-            return AssessmentProcessingOutcome.Skipped;
+            return new AssessmentProcessingResult(AssessmentProcessingOutcome.Skipped, null, null);
         }
 
         // If the clock moved back since the row was saved (time sync), finish at the creation time instead of
@@ -84,7 +84,8 @@ public sealed class MortgageApplicationService(
         }
 
         await repository.UpdateAssessmentAsync(assessment, cancellationToken);
-        return result is null ? AssessmentProcessingOutcome.Failed : AssessmentProcessingOutcome.Completed;
+        return new AssessmentProcessingResult(
+            result is null ? AssessmentProcessingOutcome.Failed : AssessmentProcessingOutcome.Completed, null, null);
     }
 
     /// <summary>For the worker's startup re-enqueue: every Pending assessment, oldest first. Not owner-scoped.</summary>

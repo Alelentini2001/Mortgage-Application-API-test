@@ -99,7 +99,7 @@ public sealed partial class AssessmentWorker(
             await using var scope = scopeFactory.CreateAsyncScope();
             var outcome = await scope.ServiceProvider.GetRequiredService<MortgageApplicationService>()
                 .ProcessAssessmentAsync(assessmentId, stoppingToken);
-            switch (outcome)
+            switch (outcome.Outcome)
             {
                 case AssessmentProcessingOutcome.Failed:
                     LogAssessmentFailed(assessmentId);
@@ -108,7 +108,7 @@ public sealed partial class AssessmentWorker(
                     LogAssessmentNotFound(assessmentId);
                     break;
                 default:
-                    LogAssessmentProcessed(assessmentId, outcome);
+                    LogAssessmentProcessed(assessmentId, outcome.Outcome);
                     break;
             }
         }

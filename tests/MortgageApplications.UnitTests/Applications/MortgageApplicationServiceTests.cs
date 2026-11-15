@@ -165,7 +165,7 @@ public sealed class MortgageApplicationServiceTests
 
         var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
 
-        Assert.Equal(AssessmentProcessingOutcome.Completed, outcome);
+        Assert.Equal(AssessmentProcessingOutcome.Completed, outcome.Outcome);
         Assert.Same(assessment, Assert.Single(_repository.Updates));
         Assert.Equal(AssessmentStatus.Completed, assessment.Status);
         Assert.Equal(_now, assessment.CreatedAt);
@@ -191,7 +191,7 @@ public sealed class MortgageApplicationServiceTests
 
         var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
 
-        Assert.Equal(AssessmentProcessingOutcome.Completed, outcome);
+        Assert.Equal(AssessmentProcessingOutcome.Completed, outcome.Outcome);
         Assert.Equal(AssessmentStatus.Completed, assessment.Status);
         Assert.Null(assessment.FailedAt);
         Assert.Equal(Decision.Declined, assessment.Result!.Decision);
@@ -209,7 +209,7 @@ public sealed class MortgageApplicationServiceTests
 
         var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
 
-        Assert.Equal(AssessmentProcessingOutcome.Failed, outcome);
+        Assert.Equal(AssessmentProcessingOutcome.Failed, outcome.Outcome);
         Assert.Same(assessment, Assert.Single(_repository.Updates));
         Assert.Equal(AssessmentStatus.Failed, assessment.Status);
         Assert.Equal(_later, assessment.FailedAt);
@@ -231,7 +231,7 @@ public sealed class MortgageApplicationServiceTests
 
         var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
 
-        Assert.Equal(AssessmentProcessingOutcome.Skipped, outcome);
+        Assert.Equal(AssessmentProcessingOutcome.Skipped, outcome.Outcome);
         Assert.Empty(_repository.Updates);
         Assert.Equal(AssessmentStatus.Completed, assessment.Status);
         Assert.Same(result, assessment.Result);
@@ -251,7 +251,7 @@ public sealed class MortgageApplicationServiceTests
 
         var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
 
-        Assert.Equal(AssessmentProcessingOutcome.Skipped, outcome);
+        Assert.Equal(AssessmentProcessingOutcome.Skipped, outcome.Outcome);
         Assert.Empty(_repository.Updates);
         Assert.Equal(AssessmentStatus.Failed, assessment.Status);
         Assert.Equal(_now, assessment.FailedAt);
@@ -264,7 +264,7 @@ public sealed class MortgageApplicationServiceTests
     {
         var outcome = await _service.ProcessAssessmentAsync(Guid.CreateVersion7(_now), Ct);
 
-        Assert.Equal(AssessmentProcessingOutcome.NotFound, outcome);
+        Assert.Equal(AssessmentProcessingOutcome.NotFound, outcome.Outcome);
         Assert.Empty(_repository.Updates);
     }
 
@@ -277,7 +277,7 @@ public sealed class MortgageApplicationServiceTests
 
         var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
 
-        Assert.Equal(AssessmentProcessingOutcome.NotFound, outcome);
+        Assert.Equal(AssessmentProcessingOutcome.NotFound, outcome.Outcome);
         Assert.Empty(_repository.Updates);
         Assert.Equal(AssessmentStatus.Pending, assessment.Status);
     }
@@ -311,7 +311,7 @@ public sealed class MortgageApplicationServiceTests
 
         var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
 
-        Assert.Equal(AssessmentProcessingOutcome.Completed, outcome);
+        Assert.Equal(AssessmentProcessingOutcome.Completed, outcome.Outcome);
         Assert.Equal(AssessmentStatus.Completed, assessment.Status);
         Assert.Equal(_now, assessment.AssessedAt);
     }
@@ -326,7 +326,7 @@ public sealed class MortgageApplicationServiceTests
 
         var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
 
-        Assert.Equal(AssessmentProcessingOutcome.Failed, outcome);
+        Assert.Equal(AssessmentProcessingOutcome.Failed, outcome.Outcome);
         Assert.Equal(AssessmentStatus.Failed, assessment.Status);
         Assert.Equal(_now, assessment.FailedAt);
     }
@@ -345,6 +345,53 @@ public sealed class MortgageApplicationServiceTests
         var ids = await _service.ListPendingAssessmentIdsAsync(Ct);
 
         Assert.Equal([pending.Id], ids);
+    }
+
+    // Phase 5 (worker telemetry): a Completed result reports the application ID and the decision, nothing else.
+    [Theory]
+    [MemberData(nameof(DecisionCases))]
+    public async Task ProcessAssessmentAsync_completed_reports_application_id_and_decision(string golden, Decision decision)
+    {
+        var assessment = await PendingAssessmentAsync(GoldenCases.All[golden].Inputs);
+
+        var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
+
+        Assert.Equal(new AssessmentProcessingResult(AssessmentProcessingOutcome.Completed, assessment.ApplicationId, decision), outcome);
+    }
+
+    public static TheoryData<string, Decision> DecisionCases => new() { { "E1", Decision.Approved }, { "E2", Decision.Declined } };
+
+    // Phase 5: a Failed result reports the application ID and no decision.
+    [Fact]
+    public async Task ProcessAssessmentAsync_failed_reports_application_id_without_decision()
+    {
+        var assessment = await PendingAssessmentAsync(TestData.E1);
+        _repository.StoredInputsOverride = TestData.E1 with { TermYears = 50 };
+
+        var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
+
+        Assert.Equal(new AssessmentProcessingResult(AssessmentProcessingOutcome.Failed, assessment.ApplicationId, null), outcome);
+    }
+
+    // Phase 5: a Skipped result still knows its application; it reports no decision even when the row is Completed.
+    [Fact]
+    public async Task ProcessAssessmentAsync_skipped_reports_application_id_without_decision()
+    {
+        var assessment = await PendingAssessmentAsync(TestData.E1);
+        await _service.ProcessAssessmentAsync(assessment.Id, Ct);
+
+        var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
+
+        Assert.Equal(new AssessmentProcessingResult(AssessmentProcessingOutcome.Skipped, assessment.ApplicationId, null), outcome);
+    }
+
+    // Phase 5: NotFound reports neither an application ID nor a decision.
+    [Fact]
+    public async Task ProcessAssessmentAsync_unknown_id_reports_no_application_id()
+    {
+        var outcome = await _service.ProcessAssessmentAsync(Guid.CreateVersion7(_now), Ct);
+
+        Assert.Equal(new AssessmentProcessingResult(AssessmentProcessingOutcome.NotFound, null, null), outcome);
     }
 
     private async Task<AffordabilityAssessment> PendingAssessmentAsync(AffordabilityInputs inputs)
