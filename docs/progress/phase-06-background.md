@@ -1,6 +1,6 @@
 # Phase 06: Background assessments
 
-Status: **In progress: plan and tests approved (2026-11-15), implementation running** · Branch: `phase-06-background` (worktree, parallel with Phase 4) · PR: — · Started: 2026-11-14 · Finished: —
+Status: **In progress: implementation, security and review gates done; ADR 0003 drafted; waiting for the Phase 4 merge, rebase and PR** · Branch: `phase-06-background` (worktree, parallel with Phase 4) · PR: — · Started: 2026-11-14 · Finished: —
 
 ## Goal
 
@@ -64,7 +64,7 @@ Alessandro approved the plan with "Proceed" on 2026-11-15, after the agent recom
 | ID | Chosen | Alternatives | Reason | Decided by |
 |---|---|---|---|---|
 | P6-D1 | A: `IAssessmentQueue` in Core; channel implementation and worker in Api | B everything in Api | "Save Pending, then enqueue" stays in one use case; hosting code stays in Api | Alessandro |
-| P6-D2 | A: bounded channel, `BoundedChannelFullMode.Wait` + `WriteAsync`, capacity from config (default 100) | B `TryWrite` + 503; C unbounded | No silent drops; a saved Pending item is recovered by the startup re-enqueue | Alessandro |
+| P6-D2 | A: bounded channel, `BoundedChannelFullMode.Wait` + `WriteAsync`, capacity from config (default 100) | B `TryWrite` + 503; C unbounded | No silent drops; a saved Pending item is recovered by the startup re-enqueue (ADR 0003) | Alessandro |
 | P6-D3 | A: named shared-cache in-memory SQLite per factory, one keep-alive connection, one connection per `DbContext` | B temporary file per factory | A SQLite connection must not be used by two threads; stays fast and isolated | Alessandro |
 | P6-D4 | A: `GET …/assessments/{assessmentId}` always 200, `status` field tells the state | B 202 while Pending | Simple to poll; response shape already supports it | Alessandro |
 
@@ -82,9 +82,22 @@ Checked by the lead agent on 2026-11-15, before implementation.
 - [TypedResults.Accepted](https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.http.typedresults.accepted?view=aspnetcore-10.0): `Accepted<TValue>(string? uri, TValue? value)` returns `Accepted<TValue>`, so the endpoint stays typed (`Results<Accepted<AssessmentResponse>, NotFound>`).
 - [In-memory databases (Microsoft.Data.Sqlite)](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/in-memory-databases): a shared in-memory database uses `Data Source=<name>;Mode=Memory;Cache=Shared`; it lives while at least one connection is open. P6-D3 uses this form (the plan's `file:` URI form is replaced by it).
 - [Database errors (Microsoft.Data.Sqlite)](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/database-errors): `SqliteConnection`, `SqliteCommand` and `SqliteDataReader` "cannot be shared and used concurrently from multiple threads". This confirms the P6-D3 risk. On a busy or locked error the library retries until the command timeout (default 30 s), so short write contention between the worker and a request is retried rather than failed.
-- Not re-checked here: EF Core change tracking for updating a detached entity. The implementer must load the assessment tracked (or attach it) before `SaveChangesAsync`. Flagged for the `dotnet-reviewer`.
+- Not re-checked before implementation: EF Core change tracking for updating a detached entity. Flagged for the `dotnet-reviewer` (it found no problem) and checked afterwards, below.
+
+Checked by the lead agent on 2026-11-15, after implementation (the implementer had no web access):
+- [BackgroundService.ExecuteTask](https://learn.microsoft.com/en-us/dotnet/api/microsoft.extensions.hosting.backgroundservice.executetask?view=net-10.0): the task of the long-running operation, null until `StartAsync` runs. Used by W-6.
+- [ChannelReader<T>.Count](https://learn.microsoft.com/en-us/dotnet/api/system.threading.channels.channelreader-1.count?view=net-10.0): current number of items; a bounded channel supports it (`CanCount`). Used by tests only.
+- [ValidateDataAnnotations](https://learn.microsoft.com/en-us/dotnet/api/microsoft.extensions.dependencyinjection.optionsbuilderdataannotationsextensions.validatedataannotations?view=net-10.0): registers DataAnnotations validation for the options type. Used with `ValidateOnStart`.
+- [SqliteConnection.ClearPool](https://learn.microsoft.com/en-us/dotnet/api/microsoft.data.sqlite.sqliteconnection.clearpool?view=msqlite-10.0): empties the pool for that connection string. Used by `ApiFactory` on dispose.
+- [Explicit tracking (EF Core)](https://learn.microsoft.com/en-us/ef/core/change-tracking/explicit-tracking): `Update` marks the entity Modified whether or not it is tracked. The processing load is tracked anyway.
+- [Task.Delay(TimeSpan, TimeProvider, CancellationToken)](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.delay?view=net-10.0): available from .NET 8; throws `OperationCanceledException` (stored in the task) when the token is cancelled; delays above 4,294,967,294 ms are rejected (the option's maximum is 3,600 s). Used by the sweep retry (R3).
 
 ## Orchestration used
+
+- Ran in parallel with Phase 4, each phase in its own git worktree (`.claude/worktrees/agent-acd40a009ddf8a3cd` for this one), with no shared files (see "Parallel safety").
+- `test-designer` proposed the cases (P06-01). `parallel-implementer` wrote the code and tests (P06-02), was resumed once after its 60-turn limit (P06-03) and twice for the review-gate fixes (P06-06, P06-07).
+- `security-auditor` (P06-04) and `dotnet-reviewer` (P06-05) ran in fresh contexts on the diff at `850a3a8`.
+- The lead agent made the two fixes Alessandro approved on 2026-11-15 (R3 and R4) and wrote ADR 0003.
 
 ## Prompts
 
@@ -108,6 +121,100 @@ Logged here during the parallel run and copied to `docs/ai/PROMPTS.md` on `main`
   ```
 - **Purpose:** propose Phase 6 test cases before any test is written.
 - **Outcome:** 17 unit, 4 repository, 15 integration and 6 worker-level cases, a list of existing tests that must change, and 12 questions (Q1–Q12). The lead agent checked Q8, Q10 and Q11 against the code and Learn (see "Tests", "Proposal"). Q10's claim that a busy timeout does not cover shared-cache locks is contradicted by Learn: Microsoft.Data.Sqlite retries both busy and locked errors until the command timeout.
+
+### P06-02 · agent→subagent (`parallel-implementer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Implement Phase 6 (background assessments) of this .NET 10 mortgage-application API, exactly as approved.
+
+  Branch: switch to the existing branch phase-06-background (it holds one commit with the approved plan). Do not create another branch. Never push.
+
+  Scope: docs/progress/phase-06-background.md. The sections "Plan (approved at Checkpoint A)", "Decisions" (P6-D1 to P6-D4), "Docs verified" and "Tests > Proposal" (the recommended selection and the answers to Q1-Q12, all approved) are your scope. Read AGENTS.md, CLAUDE.md, .claude/rules/*.md, tests/CLAUDE.md and src/MortgageApplications.Core/CLAUDE.md first.
+
+  Key points from the approved answers (the phase file is the source of truth if anything differs):
+  - IAssessmentQueue in Core; ChannelAssessmentQueue and AssessmentWorker in Api. Bounded channel, BoundedChannelFullMode.Wait, WriteAsync with the request's cancellation token. Capacity from `Assessments:QueueCapacity` (default 100, validated at startup 1 to 10,000, like AffordabilityOptions).
+  - AssessAsync saves Pending, then enqueues (in that order). ProcessAssessmentAsync(Guid) loads the assessment plus the application's AffordabilityInputs without an owner filter, returns unless Pending, catches only the calculation (Fail on a calculation error), saves. A failure while saving propagates to the worker, which logs it and leaves the row Pending. No new calculator interface (Q1).
+  - The worker re-enqueues all Pending IDs at startup, then reads one item at a time with a new async DI scope per item, catches and logs per item (assessment ID only, never amounts or owner ID), and treats cancellation on the stopping token as shutdown, never as Failed. An exception escaping ExecuteAsync stops the host (Learn link in the phase file), so nothing but shutdown may leave the loop.
+  - POST /api/applications/{id}/assessments → 202 Accepted (TypedResults.Accepted<AssessmentResponse>) + Location of GET …/assessments/{assessmentId}. GET is always 200. AssessmentResponse gains nullable failedAt; no failure reason.
+  - ApiFactory: named shared-cache in-memory SQLite (`Data Source=<guid>;Mode=Memory;Cache=Shared`), one keep-alive connection, one connection per DbContext. The worker runs in the factory's default host; WithWebHostBuilder-derived hosts remove it unless a test opts in.
+  - If ListPending needs an index, add a new migration; never edit InitialCreate (a hook blocks it).
+  - No new packages. No logging of income, expenses, deposit, property value, tokens or the owner ID.
+
+  Do not edit: Dockerfile, compose.yaml, .dockerignore, .github/, docs/PROGRESS.md, docs/ai/*, any ADR file (ADR 0003 is written later by the lead agent). Only the phase file under docs/.
+
+  Process:
+  1. Test-first: write the approved tests and the changes to existing tests; run them and confirm the new ones fail for the right reason. Keep that output.
+  2. Implement until green. Small conventional commits (AGENTS.md "Commits and PRs"; scopes core, api, infra, tests). End each commit message with: Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+  3. Run ./scripts/verify.sh (full) and keep the final output. Then run the integration tests 5 times in a row (dotnet test --project tests/MortgageApplications.IntegrationTests) and record pass/fail for each run. If any run flakes on SQLite locking, stop and report (Q10 says that goes back to Alessandro); do not switch to a temp-file database yourself.
+  4. In the phase file, fill "What was built (files)", "Tests" > a new "Results" subsection (added/total/passing, the red-then-green evidence, the 5-run result) and "Open issues" for anything you could not do. Commit that.
+
+  Report: files changed, commits, trimmed verify output, the 5-run result, every place you deviated from the phase file and why, and anything you could not do. If the plan is ambiguous or a step fails three times, stop and report instead of guessing.
+  ```
+- **Purpose:** implement the approved Phase 6 plan, test-first, in its own worktree.
+- **Outcome:** stopped at its 60-turn limit after 4 commits (`4a8ed68`, `e531691`, `d249652`, `7215f8d`) with a clean tree.
+
+### P06-03 · agent→subagent (`parallel-implementer`, resumed) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Finish Phase 6: you hit the turn limit after 4 commits (4a8ed68, e531691, d249652, 7215f8d) and a clean tree. Do only the remaining steps from your original instructions, with no new features:
+  1. If any approved must-case from the phase file is still missing, list it (do not write it now unless it is a few lines).
+  2. Run ./scripts/verify.sh (full) and keep the final output.
+  3. Run the integration tests 5 times in a row and record pass/fail for each run. If a run flakes on SQLite locking, stop and report.
+  4. Fill the phase file: "What was built (files)", "Tests" > "Results" (added/total/passing, red-then-green evidence if you kept it, otherwise say it was not kept, plus the 5-run result), and "Open issues". Commit that.
+  5. Deliver your report: files changed, commits, trimmed verify output, the 5-run result, every deviation from the phase file and why, and anything not done. Keep tool use tight; you have limited turns.
+  ```
+- **Purpose:** finish the remaining steps after the turn limit, with no new features.
+- **Outcome:** full verify passed (373 tests); integration tests passed 5 runs in a row; phase-file sections "What was built", "Results" and "Open issues" written (commit `850a3a8`).
+
+### P06-04 · agent→subagent (`security-auditor`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security gate for Phase 6 (background assessments) of a .NET 10 mortgage-application API. Review only the branch diff: run `git diff main...phase-06-background` from the repository root (the branch is checked out in another worktree; do not switch branches here; read branch files with `git show phase-06-background:<path>`).
+
+  Read first: .claude/rules/security.md, AGENTS.md, docs/progress/phase-06-background.md on the branch (plan, decisions P6-D1 to P6-D4, approved answers Q1-Q12, "Open issues" with the implementer's deviations).
+
+  Check at least: the non-owner-scoped processing load (`ProcessAssessmentAsync` and the repository method behind it) is reachable only from `AssessmentWorker`, never from an endpoint or with a caller-supplied ID; POST and GET keep owner scoping and return identical 404s for unknown, other-owner and malformed IDs, with nothing saved or queued on 404; no log message, log state, exception message or ProblemDetails carries income, expenses, deposit, property value or the owner ID (check every `[LoggerMessage]` and every logged exception path); `AssessmentResponse.failedAt` exposes no failure reason; the bounded queue cannot grow without limit and `Assessments:QueueCapacity` is validated at startup; a POST waiting on a full queue cannot be used to exhaust resources beyond what the capacity and request cancellation allow (say what the remaining denial-of-service exposure is and whether it belongs to Phase 8 rate limiting); the worker cannot be stopped by one bad item; shutdown never marks Failed; any `CA1711` or other analyzer suppressions are justified. Run Gitleaks on the branch commits (`gitleaks git --log-opts="main..phase-06-background"` or closest form), Semgrep (`p/csharp`, `p/secrets`) on the changed `.cs` files from the branch worktree at /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-acd40a009ddf8a3cd, and `dotnet list package --vulnerable --include-transitive` there; say which tools ran and which were not available. Do not install anything.
+
+  Use your output format: each finding with severity, file:line, evidence, real or false positive, and a proposed fix or justification. Do not edit files.
+  ```
+- **Purpose:** security gate on the branch diff.
+- **Outcome:** PASS. One medium finding (S1), two low and three info notes. See "Security gate".
+
+### P06-05 · agent→subagent (`dotnet-reviewer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Fresh-context review of Phase 6 (background assessments) of a .NET 10 mortgage-application API. Review only the branch diff: run `git diff main...phase-06-background` from the repository root (the branch is checked out in the worktree /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-acd40a009ddf8a3cd; read files there; do not switch branches or edit anything).
+
+  Read first: AGENTS.md, .claude/rules/backend.md, .claude/rules/tests.md, tests/CLAUDE.md, and docs/progress/phase-06-background.md on the branch (goal, plan, decisions P6-D1 to P6-D4, "Docs verified", approved tests and answers Q1-Q12, "Results" and "Open issues" with the implementer's six deviations).
+
+  Flag only correctness, security and requirement gaps, for example: EF Core change tracking in the update path (is the loaded assessment tracked, or attached, so `SaveChangesAsync` writes Status, Result, AssessedAt and FailedAt; what the result value comparer costs); whether save-then-enqueue really leaves a recoverable Pending row on every failure path, including a POST cancelled while `WriteAsync` waits; the re-enqueue running alongside the read loop (deviation 5): can it double-process or reorder in a way that breaks idempotency, and is the duplicate skip correct; whether `ProcessAssessmentAsync` catches only the calculation and lets save failures propagate as approved (Q5); whether the worker can ever leave its loop except on shutdown; the clock-before-CreatedAt bug the implementer found (both `Complete` and `Fail` throw): confirm it, and say how likely it is in practice; the `ApiFactory.WithWebHostBuilder` `new` hiding (deviation 4): can a test silently get the wrong host type through the base-class reference; tests that can be timing-flaky despite the 5 clean runs (fixed sleeps, negative waits, races with the worker), and the reduced `[Fact(Timeout)]` coverage (deviation 2); whether every approved must-case from the phase file really has a test that would fail if the behaviour broke; whether the 202 response, `Location` and `failedAt` match P6-D4 and Q11; the `CA1711` suppressions. Report each finding with severity, file:line, evidence and a proposed fix.
+  ```
+- **Purpose:** fresh-context review gate on the branch diff.
+- **Outcome:** no critical or high findings; three medium and seven low (R1–R10). See "Review gate".
+
+### P06-06 · agent→subagent (`parallel-implementer`, resumed) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Phase 6 review gate: fix these five findings on phase-06-background, test-first where a behaviour changes, then run ./scripts/verify.sh (full) and the integration tests 3 times. Do nothing else: no other refactors, no clock fix, no sweep, no concurrency token (those wait for Alessandro).
+  R1 (medium): no test drives an exception into AssessmentWorker's per-item catch (AssessmentWorker.cs ~:95). Add an integration test with a repository wrapper whose UpdateAssessmentAsync throws once: the row stays Pending, a ProcessingError log entry has the assessment ID and no amounts or owner ID, and a following POST in the same host still completes.
+  R2 (medium, real bug): ChannelAssessmentQueue.EnqueueAsync passes the request token to WriteAsync, which returns cancelled at once if the token is already cancelled, even with free capacity, stranding a saved Pending row. Change to `TryWrite` first, `WriteAsync(id, ct)` only when full. Add a ChannelAssessmentQueueTests case: already-cancelled token, empty queue → the ID is queued.
+  R5 (low): I-11 holds the worker before FindForProcessingAsync, so nothing is in memory at shutdown. Add a gate point after Complete has run in memory and before the save (in the update path), stop the host there, assert the row is Pending with AssessedAt and FailedAt null and nothing logged at Error.
+  R9 (low): AssessmentWorkerTests ~:116 `Assert.False(third.IsCompleted)` does not prove the POST reached WriteAsync. Also assert the queue's Reader.Count == 1 via a bounded EventuallyAsync.
+  R10 (low): U-P10 must also assert exactly one update attempt and that Fail was never called (count attempts in the fake before throwing).
+  Commit in small conventional commits (scope tests or api) ending with: Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>. Do not edit the phase file. Report: commits, which new tests failed before the fix (R2 at least), trimmed verify output, the 3-run result.
+  ```
+- **Purpose:** fix the review findings that needed no decision (R1, R2, R5, R9, R10).
+- **Outcome:** the run stopped on the user's usage limit before making any change.
+
+### P06-07 · agent→subagent (`parallel-implementer`, resumed) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Your last run stopped on a rate limit before any change (worktree clean at 850a3a8). Please do the five fixes from my previous message now (R1, R2, R5, R9, R10), exactly as specified there: test-first where behaviour changes, small commits, full verify, integration tests 3 times, no phase-file edits, then report. Keep tool use tight.
+  ```
+- **Purpose:** restart the P06-06 fixes after the usage limit reset.
+- **Outcome:** commits `8339c95` (R10), `37b28b2` (R2) and `b505133` (R1, R5, R9). Only the R2 test failed before its fix (`TaskCanceledException`). Full verify passed (376 tests); integration tests passed 3 runs in a row.
+
+The human prompts for this phase (Checkpoint A approval, test approval, the usage-limit resume and the approval of the review-gate decisions) are in `phase-04-docker.md`, "Prompts".
 
 ## What was built (files)
 
@@ -134,6 +241,13 @@ Implemented by the `parallel-implementer` in commits `4a8ed68` (core), `e531691`
   - Integration, changed: `ApiFactory.cs` (P6-D3 database, migrations before any host starts, worker only in the default host), `Http.cs` (polling helpers), `AssessmentTests.cs`, `NotFoundAndOwnerTests.cs`, `StartupTests.cs`, `ErrorHandlingTests.cs`, `ApiRecordsTests.cs`.
 
 A manual smoke run (`dotnet run`, Development, file database in the scratchpad) returned `HTTP/1.1 202 Accepted` with a `Location`; a GET 0.3 s later returned `"status":"Completed"`; the log showed `Re-enqueued 0 pending assessments at startup.`
+
+After the review gate:
+- `ChannelAssessmentQueue.EnqueueAsync`: `TryWrite` first, `WriteAsync` only when full (R2).
+- `MortgageApplicationService.ProcessAssessmentAsync`: finish time is the later of now and `CreatedAt` (R4).
+- `AssessmentWorker`: the startup sweep retries every `Assessments:RequeueRetryDelaySeconds` (new option, default 30 s, `[Range(1, 3600)]`, in `appsettings.json`) until it succeeds or the host stops (R3).
+- Tests: `WorkerGate.cs` gains `BeforeSave`, `FailFirstSave` and `FailFirstSweep`; new tests listed under "Review gate".
+- `docs/adr/0003-background-assessment-queue.md` (new, draft).
 
 ## Tests
 
@@ -235,13 +349,71 @@ VERIFY PASSED (full)
 
 **Flakiness check (plan step 5).** `dotnet test --project tests/MortgageApplications.IntegrationTests`, 5 runs in a row: all 5 passed, 106 / 106 each (5.4 s, 4.9 s, 4.9 s, 5.0 s, 4.9 s). No SQLite locking errors, so Q10 stays with P6-D3.
 
+**After the review gate** (lead agent, 2026-11-15). The P06-07 fixes added 3 tests (376 in total, 3 clean integration runs). Then the two fixes Alessandro approved:
+- R4, commit `e164567`: the 2 new unit tests failed first with `System.ArgumentException : Must not be before the assessment was created. (Parameter 'assessedAt')` and `(Parameter 'failedAt')`; after the fix, unit 269 / 269.
+- R3, commit `e4215a9`: the new integration test failed first with `Timed out after 10 s: assessment still Pending` (the log showed `Simulated sweep failure.`); after the fix it passed. Plus 2 startup-validation cases for the new option (0 and 3,601 s).
+
+Full verify (`./scripts/verify.sh`, run with the R3 change in the working tree, just before commit `e4215a9`), trimmed:
+```
+  total: 381
+  failed: 0
+  succeeded: 381
+  skipped: 0
+==> hook regression tests
+hook tests: 90 passed, 0 failed
+==> format check
+VERIFY PASSED (full)
+```
+The hook count is 90 rather than 91 because one case (the no-change skip of `verify-on-stop`) runs only on a clean tree. After the commit, `.claude/hooks/tests/test-hooks.sh` printed `hook tests: 91 passed, 0 failed`.
+
+Integration tests after `e4215a9`, 3 runs in a row: 112 / 112 each, no failures.
+
 ## Security gate
+
+`security-auditor` (P06-04) on the diff at `850a3a8`. **Verdict: PASS.** Tools: Gitleaks 8.30.1 (branch commits and working tree: no leaks), Semgrep 1.185.0 with `p/csharp` and `p/secrets` (27 changed files and a `--baseline-commit main` run: 0 findings), `dotnet list package --vulnerable --include-transitive` (no vulnerable packages), and a manual OWASP Top 10:2025 review. `Directory.Packages.props`, `global.json` and `.github/` are unchanged.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| S1 | Denial of service: POSTs waiting on a full queue are not limited. Each saves a Pending row first and keeps a request open; a "POST then disconnect" loop grows the database and the next startup backlog. No rate limit or request timeout exists. | Medium | Accepted until Phase 8 (Alessandro, 2026-11-15): rate limiter on `POST …/assessments` (per owner after Phase 7) and a request timeout. Recorded in ADR 0003. |
+| S2 | `ProcessAssessmentAsync` and `ListPendingAssessmentIdsAsync` are public on the shared service and not owner-scoped. Only the worker calls them; no endpoint can pass an ID. | Low | Accepted with the existing "worker only" comments (Alessandro, 2026-11-15). A separate `AssessmentProcessor` is the later option. Recorded in ADR 0003. |
+| S3 | `catch (Exception)` around the calculator discards the exception, so the log cannot say which rule failed, and a calculator bug becomes a permanent Failed. | Low | Kept as approved in Q5 (Alessandro, 2026-11-15). |
+| S4 | `ChannelAssessmentQueue.Reader` is public. | Info | Accepted: only the worker and one test use it. |
+| S5 | Three cases leave rows Pending until restart: a failed startup re-enqueue, a POST cancelled after the save, a clock before `CreatedAt`. | Info | The first and third are fixed (R3, R4). The second was narrowed by R2: it now happens only when the queue is full and the client gives up. |
+| S6 | `CA1711` suppressions on the two queue types. | Info | False positive: naming only, scoped and justified. |
+
+Checks that passed: worker logs hold only `Count`, `AssessmentId` and `Outcome`; logged exceptions carry no data values; ProblemDetails unchanged; 404s identical for unknown, malformed and other-owner IDs, with nothing saved or queued; queue capacity validated at startup; one bad item cannot stop the worker; shutdown never marks Failed; LINQ only, no raw SQL.
+
+The R3 and R4 fixes came after this gate. They add no endpoint, package or log field (the `RequeueFailed` message gains the retry delay in seconds). The gate was not re-run on them; it is re-run after the rebase on `main` (plan step 9).
 
 ## Review gate
 
+`dotnet-reviewer` (P06-05) on the diff at `850a3a8`. It read the code and did not build or run tests.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| R1 | No test sends an exception into the worker's per-item `catch`; deleting it would stop the host on the first save failure and every test would pass. | Medium | Fixed, `b505133`: `Failed_save_is_logged_leaves_the_row_pending_and_the_worker_continues`. |
+| R2 | A client that disconnects after the insert leaves a Pending row that is never queued, even with free room: `WriteAsync` returns cancelled at once for a cancelled token. | Medium | Fixed, `37b28b2`: `TryWrite` first, then `WriteAsync`. Test `EnqueueAsync_with_cancelled_token_and_free_capacity_queues_the_id` failed before the fix. |
+| R3 | The startup sweep runs once; if it fails (for example the database is not migrated yet), Pending rows stay Pending for the process lifetime. | Medium/Low | Fixed, `e4215a9` (Alessandro chose "retry with a delay until it succeeds"). A periodic sweep is later work (ADR 0003). |
+| R4 | A clock reading before `CreatedAt` makes `Complete` and `Fail` throw; the row stays Pending. | Low | Fixed, `e164567`: finish at the later of now and `CreatedAt` (Alessandro). |
+| R5 | I-11 holds the worker before the load, so it never tests "shutdown while an assessment is in memory". | Low | Fixed, `b505133`: `Shutdown_before_the_save_leaves_the_assessment_pending` (gate point `BeforeSave`). |
+| R6 | No concurrency token: two processors on one database would both see Pending and the last write would win. | Low | Not fixed (Alessandro): safe with one reader; recorded in ADR 0003 as a requirement before scaling out. |
+| R7 | `ApiFactory.WithWebHostBuilder` hides the base method with `new`; a helper typed as `WebApplicationFactory<Program>` would bind to the base and start a second worker. | Low | Open, not fixed: every call site uses `ApiFactory` today (reviewer grepped them). See "Open issues". |
+| R8 | I-10 assumes TestServer cancels `RequestAborted` synchronously before `gate.Open()`. | Low | Open, not verified: the test passed in every run so far (5 + 3 + 3 + 3). See "Open issues". |
+| R9 | `Assert.False(third.IsCompleted)` does not prove the third POST reached `WriteAsync`. | Low | Fixed, `b505133`: waits for `Reader.Count == 1` first. |
+| R10 | U-P10 only checks that the exception propagates; U-P11 tests the fake's filter. | Low | U-P10 fixed, `8339c95` (exactly one save attempt, never Failed). U-P11 kept: I-R1 covers the real query. |
+
+Checked and found no problem: EF Core tracking of the processing load, the Q5 catch scope, leaving the worker loop only on shutdown, save-then-enqueue order, the 202/`Location`/`failedAt` shapes, timeout coverage of the polling tests, the CA1711 suppressions, the approved must-cases and the log fields.
+
 ## AI output corrected or rejected (REAL cases only)
 
+- **`test-designer` Q10 (P06-01)** said a busy timeout does not cover shared-cache locks. Learn's "Database errors" page says Microsoft.Data.Sqlite retries both busy and locked errors until the command timeout. Rejected; P6-D3 kept.
+- **`parallel-implementer` (P06-02)** wrote `EnqueueAsync` as a plain `WriteAsync(id, cancellationToken)`, which strands a saved row when the client has already disconnected (R2). Caught by `dotnet-reviewer`, fixed in `37b28b2`.
+- **`parallel-implementer` (P06-02)** wrote I-11 so that it could not fail on the behaviour it names (R5), and U-P10 so that it could not catch a second save (R10). Caught by `dotnet-reviewer`, fixed in `b505133` and `8339c95`.
+
 ## Optimisations considered
+
+- No index on `Status` for the startup sweep: it runs once per start (plus retries on failure), so a table scan is acceptable at this size.
+
 
 ## Open issues
 
@@ -251,10 +423,18 @@ Implementation notes and deviations, for the reviewers:
 - **`CA1711` suppressed** on `IAssessmentQueue` and `ChannelAssessmentQueue` (the analyzer rejects names ending in `Queue`). The approved names were kept, each suppression with a justification.
 - **`ApiFactory.WithWebHostBuilder` hides the base method** (`new`), so that every existing call site gets a host without the worker (Q2). An overload with `runWorker: true` opts in. Calling the base method through a `WebApplicationFactory<Program>` reference would skip this.
 - **The startup re-enqueue runs next to the first requests.** A POST that arrives before the re-enqueue reads the database can be queued twice; the second run is skipped (idempotent). Tests that need an exact queue wait for the `PendingRequeued` log event first.
-- **EF Core change tracking** (flagged in "Docs verified"): the processing load is tracked, and `UpdateAssessmentAsync` calls `Update` before `SaveChangesAsync`. I-R2 and I-R3 prove the change survives a reload. This link was not checked on Learn in this run.
-- **APIs not checked on Learn in this run** (the implementer had no web access): `ValidateDataAnnotations`, `ChannelReader<T>.Count`, `BackgroundService.ExecuteTask`, `ExecuteUpdateAsync` (tests only), `SqliteConnection.ClearPool`.
-- **Clock going backwards (not fixed, outside scope).** If the clock reads earlier than the assessment's `CreatedAt` when it is processed, both `Complete` and `Fail` throw. The worker logs the error and the row stays Pending until a later startup. A fix would be one line (use the later of now and `CreatedAt`) and would need its own test and approval.
-- **Not done here:** ADR 0003 (written by the lead agent), the security and review gates (plan steps 6–7), and the rebase on `main` after Phase 4 (step 9).
+- **EF Core change tracking** (flagged in "Docs verified"): the processing load is tracked, and `UpdateAssessmentAsync` calls `Update` before `SaveChangesAsync`. I-R2 and I-R3 prove the change survives a reload. Checked on Learn afterwards by the lead agent (see "Docs verified").
+- **APIs not checked on Learn by the implementer** (no web access): `ValidateDataAnnotations`, `ChannelReader<T>.Count`, `BackgroundService.ExecuteTask` and `SqliteConnection.ClearPool` were checked afterwards by the lead agent (see "Docs verified"). `ExecuteUpdateAsync` (tests only) was not checked.
+- **Clock going backwards:** fixed after the review gate (R4, `e164567`).
+- **Not done yet:** the rebase on `main` after Phase 4 merges, the gates re-run on the rebased branch (plan step 9), the spec check, the PR and Checkpoint B.
+
+Still open after the gates, for Alessandro:
+- **S1, accepted until Phase 8:** rate limiter and request timeout on `POST …/assessments`.
+- **R6:** no concurrency token; required before a second worker or instance (ADR 0003).
+- **R7:** the `new` hiding in `ApiFactory`. Possible fix: decide in `ConfigureWebHost` from a setting, or a test that the base method gives a host without the worker.
+- **R8:** I-10's reliance on TestServer aborting the request synchronously is not verified against TestServer's source or docs.
+- **ADR 0003** is a draft for Alessandro to accept or change at Checkpoint B.
+- **Concurrency today:** `DevelopmentCurrentUser` gives every caller the same owner (`dev-owner-0001`) until Phase 7, so per-user isolation under real load is first tested then.
 
 ## Time spent (approx.)
 
