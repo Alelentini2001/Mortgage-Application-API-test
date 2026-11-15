@@ -65,4 +65,6 @@ flowchart TD
 
 ## Parallel runs
 
-None yet. Planned: Phase 4 ∥ Phase 6 in separate worktrees, only if they share no files.
+- **Phase 4 ∥ Phase 6 (2026-11-15).** Each ran in its own git worktree with its own `parallel-implementer`. The file sets were checked first: Phase 4 avoided `Program.cs` (P4-D1) so they shared no source file; shared docs (`PROGRESS.md`, `PROMPTS.md`, this file, the design journal) were edited only on `main` after each merge. Phase 4 merged first (#7); Phase 6 was rebased with no conflicts, its gates re-run, then merged (#8).
+- **What it cost.** Two usage-limit stops and one implementer turn limit had to be resumed by hand; the rebase changed every cited commit hash; the lead agent's context carried both phases at once.
+- **Decision after it (Alessandro, P06-12):** phases run one at a time from now on.
