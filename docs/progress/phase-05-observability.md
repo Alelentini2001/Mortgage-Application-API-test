@@ -1,6 +1,6 @@
 # Phase 05: Logging + instrumentation
 
-Status: **In progress: plan and tests approved (2026-11-15), implementation next** · Branch: `phase-05-observability` · PR: — · Started: 2026-11-15 · Finished: —
+Status: **In progress: implemented, gates run and their findings fixed (2026-11-15); PR and Checkpoint B next** · Branch: `phase-05-observability` · PR: — · Started: 2026-11-15 · Finished: —
 
 ## Goal
 
@@ -149,7 +149,7 @@ Source:
 - `src/MortgageApplications.Api/Observability/AssessmentTelemetry.cs` (new, singleton): `ActivitySource` and `IMeterFactory` meter named `MortgageApplications`; counter `mortgage.assessments.processed` (long, unit `{assessment}`) and histogram `mortgage.assessment.duration` (double, unit `s`, bucket advice in seconds); span `assessment.process` (Internal). Tags: `assessment.id`, `application.id` (span only), `assessment.outcome`, `assessment.decision` (Completed only), `assessment.rules_version` (Completed and Failed). Counter and histogram only for Completed and Failed. A processing error sets status Error with the exception type name only.
 - `src/MortgageApplications.Api/Assessments/AssessmentWorker.cs`: one root span per item (`Activity.Current` cleared first, P5-D3 A), duration from the injected `TimeProvider` (`GetTimestamp`/`GetElapsedTime`), rules version from `AffordabilityOptions`. The six log messages are unchanged.
 - `src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs`: after a successful queue, tags the request's server span (`IHttpActivityFeature`) with `assessment.id` and logs `AssessmentQueued` (EventId 7, Information, `AssessmentId` and `ApplicationId` only). Nothing for a 404.
-- `src/MortgageApplications.Api/Program.cs`: `AddOpenTelemetry()` with `ConfigureResource` (`AddService("mortgage-applications")` only when `OTEL_SERVICE_NAME` is not set), `WithTracing` (ASP.NET Core instrumentation, `AddSource("MortgageApplications")`), `WithMetrics` (ASP.NET Core instrumentation, `MortgageApplications`, `Microsoft.AspNetCore.Hosting`, `Microsoft.AspNetCore.Server.Kestrel`), `WithLogging()`; `UseOtlpExporter()` only when `builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]` is set. Comment "ADR in Phase 4" becomes "ADR 0002".
+- `src/MortgageApplications.Api/Program.cs`: `AddOpenTelemetry()` with `ConfigureResource` (`AddService("mortgage-applications")` only when neither `OTEL_SERVICE_NAME` nor a `service.name=` in `OTEL_RESOURCE_ATTRIBUTES` is set; after the gates), `WithTracing` (ASP.NET Core instrumentation with `user_agent.original` removed through `EnrichWithHttpRequest`, after the gates; `AddSource("MortgageApplications")`), `WithMetrics` (ASP.NET Core instrumentation, `MortgageApplications`, `Microsoft.AspNetCore.Hosting`, `Microsoft.AspNetCore.Server.Kestrel`), `WithLogging()`; `UseOtlpExporter()` only when `OTEL_EXPORTER_OTLP_ENDPOINT` or one of the `..._TRACES_ENDPOINT`, `..._METRICS_ENDPOINT`, `..._LOGS_ENDPOINT` keys is set in `builder.Configuration` (the signal keys after the gates). Comment "ADR in Phase 4" becomes "ADR 0002".
 - `src/MortgageApplications.Api/appsettings.json`: `Microsoft.EntityFrameworkCore.Database.Command` at `Warning` (P5-D5 A).
 - `src/MortgageApplications.Infrastructure/DatabaseMigration.cs`: comment "ADR in Phase 4" becomes "ADR 0002".
 - `Directory.Packages.props`, `src/MortgageApplications.Api/MortgageApplications.Api.csproj`: the 3 approved packages at 1.20.1 (transitive: `OpenTelemetry`, `OpenTelemetry.Api`, `OpenTelemetry.Api.ProviderBuilderExtensions`, all 1.20.1). `dotnet list package --vulnerable --include-transitive`: none.
@@ -269,6 +269,33 @@ Questions and the lead agent's recommended answers:
 - The dashboard shows "Endpoint is unsecured: untrusted apps can send telemetry to the dashboard": its OTLP endpoint has no API key. Accepted for local use, because the OTLP ports are only on the compose network (see "Open issues").
 - Cleaned up with `down -v --rmi local`.
 
+**Results after the gates** (review gate items 1 to 7, security gate items 8 to 10; commits `0eccb16` tests, `f25c203` fix; outputs kept in the session scratchpad as `p5-gates-*.txt`):
+- Red with the strengthened tests, before the `Program.cs` fix: integration 168 total, 4 failed. O4 failed on `user_agent.original`. O25b (traces key only) received no request. The `OTEL_RESOURCE_ATTRIBUTES` service-name case exported `mortgage-applications`. `FormsOf_produces_every_listed_form` failed on the new precision forms, so its expected list was updated (test, not helper).
+- Item 1, `ForbiddenNumbers`: the new self-tests were also run against the previous helper (restored temporarily from git, then put back). 7 of 18 failed: `LTI 2.825` (moved from the clean texts to the leaks), the 5 unrounded E1 cases (`ltv=0.8`, `dti=0.3302`, `lti=2.8235`, `ltv 80.0%`, `payment 1438.9`), and the forms list. With the new helper, O1, O2, O5, O6, O8 and O26 still pass, so no ID, rules version or other legitimate text matches the new forms. Timestamps and durations are not stripped because no scanned text carries one (the class comment says why).
+- Item 5, O14: proved by a temporary mutation (reverted). With `Activity.Current = null` removed from the worker, O14 failed: the worker span joined the trace of the test activity that was current when the host started.
+- Item 8, span event and link tags: proved by a temporary mutation (reverted). A span event with tag `loan=240000.00` made O1 (E1) fail. E2 passed, which is right: 240000.00 is not an E2 number.
+- Item 9, instrument set: proved by a temporary mutation (reverted). An extra counter `mortgage.mutation.extra` on our meter made the new instrument test fail.
+- Item 6, bucket advice: `Instrument<T>.Advice` is public, so the instrument test also asserts the 14 boundaries. Proved by a temporary mutation (reverted): with the advice removed, the test failed. A first attempt at this mutation did not compile; that run used stale binaries and is discarded.
+- Item 10, O6: the 500 request now posts the sentinel body. Its server span (tags, status description, events) and the logs are scanned for the sentinels and the owner ID. It passed at once; no mutation was run for it.
+- Item 2, O24: still on the default port 4318 (the reason is in the test comment). The skip is explicit: `Assert.Skip("port 4318 in use")`. It did not skip in any run.
+- Item 4, O4 key list, exact (ASP.NET Core instrumentation 1.20.1 on these endpoints: 201, 202 with a query string, 200, 404, 500): `error.type`, `http.request.method`, `http.response.status_code`, `http.route`, `network.protocol.version`, `server.address`, `url.path`, `url.query`, `url.scheme`, plus our `assessment.id`. `user_agent.original` was there before the fix and is removed now.
+- `./scripts/verify.sh` (full), trimmed:
+  ```
+  ==> restore
+  ==> build (Release, warnings as errors)
+  ==> all tests
+    total: 442
+    failed: 0
+    succeeded: 442
+    skipped: 0
+    duration: 13s 372ms
+  ==> hook regression tests
+  hook tests: 91 passed, 0 failed
+  ==> format check
+  VERIFY PASSED (full)
+  ```
+- Integration tests 3 times in a row (`-c Release --no-build`): run 1: 168 passed, 0 failed, 0 skipped (14 s); run 2: 168 passed (14 s); run 3: 168 passed (13 s).
+
 ## Security gate
 
 ## Review gate
@@ -288,8 +315,11 @@ Questions and the lead agent's recommended answers:
 - Addition not in the plan: `ForbiddenNumbers` also strips 32- and 16-hex trace and span IDs before searching, not only GUIDs and the rules version.
 - The worker's Skipped span carries `application.id` (the row exists); the plan said "only when known", which it is.
 - `CapturingLoggerProvider.Text` leaves out the activity-tracking scope values (`TraceId`, `SpanId`, `ParentId`), so random hex cannot make the existing sentinel tests (I-13, I-14) flaky; the trace ID is kept in its own field.
-- Not done by the implementer: Learn checks for the implementation-time APIs listed in plan step 2 (`ActivitySource`, `Meter`/`InstrumentAdvice`, `IMeterFactory` scope, `MeterListener`/`ActivityListener`, `UseOtlpExporter`, `IHttpActivityFeature`). Only the package READMEs in the NuGet cache were read (`UseOtlpExporter` behaviour, `IConfiguration` for `OTEL_*` keys, `url.query` redaction). The lead agent should add the Learn links to "Docs verified".
-- Not done: the manual dashboard check (O30, plan step 10) and the security and review gates; they are the lead agent's steps.
+- The Learn checks for the implementation-time APIs and the manual dashboard check (O30) were done by the lead agent: see "Docs verified" and the O30 paragraph under "Results".
+- Rules section 6 names the allowed fields (application ID, assessment ID, decision, `RulesVersion`, status codes, timings) but not the HTTP semantic-convention keys of the framework server spans (O4 list under "Results after the gates": method, route, path, redacted query, scheme, status code, protocol version, server address, error type). Alessandro decides at Checkpoint B whether to amend the rules wording.
+- Known, intended gap (no test): when the host shuts down while the worker is processing an item, the `assessment.process` span ends with status Unset and only `assessment.id` (no outcome, no count). This matches "shutdown is never a failure": the item stays Pending and is processed at the next start.
+- With only a signal-specific endpoint key set (for example `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`), `UseOtlpExporter` still turns on all three signals, and the other two go to the exporter's default endpoint on localhost, where they fail. Set the base key, or all three signal keys.
+- O24 depends on the fixed default port 4318: any endpoint key pointing at a free port would also turn the exporter on, so only the default port can catch an exporter registered unconditionally. It skips, with the reason, when 4318 is taken.
 
 ## Time spent (approx.)
 
