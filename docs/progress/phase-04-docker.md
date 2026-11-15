@@ -1,6 +1,6 @@
 # Phase 04: Docker
 
-Status: **In progress: implementation, gates and LOCAL container checks done; ADR 0002 not written; no PR yet** · Branch: `phase-04-docker` (worktree, parallel with Phase 6) · PR: — · Started: 2026-11-14 · Finished: —
+Status: **In progress: implementation, gates, LOCAL container checks and ADR 0002 draft done; spec check and PR next** · Branch: `phase-04-docker` (worktree, parallel with Phase 6) · PR: — · Started: 2026-11-14 · Finished: —
 
 ## Goal
 
@@ -188,6 +188,18 @@ Logged here during the parallel run and copied to `docs/ai/PROMPTS.md` on `main`
 - **Purpose:** fresh-context review of the Phase 4 diff.
 - **Outcome:** 9 findings (R1–R9), none critical or high. See "Review gate".
 
+### P04-09 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > I hit my usage limit while you were working, but it has reset now. Please continue from where you left off.
+- **Purpose:** resume after the usage limit stopped the Phase 6 fix run (P06-06).
+- **Outcome:** the fix run was restarted (P06-07); the lead agent checked its commits, re-ran the full verify (376 tests) and presented seven open decisions plus the C14 CI-break question.
+
+### P04-10 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Proceed, also I have a question, does this also mind when two users do the same at the same time? Like security stuff like these...
+- **Purpose:** approve the recommended answer to all seven open decisions (Phase 6: accept S1 until Phase 8, fix the clock (R4), retry the startup sweep (R3), record the missing concurrency token in ADR 0003, accept the worker-only methods with comments, keep the Q5 catch; both phases: the agent drafts ADR 0002 and ADR 0003) and the deliberate CI break for C14; plus a question on concurrent users.
+- **Outcome:** R3 and R4 fixed on `phase-06-background`; ADR 0002 and ADR 0003 drafted; the question answered in chat.
+
 ## What was built (files)
 
 Written by `parallel-implementer` on 2026-11-15 (P04-06). No .NET code, test project, `.dockerignore` or ADR file was changed; ADR 0002 is written later by the lead agent.
@@ -198,6 +210,7 @@ Written by `parallel-implementer` on 2026-11-15 (P04-06). No .NET code, test pro
 | `compose.yaml` (new) | Service `api`, `build: .`, port `127.0.0.1:8080:8080` (ambiguity 4), `ASPNETCORE_ENVIRONMENT: Development` (P4-D1), `ConnectionStrings__MortgageApplications: Data Source=/app/data/mortgage-applications.db`, named volume `data:/app/data`. No Aspire dashboard (P4-D2). |
 | `.github/workflows/ci.yml` | New `docker` job (P4-D3, ambiguities 2 and 3): job-level `permissions: contents: read`, `timeout-minutes: 15`, the same pinned `actions/checkout` SHA as `verify` with `persist-credentials: false`; `docker compose up -d --build`; a poll of `GET /health` (60 s, fails and prints `docker compose logs` on timeout or if the `api` container is not running); `POST /api/applications` with the golden E1 body from `Http.cs` (ambiguity 5), expects 201 and a `Location` header, then `GET` of that path expects 200 and a body equal to the POST response (compared with `jq -S`); final `if: always()` step `docker compose down -v`. Bodies are written to files and never echoed. |
 | `docs/progress/phase-04-docker.md` | This section, "Results" and "Open issues". |
+| `docs/adr/0002-container-runtime-and-startup-migrations.md` (new, lead agent) | Draft ADR: startup migration only in Development, production uses a migration bundle, connection string from the environment, compose exposes Scalar, OpenAPI and every endpoint without auth until Phase 7 behind the `127.0.0.1` bind (security S3, review R1). |
 
 ## Tests
 
@@ -303,7 +316,7 @@ Tools: Gitleaks 8.30.1 on the branch commits (`5 commits scanned ... no leaks fo
 |---|---|---|---|
 | S1 | The image has never been built or run, so non-root, layer contents and `/app/data` ownership are checked only on paper | Medium (verification gap) | Open: LOCAL checks C1–C11 and C14 must run before Checkpoint B, and the CI `docker` job must pass |
 | S2 | `.dockerignore` patterns `.env`, `.env.*`, `*.pem`, `*.md` match only at the context root, so `COPY src/ src/` would copy nested ones into the build stage | Low (latent; no such files exist today) | Fixed: patterns made recursive (`**/.env`, `**/.env.*`, `**/*.pem`, `**/*.md`) and `**/secrets/` added |
-| S3 | Compose runs as Development: Scalar, OpenAPI and every endpoint are reachable without authentication until Phase 7 | Low, accepted (P4-D1) | Mitigated by the `127.0.0.1` bind. ADR 0002 must state it and say the bind must not be widened before Phase 7 |
+| S3 | Compose runs as Development: Scalar, OpenAPI and every endpoint are reachable without authentication until Phase 7 | Low, accepted (P4-D1) | Mitigated by the `127.0.0.1` bind. ADR 0002 (draft) states it and that the bind must not be widened before Phase 7 |
 | S4 | Developer exception page in Development | None | False positive: `ProblemExceptionHandler` handles every 500 first and never writes exception text |
 | S5 | Base images by tag, not digest | Low, accepted (P4-D4) | Phase 8: pin digests and add a Dependabot `docker` entry |
 | S6 | Non-root user | None | Pass on paper; CI now checks it (see R2) |
@@ -319,7 +332,7 @@ Tools: Gitleaks 8.30.1 on the branch commits (`5 commits scanned ... no leaks fo
 
 | # | Finding | Severity | Resolution |
 |---|---|---|---|
-| R1 | ADR 0002 is missing, and the comments in `Program.cs:54` and `DatabaseMigration.cs:11` point to it | Medium | Open: ADR 0002 is written before Checkpoint B (waiting for Alessandro: agent or `/adr`). The two code comments are not touched here because `Program.cs` belongs to Phase 6's file set; they still say "ADR in Phase 4", which becomes true when the ADR lands |
+| R1 | ADR 0002 is missing, and the comments in `Program.cs:54` and `DatabaseMigration.cs:11` point to it | Medium | Fixed: ADR 0002 drafted by the lead agent (Alessandro chose this, P04-10). The two code comments are not touched here because `Program.cs` belongs to Phase 6's file set; they are changed to "ADR 0002" on `main` after both merges |
 | R2 | C2 was approved as LOCAL + CI, but the CI job never checked the UID | Medium | Fixed: new CI step "Check the container user" fails if `id -u` is empty or 0, or if `/app/data` is not owned by that UID (also covers C8) |
 | R3 | `diff <(jq …) <(jq …)` passes when both bodies are empty or not JSON | Low | Fixed: `jq -e` with `--slurpfile` checks exactly one JSON body, equality, and two submitted values |
 | R4 | A curl transport error ends the step before `docker compose logs` runs | Low | Fixed: `|| status="curl-exit-$?"` so the status branch prints the logs |
@@ -341,7 +354,9 @@ The reviewer reproduced the restore and publish of the Api project from the Dock
 ## Open issues
 
 - Image digest pinning: Learn calls it a best practice; P4-D4 chose tags for now. Revisit in Phase 8, with a Dependabot `docker` entry (security S5). Also covers review R6: a floating `sdk:10.0` can bring a newer SDK band than the `verify` job and fail on new analyzer warnings.
-- ADR 0002 not written yet (review R1, security S3).
+- ADR 0002 is a draft for Alessandro to accept or change at Checkpoint B.
+- The "ADR in Phase 4" comments in `Program.cs` and `DatabaseMigration.cs` are updated to "ADR 0002" after both merges.
+- C14 in CI (a deliberately broken startup must fail the `docker` job): approved in P04-10, run on the PR branch as a temporary commit that is reverted.
 - X1 (no startup migration outside Development, as an xUnit test): deferred until Phase 4 and Phase 6 are both merged.
 - LOCAL checks: not run by the implementer (no Docker daemon); run afterwards by the lead agent, all pass after the `init: true` fix (see "Results (lead agent, with Docker)"). The CI `docker` job has not run yet: it runs with the PR.
 - C14's "one deliberate CI break" is not done: it needs a pushed commit that breaks the container, then a revert. Needs Alessandro's go-ahead, since it adds a red CI run to the PR.
