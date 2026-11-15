@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
 
 namespace MortgageApplications.IntegrationTests;
 
@@ -11,6 +10,11 @@ namespace MortgageApplications.IntegrationTests;
 /// Phase 5 export: the OTLP exporter is added only when <c>OTEL_EXPORTER_OTLP_ENDPOINT</c> is set (read from
 /// configuration, Q8). The tests use OTLP/HTTP protobuf (<c>OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf</c>), so a
 /// plain loopback <see cref="HttpListener"/> can stand in for the collector; disposing the host flushes every signal.
+/// <para>
+/// The settings go in with <c>UseSetting</c> (per host, never an environment variable): <c>Program</c> reads them
+/// before <c>Build()</c>, and <c>WebApplicationFactory</c> applies <c>ConfigureAppConfiguration</c> sources only at
+/// <c>Build()</c>, so an <c>AddInMemoryCollection</c> value is not visible there yet.
+/// </para>
 /// </summary>
 [Collection(TelemetryGroup.Name)]
 public sealed class OtlpExportTests
@@ -81,7 +85,13 @@ public sealed class OtlpExportTests
         }
 
         return factory.WithWebHostBuilder(
-            builder => builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(settings)),
+            builder =>
+            {
+                foreach (var (key, value) in settings)
+                {
+                    builder.UseSetting(key, value);
+                }
+            },
             runWorker: true);
     }
 
