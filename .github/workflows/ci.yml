@@ -114,6 +114,49 @@ jobs:
           fi
           echo "POST returned 201 and GET $location returned the same application."
 
+      # The assessment runs in the background worker: prove 202 + Location and that it completes in the container
+      # (Release build, file-based SQLite on the volume, non-root user). E1 is approved (rules section 8).
+      - name: Assess the application and poll until it finishes
+        run: |
+          id=$(jq -r '.id' created.json)
+          app="/api/applications/$id"
+          status=$(curl -sS --max-time 10 -X POST -o accepted.json -D assess-headers.txt -w '%{http_code}' \
+            "http://127.0.0.1:8080$app/assessments") || status="curl-exit-$?"
+          if [ "$status" != "202" ]; then
+            echo "::error::POST $app/assessments returned $status, expected 202."
+            docker compose logs --no-color
+            exit 1
+          fi
+          location=$(awk 'tolower($1) == "location:" { print $2 }' assess-headers.txt | tr -d '\r')
+          case "$location" in
+            "$app/assessments/"*) ;;
+            *)
+              echo "::error::POST $app/assessments returned Location '$location', expected $app/assessments/{id}."
+              exit 1
+              ;;
+          esac
+          deadline=$((SECONDS + 30))
+          while :; do
+            curl -sS --max-time 5 -o assessment.json "http://127.0.0.1:8080$location" || true
+            state=$(jq -r '.status // empty' assessment.json 2>/dev/null || true)
+            if [ -n "$state" ] && [ "$state" != "Pending" ]; then
+              break
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::The assessment was still '$state' after 30 s."
+              docker compose logs --no-color
+              exit 1
+            fi
+            sleep 1
+          done
+          if ! jq -e '.status == "Completed" and .result.decision == "Approved" and .assessedAt != null' \
+            assessment.json > /dev/null; then
+            echo "::error::The assessment finished as '$state', expected Completed and Approved."
+            docker compose logs --no-color
+            exit 1
+          fi
+          echo "POST returned 202 and the assessment completed as Approved."
+
       - name: Remove containers and volume
         if: always()
         run: docker compose down -v
