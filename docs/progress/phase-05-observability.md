@@ -279,7 +279,7 @@ Questions and the lead agent's recommended answers:
 
 ## Open issues
 
-- **Dashboard OTLP endpoint without an API key** (seen in O30): any container on the compose network could send telemetry to the dashboard. Local demo only, OTLP ports not published; an OTLP API key (`Dashboard__Otlp__AuthMode=ApiKey`) is possible later.
+- **Dashboard OTLP endpoint without an API key** (seen in O30): any container on the compose network could send telemetry to the dashboard. Local demo only, OTLP ports not published; the dashboard documents an OTLP API-key mode, not checked or configured here.
 
 - Dashboard image: `mcr.microsoft.com/aspire/dashboard:13.6.2`. The lead agent checked the MCR catalog on 2026-11-15: 13.6.2 was published 2026-10-29, the newest tag at least two weeks old (13.6.4 is 2026-11-10, 13.6.5 is 2026-11-11). Still a tag, not a digest (P4-D4); digest pinning is Phase 8.
 - Deviation: `ProcessAssessmentAsync` now returns `AssessmentProcessingResult` (outcome, application ID, decision) instead of the enum; existing unit asserts changed from `outcome` to `outcome.Outcome` (no assert weakened).
