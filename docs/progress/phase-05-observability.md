@@ -1,6 +1,6 @@
 # Phase 05: Logging + instrumentation
 
-Status: **In progress: plan approved (2026-11-15), test design next** · Branch: `phase-05-observability` · PR: — · Started: 2026-11-15 · Finished: —
+Status: **In progress: plan and tests approved (2026-11-15), implementation next** · Branch: `phase-05-observability` · PR: — · Started: 2026-11-15 · Finished: —
 
 ## Goal
 
@@ -127,11 +127,17 @@ Planning: lead agent only (no subagent yet).
 - **Purpose:** propose Phase 5 test cases before any test is written.
 - **Outcome:** 31 cases (O1–O31) and 13 questions (Q1–Q13). See "Tests", "Proposal".
 
+### P05-04 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Yes proceed
+- **Purpose:** approval of the recommended test selection (all must cases plus O7, O8, O26, O28; O29 and O31 as verify steps; O4 and O19 skipped) and of the recommended answers to Q1–Q13.
+- **Outcome:** implementation delegated, test-first (P05-05).
+
 ## What was built (files)
 
 ## Tests
 
-### Proposal (`test-designer`, P05-03; waiting for Alessandro)
+### Proposal (`test-designer`, P05-03; approved by Alessandro, P05-04)
 
 All new cases are integration tests: `tests/CLAUDE.md` limits unit tests to Core, and the new code is in the Api project. No test package: `ActivityListener` and `MeterListener` are built in.
 
