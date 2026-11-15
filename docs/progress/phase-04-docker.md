@@ -1,6 +1,6 @@
 # Phase 04: Docker
 
-Status: **Checkpoint B: PR open, waiting for Alessandro**  · Branch: `phase-04-docker` (worktree, parallel with Phase 6) · PR: [#7](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/7) · Started: 2026-11-14 · Finished: —
+Status: **Merged** (squash `ede3605`) · Branch: `phase-04-docker` (worktree, parallel with Phase 6) · PR: [#7](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/7) · Started: 2026-11-14 · Finished: 2026-11-15
 
 ## Goal
 
@@ -72,6 +72,12 @@ Alessandro approved the plan with "Proceed" on 2026-11-15, after the agent recom
 | P4-D2 | A: Aspire dashboard added in Phase 5 | B empty service now | No telemetry exists until Phase 5 | Alessandro |
 | P4-D3 | A: CI builds the image, runs it and polls `GET /health` (60 s timeout) | B build only | Proves the image starts, not only that it builds | Alessandro |
 | P4-D4 | A: image tags now, digest pinning revisited in Phase 8 | B digest pins now | Readable; picks up patched images | Alessandro |
+
+## Checkpoint B outcome (2026-11-15)
+
+Alessandro: "Yes proceed!" (P04-13).
+- CI "Build, test, format" and "Docker image build and smoke test" passed on `4651e34`; PR #7 was squash-merged as `ede3605` with a written message.
+- ADR 0002 stays "Proposed" until Alessandro accepts it explicitly; the approval was of the PR, not a separate answer on the ADR.
 
 ## Docs verified (links)
 
@@ -233,6 +239,12 @@ Logged here during the parallel run and copied to `docs/ai/PROMPTS.md` on `main`
   ```
 - **Purpose:** the find step of the local `/security-review` on PR #7.
 - **Outcome:** no HIGH or MEDIUM candidates, so the skill's false-positive filter step had nothing to run on.
+
+### P04-13 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Yes proceed! What about phase 5?
+- **Purpose:** Checkpoint B approval of Phase 4, and a question on when Phase 5 runs.
+- **Outcome:** PR #7 squash-merged as `ede3605` after both CI jobs passed on `4651e34`; Phase 6 is rebased next. Phase 5 answered in chat.
 
 ## What was built (files)
 

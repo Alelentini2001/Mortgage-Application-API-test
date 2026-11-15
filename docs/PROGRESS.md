@@ -1,24 +1,24 @@
 # Progress
 
 ## Resume here
-- **Phase:** 03 (API + persistence + validation, the minimum submittable product) **merged** to `main` via [#6](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/6) (squash `a187e29`). Alessandro approved it with "Proceed". Phase file: `docs/progress/phase-03-api.md`.
-- **Built:** four endpoints under `/api/applications` (create 201 + `Location`, get, synchronous assess 201, get assessment), validation at the boundary over one Core rule set, strict JSON, owner-scoped EF Core SQLite persistence with an initial migration, ProblemDetails without exception text, startup options validation, OpenAPI + Scalar in Development, `requests.http`; 258 unit + 89 integration tests.
-- **Next action:** Alessandro runs `/clear`, then starts Phase 4 (Docker) and Phase 6 (background assessments) in parallel, each in its own worktree (master prompt B5 parallel plan: they must not share files; if both need `Program.cs` or compose, serialise them). Merge 4 first, rebase 6, re-run the gates, merge 6.
+- **Phase:** 04 (Docker) **merged** to `main` via [#7](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/7) (squash `ede3605`), approved by Alessandro with "Yes proceed!". Phase file: `docs/progress/phase-04-docker.md`. Phase 06 (background assessments) is on `phase-06-background` (worktree `.claude/worktrees/agent-acd40a009ddf8a3cd`): implementation, security gate, review gate and spec check done; ADR 0003 drafted. Phase file: `docs/progress/phase-06-background.md`.
+- **Built in Phase 4:** multi-stage `Dockerfile` (non-root, port 8080), `compose.yaml` (loopback bind, Development, named volume, `init: true`), `.dockerignore`, CI `docker` job (build, `/health` poll, non-root check, POST/GET round trip), draft ADR 0002.
+- **Next action:** rebase `phase-06-background` on `main`, re-run verify and the security and review gates (the security gate has not seen R3/R4), open the Phase 6 PR with `/code-review` and `/security-review`, Checkpoint B, merge. Then on `main`: copy the Phase 6 prompts into `docs/ai/PROMPTS.md`, change the "ADR in Phase 4" comments in `Program.cs` and `DatabaseMigration.cs` to "ADR 0002", add test X1 (no startup migration outside Development). Then Phase 5.
 - **Carry into later phases:**
-  - Phase 4: connection string location and the startup-migration ADR (security I1).
-  - Phase 5: `[LoggerMessage]` with allowlisted fields only + log-capture test (S1 part b); real 500s are logged by the framework today and must be covered.
-  - Phase 6: no silent queue drops and check `Status` before `Complete`; the POST becomes 202; the result comparer's cost once the worker tracks assessments (`/code-review` 6).
-  - Phase 7: replace `DevelopmentCurrentUser`, add `RequireAuthorization` (reviewer F6); secure default policy and a fail-closed dev token endpoint.
-  - Phase 8: rate-limit decision or an accepted risk; NuGet lock files and package-source mapping (security L3); NuGet signature verification on macOS.
-  - Phase 9: `/code-review` 1, 5 and 7 (one bad-request error path, one 2 dp mechanism, faster strictness tests).
+  - Phase 5: `[LoggerMessage]` with allowlisted fields only + log-capture test (S1 part b); real 500s are logged by the framework today and must be covered. Aspire dashboard in compose (P4-D2).
+  - Phase 7: replace `DevelopmentCurrentUser`, add `RequireAuthorization` (reviewer F6); secure default policy and a fail-closed dev token endpoint. Do not widen the compose port bind before this (ADR 0002).
+  - Phase 8: rate limiter and request timeout on `POST …/assessments` (Phase 6 security S1, accepted until then); NuGet lock files and package-source mapping (security L3); NuGet signature verification on macOS; base-image digest pinning and a Dependabot `docker` entry (P4-D4).
+  - Phase 9: `/code-review` 1, 5 and 7 from Phase 3.
+  - Phase 10: README, including `docker compose down -v` as the reset for a `data` volume with the wrong owner (PR #7 `/code-review` 4) and `docker run --init` outside compose (ADR 0002).
 - **Open decisions / blockers for Alessandro:**
+  - Accept ADR 0002 (Phase 4) and, at Phase 6 Checkpoint B, ADR 0003. Both are "Proposed" drafts.
   - Phase 3: accept `DevelopmentCurrentUser` until Phase 7 (recommended: yes); `.claude/rules/backend.md` says reads "project to DTOs" but P3-D1 returns entities through the Core port: reword the rule or accept the exception (`/code-review` 3); optional ADR for the persistence choice (`/adr` is user-invoked).
   - Optional ADR for the Core domain shape (P2-D1/D2): `/adr` is user-invoked only.
   - Whether to write the property-test exception into `tests/CLAUDE.md` ("No logic in tests beyond setup"; Phase 2 `/code-review` finding 7).
   - `security-auditor` S10 (Phase 1): keep or redact local paths in the verbatim prompt logs before the repo goes public.
   - `spec-checker` questions (status wording, constraint rows R44/R50, final tag, optional scope R30–R33): see `docs/progress/phase-01-spec.md`, "Open issues".
-  - Later: branch protection on `main` (require the CI check).
-- **Last verify:** `./scripts/verify.sh` full → PASSED (347 tests, 91 hook cases, clean tree) on `phase-03-api` at `acbb482`; CI "Build, test, format" passed on PR #6, 2026-11-14.
+  - Later: branch protection on `main` (require the CI checks).
+- **Last verify:** `./scripts/verify.sh` full → PASSED (347 tests, 91 hook cases) on `phase-04-docker`; CI "Build, test, format" and "Docker image build and smoke test" passed on PR #7 at `4651e34`, 2026-11-15. On `phase-06-background`: PASSED (381 tests), 2026-11-15.
 
 ## Phases
 
@@ -28,9 +28,9 @@
 | 01 | Spec + production layers | Merged | `phase-01-spec` | [#3](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/3) | docs only (18 golden examples for Phase 2) | 2026-11-14 |
 | 02 | Core domain + calculator (TDD) | Merged | `phase-02-core` | [#5](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/5) | 215 unit + 1 integration placeholder, 216/216 | 2026-11-14 |
 | 03 | API + persistence + validation (MVP) | Merged | `phase-03-api` | [#6](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/6) | 258 unit + 89 integration, 347/347 | 2026-11-14 |
-| 04 | Docker | Not started | — | — | — | — |
+| 04 | Docker | Merged | `phase-04-docker` | [#7](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/7) | 258 unit + 89 integration, 347/347; CI `docker` job (build, health, user, POST/GET) | 2026-11-15 |
 | 05 | Logging + instrumentation | Not started | — | — | — | — |
-| 06 | Background assessments | Not started | — | — | — | — |
+| 06 | Background assessments | In progress (gates done, rebase next) | `phase-06-background` | — | 269 unit + 112 integration, 381/381 (on its branch) | 2026-11-15 |
 | 07 | Authentication + authorisation | Not started | — | — | — | — |
 | 08 | Security hardening | Not started | — | — | — | — |
 | 09 | Optimisation + quality | Not started | — | — | — | — |
@@ -42,7 +42,7 @@
 Snapshot at the end of Phase 3 (2026-11-14), produced by the `spec-checker` subagent (prompt P03-09) at `a446c64` from `docs/spec/ORIGINAL_SPEC.md`. Re-run at the end of every phase.
 
 **Status key.** "Met" needs code or a test. Design written down but not built is "partial".
-**Totals now:** 26 met · 9 partial · 20 missing (Phase 2 was 1 / 28 / 26).
+**Totals now:** 27 met · 10 partial · 18 missing after Phase 4 (R32 met, R46 partial; `spec-checker` P04-11). End of Phase 3: 26 / 9 / 20.
 
 Paths: "Endpoints" = `src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs`; test classes are in `tests/MortgageApplications.IntegrationTests/` unless marked unit.
 
@@ -79,7 +79,7 @@ Paths: "Endpoints" = `src/MortgageApplications.Api/Applications/ApplicationEndpo
 | R29 | Tests for critical validation rules | Testing | met | `ValidationTests` (HTTP 400 per field and bound); unit `ApplicationInputRulesTests`, `InputGuardTests` |
 | R30 | Optional: background processing | Optional | missing | Phase 6 |
 | R31 | Optional: authentication | Optional | missing | Phase 7 (`DevelopmentCurrentUser` only, a fixed owner) |
-| R32 | Optional: Docker support | Optional | missing | Phase 4 |
+| R32 | Optional: Docker support | Optional | met | `Dockerfile`, `compose.yaml`; CI job "Docker image build and smoke test"; local checks C1–C14 in `docs/progress/phase-04-docker.md` |
 | R33 | Optional: logging or instrumentation | Optional | missing | Phase 5 |
 | R34 | README: setup instructions | Docs | missing | Phase 10 |
 | R35 | README: how to run the app | Docs | missing | Phase 10 |
@@ -93,7 +93,7 @@ Paths: "Endpoints" = `src/MortgageApplications.Api/Applications/ApplicationEndpo
 | R43 | Submit as GitHub repo or archive | Submission | partial | The GitHub repo exists; final state in Phase 11 |
 | R44 | Clarity over production-readiness | Time | partial | Expectation only; Phases 9-10 |
 | R45 | Fresh clone in the session | Follow-up | missing | Phase 11 (two timed clean runs) |
-| R46 | Build and run from the clone | Follow-up | missing | Phases 4, 10, 11 |
+| R46 | Build and run from the clone | Follow-up | partial | `docker compose up --build` works from a fresh clone (Phase 4, check C1); README (Phase 10) and rehearsal (Phase 11) to do |
 | R47 | Short live demo | Follow-up | missing | `requests.http` exists (Phase 3); `DEMO-SCRIPT.md` in Phase 11 |
 | R48 | Talk through code and choices | Follow-up | missing | Phase 11 (`DEMO-SCRIPT.md`, likely questions) |
 | R49 | At most 3 slides | Follow-up | missing | Phase 11 (`docs/presentation/SLIDES.md`) |

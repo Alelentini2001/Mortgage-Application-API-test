@@ -457,3 +457,157 @@ Every prompt, verbatim, by phase. Tags: `human→agent` (Alessandro to the lead 
 - **Outcome:**
   - PR #6 squash-merged as `a187e29` with a written message.
   - The open decisions (`DevelopmentCurrentUser` until Phase 7, the `backend.md` DTO-projection rule, an optional ADR) were not answered, so they stay open.
+
+## Phase 04: Docker (run in parallel with Phase 6)
+
+Copied from `docs/progress/phase-04-docker.md` after the merge. The human prompts P04-01 to P04-13 cover both Phase 4 and Phase 6; the Phase 6 subagent prompts (P06-01 to P06-08) are copied after the Phase 6 merge.
+
+### P04-01 · human→agent · 2026-11-14
+- **Prompt (verbatim):**
+  > continue with next steps
+- **Purpose:** start the next step from `docs/PROGRESS.md` ("Resume here": Phase 4 and Phase 6 in parallel).
+- **Outcome:** the agent read the progress files and the code, checked which files each phase would touch, and wrote both plans with their decisions (Checkpoint A).
+
+### P04-02 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Try again
+- **Purpose:** resume after the previous turn stopped before the Phase 6 plan was written.
+- **Outcome:** the Phase 6 plan was written; both plans presented at Checkpoint A.
+
+### P04-03 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Proceed
+- **Purpose:** Checkpoint A approval of both plans with the recommended options (P4-D1 to P4-D4, P6-D1 to P6-D4).
+- **Outcome:** decisions recorded; docs check; `test-designer` run for both phases (P04-04, P06-01).
+
+### P04-04 · agent→subagent (`test-designer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Phase 4 (Docker) of a .NET 10 mortgage-application API (Minimal APIs + EF Core SQLite). Propose test cases and checks for the approved plan; do not write code.
+
+  Read first: docs/progress/phase-04-docker.md (goal, plan, approved decisions P4-D1 to P4-D4), .claude/rules/infra.md, .claude/rules/security.md, .claude/rules/tests.md, tests/CLAUDE.md, .dockerignore, .github/workflows/ci.yml, src/MortgageApplications.Api/Program.cs, src/MortgageApplications.Api/appsettings.json, src/MortgageApplications.Infrastructure/DatabaseMigration.cs, and tests/MortgageApplications.IntegrationTests/StartupTests.cs (what startup behaviour is already covered).
+
+  What will be built (not written yet):
+  - A multi-stage Dockerfile (mcr.microsoft.com/dotnet/sdk:10.0 → aspnet:10.0, image tags not digests), restore layer from the csproj/props/global.json/slnx files, publish the Api project in Release, /app/data created and owned by $APP_UID, USER $APP_UID, EXPOSE 8080.
+  - compose.yaml: one service "api" built from ".", port 8080:8080, ASPNETCORE_ENVIRONMENT=Development (so the existing Development-only startup migration runs, decision P4-D1), ConnectionStrings__MortgageApplications=Data Source=/app/data/mortgage-applications.db, named volume data:/app/data. No Aspire dashboard (Phase 5).
+  - A new CI job "docker": permissions contents: read, pinned actions/checkout, docker build, run the container, poll GET /health with a 60 s timeout, fail the job otherwise, always stop the container.
+  - No .NET code change is planned. The checks are mostly shell/CI checks, not xUnit tests.
+
+  Cover at least: the image builds from a clean clone; the container runs as a non-root user (uid check); /health returns 200 on 8080; a POST then GET /api/applications/{id} round trip works inside the container (schema exists, so the startup migration ran); data survives docker compose down + up but not down -v; no *.db, .env*, *.pem, tests/ or docs/ in the image; the CI job fails if the container never becomes healthy and cleans up either way; the published app does not need the SDK at runtime. Also say whether any xUnit test is worth adding (for example a test that the startup migration does not run outside Development, if not already covered) and why.
+
+  Use the agent's output format. Mark each case must or nice, keep the list tight (no redundant cases), say for each where it runs (local fresh-clone run, CI job, or xUnit), and list any ambiguities in the plan you need Alessandro to settle.
+  ```
+- **Purpose:** propose Phase 4 checks before anything is built.
+- **Approved:** see P04-05.
+- **Outcome:** 16 container/CI checks (C1–C16; C17 folded into ambiguity 2), 1 optional xUnit test (X1) and 6 ambiguities. The lead agent checked ambiguity 1 against the code (`MortgageApplications.slnx` lists both test projects; `.dockerignore` excludes `tests/`). Recommended selection and answers are in "Tests", "Proposal".
+
+### P04-05 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Ok add it and proceed (yes)
+- **Purpose:** approval of the recommended test selections and answers for Phase 4 and Phase 6; "add it" is read as adding `failedAt` to `AssessmentResponse` (Phase 6, Q11), the last item the agent recommended adding.
+- **Outcome:** both phase branches created with their plan files; `parallel-implementer` started for each (P04-06, P06-02).
+
+### P04-06 · agent→subagent (`parallel-implementer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Implement Phase 4 (Docker) of this .NET 10 mortgage-application API, exactly as approved.
+
+  Branch: switch to the existing branch phase-04-docker (it holds one commit with the approved plan). Do not create another branch. Never push.
+
+  Scope: docs/progress/phase-04-docker.md. The sections "Parallel safety with Phase 6", "Plan (approved at Checkpoint A)", "Decisions" (P4-D1 to P4-D4), "Docs verified" and "Tests > Proposal" (the recommended checks C1-C11, C13, C14, C16 and the answers to ambiguities 1-6, all approved) are your scope. Read AGENTS.md, CLAUDE.md, .claude/rules/infra.md, .claude/rules/security.md first.
+
+  Key points from the approved answers (the phase file is the source of truth if anything differs):
+  - Dockerfile: sdk:10.0 build stage, aspnet:10.0 runtime (tags, not digests). Restore and publish src/MortgageApplications.Api/MortgageApplications.Api.csproj only, after copying the three src .csproj files, Directory.Build.props, Directory.Packages.props and global.json (the .slnx lists test projects that .dockerignore excludes). Runtime: create /app/data owned by $APP_UID, USER $APP_UID, EXPOSE 8080. No secrets, no ENV with connection strings.
+  - compose.yaml: service api, build ".", ports "127.0.0.1:8080:8080", ASPNETCORE_ENVIRONMENT=Development, ConnectionStrings__MortgageApplications=Data Source=/app/data/mortgage-applications.db, named volume data:/app/data. No Aspire dashboard.
+  - CI: new job "docker" in .github/workflows/ci.yml: job-level permissions contents: read, the same pinned actions/checkout SHA as the existing job with persist-credentials: false, timeout-minutes, `docker compose up -d --build`, a poll script on GET /health (60 s timeout, fails non-zero and prints `docker compose logs` on timeout or if the container exits), then the C4/C5 POST + GET round trip, and a final `if: always()` step running `docker compose down -v`. No secrets, no login, no push.
+  - No .NET code changes. Do not edit src/, tests/, Program.cs, docs/PROGRESS.md, docs/ai/*, or any ADR file (ADR 0002 is written later by the lead agent). Only the phase file under docs/.
+
+  Process:
+  1. Write the files in small conventional commits (scopes infra, ci). End each commit message with: Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+  2. Run ./scripts/verify.sh (full) and keep the final output (it must still pass).
+  3. Check whether Docker is reachable with `docker version`. If it is: run the approved LOCAL checks in a fresh clone of this branch in a new empty directory under /private/tmp/claude-501/ (clone from this repository's path, check out phase-04-docker), and record each check's command and result (C1-C11, C14, with the C9 planted files created only in that clone). Clean up containers, images you built and volumes afterwards. Never print request bodies containing amounts into the phase file beyond what the check needs. If Docker is NOT reachable: do not try to start it, do not wait for it; mark every LOCAL check as "not run: Docker daemon not available" and continue.
+  4. Do the C13 static review of the workflow yourself and record it.
+  5. In the phase file, fill "What was built (files)", "Tests" > a new "Results" subsection (one row per check: run / not run, command, result) and "Open issues". Commit that.
+
+  Report: files changed, commits, trimmed verify output, the result of each check (or "not run" and why), every place you deviated from the phase file and why. If the plan is ambiguous or a step fails three times, stop and report instead of guessing.
+  ```
+- **Purpose:** implement the approved Phase 4 plan in its own worktree.
+- **Outcome:** 4 commits (`7e83532`, `aeb932d`, `ee9c8ef`, `ce46e8f`); full verify passed; LOCAL container checks marked not run (no Docker daemon). See "Results".
+
+### P04-07 · agent→subagent (`security-auditor`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security gate for Phase 4 (Docker) of a .NET 10 mortgage-application API. Review only the branch diff: run `git diff main...phase-04-docker` from the repository root (the branch is checked out in another worktree; do not switch branches here). Files: Dockerfile, compose.yaml, .github/workflows/ci.yml (new `docker` job), docs/progress/phase-04-docker.md.
+
+  Read first: .claude/rules/security.md, .claude/rules/infra.md, .dockerignore, docs/progress/phase-04-docker.md (plan, decisions P4-D1 to P4-D4, approved answers to ambiguities 1-6).
+
+  Check at least: the image runs as non-root (`USER $APP_UID` after every root step) and nothing writes outside /app/data at run time; no secrets, connection strings or keys in any layer, ENV, ARG or build context (`COPY src/ src/` scope against .dockerignore: *.db, .env*, *.pem, bin/obj); compose binds to 127.0.0.1 only and the ADR-to-be says Development in compose exposes Scalar/OpenAPI without auth until Phase 7; the CI job: least-privilege permissions, pinned actions, persist-credentials false, no `${{ }}` expressions inside `run:` blocks (script injection), no secrets, no push/login, cleanup with `if: always()`, request bodies with amounts not printed to logs; supply chain of base images (tags not digests, P4-D4 accepted for now: say whether that acceptance is reasonable or should be raised now). Run Gitleaks on the branch commits (`gitleaks git --log-opts="main..phase-04-docker"` or the closest available form) and Semgrep on the changed files if the tools are installed; say which ran and which were not available. Do not install anything.
+
+  Use your output format: each finding with severity, file:line, evidence, real or false positive, and a proposed fix or justification. Do not edit files.
+  ```
+- **Purpose:** security gate on the Phase 4 diff.
+- **Outcome:** pass, 11 rows (S1–S11). See "Security gate".
+
+### P04-08 · agent→subagent (`dotnet-reviewer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Fresh-context review of Phase 4 (Docker) of a .NET 10 mortgage-application API. Review only the branch diff: run `git diff main...phase-04-docker` from the repository root (the branch is checked out in another worktree; do not switch branches here). Files: Dockerfile, compose.yaml, .github/workflows/ci.yml (new `docker` job), docs/progress/phase-04-docker.md.
+
+  Read first: AGENTS.md, .claude/rules/infra.md, docs/progress/phase-04-docker.md (goal, plan, decisions P4-D1 to P4-D4, "Docs verified", approved checks and answers), src/MortgageApplications.Api/Program.cs, src/MortgageApplications.Api/appsettings.json, src/MortgageApplications.Infrastructure/DatabaseMigration.cs, global.json, Directory.Build.props, .dockerignore.
+
+  Flag only correctness, security and requirement gaps, for example: will `dotnet restore` of the Api csproj alone succeed with central package management and Directory.Build.props as copied (anything else the build reads, such as a NuGet.config, analyzer config or .editorconfig with warnings-as-errors, missing from the build context so the image build behaves differently from verify.sh?); does `chown "$APP_UID"` expand in that RUN; does the named volume inherit /app/data ownership on first use; does the compose environment make the app migrate on startup and find the database; does the CI poll script really fail on every failure path (curl errors, container exit, timeout) and never exit 0 early; is the POST body valid for the API's strict JSON and validation rules; does the phase file's "Results" section claim anything that was not run (the Docker daemon was not available, so the LOCAL checks must be marked not run). Report each finding with severity, file:line, evidence and a proposed fix. Do not edit files.
+  ```
+- **Purpose:** fresh-context review of the Phase 4 diff.
+- **Outcome:** 9 findings (R1–R9), none critical or high. See "Review gate".
+
+### P04-09 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > I hit my usage limit while you were working, but it has reset now. Please continue from where you left off.
+- **Purpose:** resume after the usage limit stopped the Phase 6 fix run (P06-06).
+- **Outcome:** the fix run was restarted (P06-07); the lead agent checked its commits, re-ran the full verify (376 tests) and presented seven open decisions plus the C14 CI-break question.
+
+### P04-10 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Proceed, also I have a question, does this also mind when two users do the same at the same time? Like security stuff like these...
+- **Purpose:** approve the recommended answer to all seven open decisions (Phase 6: accept S1 until Phase 8, fix the clock (R4), retry the startup sweep (R3), record the missing concurrency token in ADR 0003, accept the worker-only methods with comments, keep the Q5 catch; both phases: the agent drafts ADR 0002 and ADR 0003) and the deliberate CI break for C14; plus a question on concurrent users.
+- **Outcome:** R3 and R4 fixed on `phase-06-background`; ADR 0002 and ADR 0003 drafted; the question answered in chat.
+
+### P04-11 · agent→subagent (`spec-checker`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Spec check for Phase 4 (Docker) of a .NET 10 mortgage-application API. Read only; do not edit anything.
+
+  Read the branch files in the worktree /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-afcd22232b922d159 (branch phase-04-docker): docs/spec/ORIGINAL_SPEC.md, docs/progress/phase-04-docker.md (goal, plan, decisions P4-D1 to P4-D4, approved checks C1-C16 and answers), docs/adr/0002-container-runtime-and-startup-migrations.md, Dockerfile, compose.yaml, .dockerignore, .github/workflows/ci.yml, .claude/rules/infra.md, .claude/rules/security.md, and the traceability notes in docs/progress/phase-01-spec.md for the requirement IDs.
+
+  Map every spec requirement and every Phase 4 goal and approved check that this phase touches (containerisation, configuration, startup migrations, CI, security constraints such as non-root, no secrets, loopback bind) to the file or test or CI step where it is met. Mark each met / partial / missing, with a one-line reason and the file path. Say which checks are LOCAL only (run by the lead agent, recorded in the phase file) and which run in CI. List anything the phase file claims that you could not find in the files. Keep it short: one table plus at most 5 notes.
+  ```
+- **Purpose:** requirement traceability before the PR.
+- **Outcome:** see "Review gate", spec check.
+
+### P04-12 · agent→subagent (`general-purpose`, from the `/security-review` skill) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security review sub-task for PR #7 (Phase 4, Docker) of a .NET 10 mortgage-application API. Read only: do not edit files and do not run Docker.
+
+  Repository worktree: /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-afcd22232b922d159 (branch phase-04-docker). The diff to review: run `git diff main...HEAD` there. Changed files: .claude/rules/infra.md, .dockerignore, .github/workflows/ci.yml, Dockerfile, compose.yaml, docs/adr/0002-container-runtime-and-startup-migrations.md, docs/progress/phase-04-docker.md. Context to read: src/MortgageApplications.Api/Program.cs, src/MortgageApplications.Api/appsettings*.json, .claude/rules/security.md, AGENTS.md.
+
+  OBJECTIVE: identify HIGH-CONFIDENCE security vulnerabilities newly added by this PR that could have real exploitation potential. Not a general code review. Do not comment on existing security concerns.
+  1. Minimise false positives: only flag issues where you are >80% confident of actual exploitability.
+  2. Skip theoretical issues, style concerns and low-impact findings.
+  3. Prioritise vulnerabilities that could lead to unauthorized access, data breaches or system compromise.
+  4. Do NOT report: denial of service; secrets or sensitive data stored on disk; rate limiting or resource exhaustion.
+
+  Categories to examine: input validation (SQL/command/XXE/template/NoSQL injection, path traversal); authentication and authorization (bypass, privilege escalation, sessions, JWT); crypto and secrets (hardcoded keys, weak crypto, key storage, randomness, certificate validation); injection and code execution (deserialization, YAML, eval, XSS); data exposure (sensitive data logging or storage, PII, endpoint data leakage, debug information exposure). Even if only exploitable from the local network, it can be HIGH.
+
+  Method: (1) research the repository's security model and existing patterns; (2) compare the new changes against them and look for new attack surface; (3) assess each modified file, trace data from inputs to sensitive operations, look for privilege boundaries crossed unsafely.
+
+  For each candidate give: file, line, severity (HIGH / MEDIUM / LOW), category slug, description, exploit scenario, fix recommendation, and a confidence from 1 to 10. Focus on HIGH and MEDIUM; MEDIUM only if obvious and concrete. If there are no candidates, say so plainly. Keep the report short.
+  ```
+- **Purpose:** the find step of the local `/security-review` on PR #7.
+- **Outcome:** no HIGH or MEDIUM candidates, so the skill's false-positive filter step had nothing to run on.
+
+### P04-13 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Yes proceed! What about phase 5?
+- **Purpose:** Checkpoint B approval of Phase 4, and a question on when Phase 5 runs.
+- **Outcome:** PR #7 squash-merged as `ede3605` after both CI jobs passed on `4651e34`; Phase 6 is rebased next. Phase 5 answered in chat.
