@@ -407,7 +407,7 @@ public sealed class AssessmentWorkerTests
         await using var scope = services.CreateAsyncScope();
         var outcome = await scope.ServiceProvider.GetRequiredService<MortgageApplicationService>()
             .ProcessAssessmentAsync(assessmentId, Http.Ct);
-        Assert.Equal(AssessmentProcessingOutcome.Completed, outcome);
+        Assert.Equal(AssessmentProcessingOutcome.Completed, outcome.Outcome);
     }
 
     private static async Task<int> CountAssessmentsAsync(IServiceProvider services) =>

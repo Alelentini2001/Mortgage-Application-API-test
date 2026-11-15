@@ -8,7 +8,7 @@ public static class DatabaseMigration
 {
     /// <summary>
     /// Applies pending migrations. The API calls this at startup in Development only; in production migrations
-    /// run as a separate deployment step (docs/layers/PRODUCTION-LAYERS.md, "Hosting / deploy"; ADR in Phase 4).
+    /// run as a separate deployment step (docs/layers/PRODUCTION-LAYERS.md, "Hosting / deploy"; ADR 0002).
     /// </summary>
     public static async Task MigrateDatabaseAsync(this IServiceProvider services, CancellationToken cancellationToken = default)
     {

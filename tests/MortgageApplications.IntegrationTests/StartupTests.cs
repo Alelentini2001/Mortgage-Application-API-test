@@ -1,7 +1,14 @@
 using System.Net;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using MortgageApplications.Infrastructure.Persistence;
 
 namespace MortgageApplications.IntegrationTests;
 
@@ -133,6 +140,40 @@ public sealed class StartupTests
     }
 
     public static TheoryData<string> DevelopmentOnlyPaths => ["/openapi/v1.json", "/scalar", "/scalar/v1"];
+
+    // O27 (X1, carried over from Phase 4): outside Development the app does not migrate its database at startup;
+    // Development does (control). The host uses a fresh named in-memory database that ApiFactory did not migrate.
+    [Theory]
+    [MemberData(nameof(MigrationCases))]
+    public async Task Startup_migrates_the_database_only_in_development(string environment, long expectedHistoryTables)
+    {
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = $"x1-{Guid.NewGuid():N}",
+            Mode = SqliteOpenMode.Memory,
+            Cache = SqliteCacheMode.Shared,
+        }.ToString();
+        using var keepAlive = new SqliteConnection(connectionString);
+        keepAlive.Open();
+        using var factory = new ApiFactory();
+        using var host = factory.WithWebHostBuilder(builder => builder
+            .UseEnvironment(environment)
+            .ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IDbContextOptionsConfiguration<MortgageApplicationsDbContext>>();
+                services.AddDbContext<MortgageApplicationsDbContext>(options => options.UseSqlite(connectionString));
+            }));
+
+        var response = await host.CreateClient().GetPathAsync("/health");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var command = keepAlive.CreateCommand();
+        command.CommandText = "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = '__EFMigrationsHistory'";
+        Assert.Equal(expectedHistoryTables, (long)(await command.ExecuteScalarAsync(Http.Ct))!);
+        SqliteConnection.ClearPool(keepAlive);
+    }
+
+    public static TheoryData<string, long> MigrationCases => new() { { "Production", 0 }, { "Development", 1 } };
 
     private static OptionsValidationException FindOptionsFailure(Exception ex)
     {

@@ -1,0 +1,20 @@
+# Opt-in local observability (Phase 5, P5-D2 A). Development and demo only, like compose.yaml.
+#   docker compose -f compose.yaml -f compose.observability.yaml up --build
+# The Aspire dashboard receives the API's traces, metrics and logs over OTLP and shows them at
+# http://127.0.0.1:18888. Login stays on: open the login?t=... link printed in the dashboard container's log.
+services:
+  aspire-dashboard:
+    # Pinned tag, not latest: 13.6.2 was published 2026-10-29, the newest tag at least two weeks old on 2026-11-15
+    # (checked in the MCR catalog). Digest pinning is Phase 8.
+    image: mcr.microsoft.com/aspire/dashboard:13.6.2
+    ports:
+      # The UI on loopback only. The OTLP ports (18889 gRPC, 18890 HTTP) are not published to the host: only the
+      # api container reaches them, on the compose network.
+      - "127.0.0.1:18888:18888"
+
+  api:
+    environment:
+      # OTLP over gRPC (the exporter's default protocol) to the dashboard; setting this turns the exporter on.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://aspire-dashboard:18889
+    depends_on:
+      - aspire-dashboard

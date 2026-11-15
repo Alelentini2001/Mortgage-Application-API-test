@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Http.HttpResults;
 using MortgageApplications.Api.Identity;
+using MortgageApplications.Api.Observability;
 using MortgageApplications.Core.Applications;
 
 namespace MortgageApplications.Api.Applications;
@@ -9,7 +11,7 @@ namespace MortgageApplications.Api.Applications;
 /// (404). Unknown and other owners' IDs both give an empty 404 that the status-code middleware turns into the
 /// same ProblemDetails, so nothing reveals whether an ID exists.
 /// </summary>
-public static class ApplicationEndpoints
+public static partial class ApplicationEndpoints
 {
     public static IEndpointRouteBuilder MapApplicationEndpoints(this IEndpointRouteBuilder endpoints)
     {
@@ -55,18 +57,29 @@ public static class ApplicationEndpoints
 
     // 202 + Location (P6-D4): the body is the Pending assessment; the client polls the Location until the status is
     // Completed or Failed. When the queue is full the request waits for room (P6-D2), bounded by its own token.
+    // Once queued, the request's server span gets the assessment ID, so a trace view finds the worker's span with the
+    // same tag (P5-D3 A), and the queued log carries the two IDs only. A 404 records neither.
     private static async Task<Results<Accepted<AssessmentResponse>, NotFound>> AssessAsync(
         Guid id,
         MortgageApplicationService service,
         ICurrentUser user,
+        HttpContext httpContext,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         var assessment = await service.AssessAsync(user.OwnerId, id, cancellationToken);
-        return assessment is null
-            ? TypedResults.NotFound()
-            : TypedResults.Accepted(
-                $"/api/applications/{id}/assessments/{assessment.Id}",
-                AssessmentResponse.From(assessment));
+        if (assessment is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        httpContext.Features.Get<IHttpActivityFeature>()?.Activity
+            .SetTag(AssessmentTelemetry.AssessmentIdTag, assessment.Id.ToString());
+        var logger = loggerFactory.CreateLogger(typeof(ApplicationEndpoints));
+        LogAssessmentQueued(logger, assessment.Id, id);
+        return TypedResults.Accepted(
+            $"/api/applications/{id}/assessments/{assessment.Id}",
+            AssessmentResponse.From(assessment));
     }
 
     private static async Task<Results<Ok<AssessmentResponse>, NotFound>> GetAssessmentAsync(
@@ -81,4 +94,8 @@ public static class ApplicationEndpoints
             ? TypedResults.NotFound()
             : TypedResults.Ok(AssessmentResponse.From(assessment));
     }
+
+    [LoggerMessage(EventId = 7, EventName = "AssessmentQueued", Level = LogLevel.Information,
+        Message = "Assessment {AssessmentId} of application {ApplicationId} queued.")]
+    private static partial void LogAssessmentQueued(ILogger logger, Guid assessmentId, Guid applicationId);
 }

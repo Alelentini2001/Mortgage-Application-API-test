@@ -1,4 +1,7 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Options;
+using MortgageApplications.Api.Observability;
+using MortgageApplications.Core.Affordability;
 using MortgageApplications.Core.Applications;
 
 namespace MortgageApplications.Api.Assessments;
@@ -12,12 +15,18 @@ namespace MortgageApplications.Api.Assessments;
 /// logged, and only shutdown leaves the loop. Shutdown is never a failure: an unfinished item stays Pending and is
 /// picked up at the next start. Logs carry the assessment ID only: never amounts, inputs or the owner ID.
 /// </para>
+/// <para>
+/// Each item gets a root <c>assessment.process</c> span and, when Completed or Failed, one count and one duration
+/// (<see cref="AssessmentTelemetry"/>). The duration comes from the injected <see cref="TimeProvider"/>.
+/// </para>
 /// </summary>
 public sealed partial class AssessmentWorker(
     ChannelAssessmentQueue queue,
     IServiceScopeFactory scopeFactory,
     IOptions<AssessmentQueueOptions> options,
     TimeProvider timeProvider,
+    AssessmentTelemetry telemetry,
+    IOptions<AffordabilityOptions> affordabilityOptions,
     ILogger<AssessmentWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -94,12 +103,25 @@ public sealed partial class AssessmentWorker(
 
     private async Task ProcessOneAsync(Guid assessmentId, CancellationToken stoppingToken)
     {
+        // A root span per item (P5-D3 A). This async method gets its own copy of the execution context, so clearing
+        // the current activity here does not change the caller's.
+        Activity.Current = null;
+        using var activity = telemetry.StartProcessing(assessmentId);
         try
         {
-            await using var scope = scopeFactory.CreateAsyncScope();
-            var outcome = await scope.ServiceProvider.GetRequiredService<MortgageApplicationService>()
-                .ProcessAssessmentAsync(assessmentId, stoppingToken);
-            switch (outcome)
+            var started = timeProvider.GetTimestamp();
+            AssessmentProcessingResult result;
+            await using (var scope = scopeFactory.CreateAsyncScope())
+            {
+                result = await scope.ServiceProvider.GetRequiredService<MortgageApplicationService>()
+                    .ProcessAssessmentAsync(assessmentId, stoppingToken);
+            }
+
+            // The rules version is the configured one, which the calculator also uses (Q4: also for Failed). It is
+            // validated as required at startup.
+            telemetry.RecordProcessed(
+                activity, result, affordabilityOptions.Value.RulesVersion!, timeProvider.GetElapsedTime(started));
+            switch (result.Outcome)
             {
                 case AssessmentProcessingOutcome.Failed:
                     LogAssessmentFailed(assessmentId);
@@ -108,7 +130,7 @@ public sealed partial class AssessmentWorker(
                     LogAssessmentNotFound(assessmentId);
                     break;
                 default:
-                    LogAssessmentProcessed(assessmentId, outcome);
+                    LogAssessmentProcessed(assessmentId, result.Outcome);
                     break;
             }
         }
@@ -118,6 +140,7 @@ public sealed partial class AssessmentWorker(
         }
         catch (Exception exception)
         {
+            AssessmentTelemetry.RecordError(activity, exception);
             LogProcessingError(assessmentId, exception);
         }
     }
