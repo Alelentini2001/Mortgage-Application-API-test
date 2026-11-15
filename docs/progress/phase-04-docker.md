@@ -1,6 +1,6 @@
 # Phase 04: Docker
 
-Status: **In progress: implementation and gates done; LOCAL container checks not run yet (no Docker daemon); ADR 0002 not written** · Branch: `phase-04-docker` (worktree, parallel with Phase 6) · PR: — · Started: 2026-11-14 · Finished: —
+Status: **In progress: implementation, gates and LOCAL container checks done; ADR 0002 not written; no PR yet** · Branch: `phase-04-docker` (worktree, parallel with Phase 6) · PR: — · Started: 2026-11-14 · Finished: —
 
 ## Goal
 
@@ -271,6 +271,28 @@ The Docker daemon was not available on the implementer's machine: `docker versio
 - The Dockerfile's restore and publish commands were run on the host in a copy of the build context (only `global.json`, `Directory.Build.props`, `Directory.Packages.props` and `src/` without `bin/` and `obj/`): `dotnet restore src/MortgageApplications.Api/MortgageApplications.Api.csproj` restored the three projects, and `dotnet publish ... -c Release -o publish --no-restore` succeeded (output includes `MortgageApplications.Api.dll`, `appsettings*.json` and the SQLite native `runtimes/`). This supports ambiguity 1 but is not the Linux build.
 - `./scripts/verify.sh` (full): build 0 warnings, 0 errors; tests 347 passed, 0 failed; hook tests 91 passed; format check passed; `VERIFY PASSED (full)`.
 
+### Results (lead agent, with Docker, 2026-11-15)
+
+Docker Desktop came up after the implementer had finished (server 29.3.1, arm64). The lead agent ran the LOCAL checks in a fresh clone of `phase-04-docker` at `274365b` in the scratchpad (`git clone --branch phase-04-docker <repo> p4-clone`), with compose project name `p4check`.
+
+| ID | Result | Evidence |
+|---|---|---|
+| C1 | Pass | `docker compose up --build -d` exit 0 in 44 s wall time (base images already pulled; 0 cached build steps) |
+| C2 | Pass | `Config.User=1654`; `id -u` → `1654`; `$APP_UID` → `1654`; `whoami` → `app` |
+| C3 | Pass | `GET /health` → `"Healthy" 200` |
+| C4 | Pass | `POST /api/applications` (E1 body) → 201, `Location: /api/applications/<id>` |
+| C5 | Pass | `GET` of that path → 200, body equal to the POST body (`jq` slurp compare) |
+| C6 | Pass | `down`, `up -d`, `GET` the same ID → 200, same body |
+| C7 | Pass | `down -v`, `up -d`, `GET` the old ID → 404; new `POST` → 201 |
+| C8 | Pass | `/app/data` owner `1654 app 755`; it holds `mortgage-applications.db`, `-shm`, `-wal` |
+| C9 | Pass | Planted untracked files at the root (`planted-root.db`, `.env`, `.env.local`, `planted-root.pem`, `docs/planted.md`, `tests/planted.txt`) and nested under `src/MortgageApplications.Api/` (`planted.db`, `.env`, `.env.local`, `planted.pem`, `secrets/planted.txt`, `PLANTED.md`). `find` for planted names, `.env*`, `*.pem`, `*.db`, `secrets` found nothing in the final image (`/app`) **or** the build stage (`docker build --target build`, `/src`), so the recursive `.dockerignore` patterns (S2) work. `/app` has no `tests`, `docs`, `.git`, `.claude`. `.editorconfig` is present in the build stage (R5) |
+| C10 | Pass | Image `Env` holds only `PATH`, `APP_UID=1654`, `ASPNETCORE_HTTP_PORTS=8080`, `DOTNET_RUNNING_IN_CONTAINER`, `DOTNET_VERSION=10.0.15`, `ASPNET_VERSION=10.0.15`; `docker history --no-trunc` has no secret, token, key or connection-string match |
+| C11 | Pass | `dotnet --list-sdks` → empty; `/usr/share/dotnet/sdk` does not exist; image 305 MB; OS `Ubuntu 24.04.5 LTS` (confirms R8) |
+| C14 | **Failed first, then fixed** | With `Affordability__AssessmentRate=0.987` (compose override), the extracted CI poll script exited 1 after 60 s with `::error::GET /health did not return 200 within 60 s.` and printed the logs (`OptionsValidationException: AssessmentRate must be between 0.001 and 0.25 …`; no amounts in the 129 log lines). But the container never exited: `dotnet` stayed at 99% CPU (`docker top`) and `Up 40 seconds` after the unhandled exception. Cause: `dotnet` was PID 1, and PID 1 ignores the abort signal the runtime raises on an unhandled exception. With `init: true` the same container exits at once with code 134. Fix: `init: true` in `compose.yaml`. Re-run: poll exit 1 after 3 s with `::error::The api container is not running.` (this also covers nice-to-have C15) |
+| CI steps | Pass | All four `docker` job scripts, extracted from `ci.yml` and run against the fixed compose: `GET /health returned 200.`, `The api container runs as uid 1654, which owns /app/data.`, `POST returned 201 and GET /api/applications/<id> returned the same application.` |
+
+Not done: C14's deliberate CI break (needs a pushed failing commit; waiting for Alessandro). The containers, the `p4check` volume and the test images were removed afterwards.
+
 ## Security gate
 
 `security-auditor` (prompt P04-07) on `git diff main...phase-04-docker` at `ce46e8f`, 2026-11-15. Verdict: pass, no high or critical findings. The file and scanner review only: the image had not been built (no Docker daemon).
@@ -321,7 +343,7 @@ The reviewer reproduced the restore and publish of the Api project from the Dock
 - Image digest pinning: Learn calls it a best practice; P4-D4 chose tags for now. Revisit in Phase 8, with a Dependabot `docker` entry (security S5). Also covers review R6: a floating `sdk:10.0` can bring a newer SDK band than the `verify` job and fail on new analyzer warnings.
 - ADR 0002 not written yet (review R1, security S3).
 - X1 (no startup migration outside Development, as an xUnit test): deferred until Phase 4 and Phase 6 are both merged.
-- LOCAL checks C1-C11 and C14 were not run: the Docker daemon was not available to the implementer (see "Results"). They must be run in a fresh clone on a machine with Docker before Checkpoint B; until then the image has never been built.
+- LOCAL checks: not run by the implementer (no Docker daemon); run afterwards by the lead agent, all pass after the `init: true` fix (see "Results (lead agent, with Docker)"). The CI `docker` job has not run yet: it runs with the PR.
 - C14's "one deliberate CI break" is not done: it needs a pushed commit that breaks the container, then a revert. Needs Alessandro's go-ahead, since it adds a red CI run to the PR.
 - C2 and C8 in CI: resolved after the review gate (R2); C2 was approved as LOCAL + CI, so the CI step is in scope.
 
