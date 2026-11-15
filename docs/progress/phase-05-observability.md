@@ -262,6 +262,13 @@ Questions and the lead agent's recommended answers:
 - O27: a fresh named shared-cache in-memory database that `ApiFactory` did not migrate, swapped in with `ConfigureTestServices`; the check is whether `__EFMigrationsHistory` exists after startup (0 in Production, 1 in Development).
 - Q12, `url.query`: checked in `~/.nuget/packages/opentelemetry.instrumentation.aspnetcore/1.20.1/README.md` (lines 84 to 88): by default the instrumentation replaces every query value with `Redacted` (`?key1=Redacted`); `OTEL_DOTNET_EXPERIMENTAL_ASPNETCORE_DISABLE_URL_QUERY_REDACTION=true` turns that off. Not set anywhere in this repo. The Q12 test proves `85123` in a query reaches no span.
 
+**O30, manual dashboard check** (lead agent, 2026-11-15). `docker compose -f compose.yaml -f compose.observability.yaml up -d --build` (project `p5obs`): `/health` 200; `docker compose ps` shows `api` on `127.0.0.1:8080` and `aspire-dashboard` on `127.0.0.1:18888` only (no OTLP port on the host). E1 completed as Approved and E2 as Declined. In the dashboard (built-in browser, login link from the dashboard container's log):
+- **Traces:** 12 traces, including two `assessment.process` root traces separate from their `POST …/assessments` traces (P5-D3 A). The E1 span has exactly: `application.id`, `assessment.decision=Approved`, `assessment.id`, `assessment.outcome=Completed`, `assessment.rules_version=1.0`; kind Internal; 0 events, 0 links; resource `service.name=mortgage-applications`, SDK 1.20.1.
+- **Structured logs:** 9 entries, including two `Assessment {AssessmentId} of application {ApplicationId} queued.` linked to their traces. A script over the page text found none of `85000`, `85,000`, `60000`, `20000`, `300000`, `240000`, `280000`, `1438.92`, `1678.74`, `33.02`, `36.41`, `2.82`, `3.29`, `381535`, `93.33`, `80.00`, `900.00`.
+- **Metrics:** meter `MortgageApplications` with `mortgage.assessments.processed` = 2 (tag values: decision Approved and Declined, outcome Completed, rules version 1.0) and `mortgage.assessment.duration`; plus the `Microsoft.AspNetCore.Hosting`, `Routing` and `Server.Kestrel` meters.
+- The dashboard shows "Endpoint is unsecured: untrusted apps can send telemetry to the dashboard": its OTLP endpoint has no API key. Accepted for local use, because the OTLP ports are only on the compose network (see "Open issues").
+- Cleaned up with `down -v --rmi local`.
+
 ## Security gate
 
 ## Review gate
@@ -271,6 +278,8 @@ Questions and the lead agent's recommended answers:
 ## Optimisations considered
 
 ## Open issues
+
+- **Dashboard OTLP endpoint without an API key** (seen in O30): any container on the compose network could send telemetry to the dashboard. Local demo only, OTLP ports not published; an OTLP API key (`Dashboard__Otlp__AuthMode=ApiKey`) is possible later.
 
 - Dashboard image: `mcr.microsoft.com/aspire/dashboard:13.6.2`. The lead agent checked the MCR catalog on 2026-11-15: 13.6.2 was published 2026-10-29, the newest tag at least two weeks old (13.6.4 is 2026-11-10, 13.6.5 is 2026-11-11). Still a tag, not a digest (P4-D4); digest pinning is Phase 8.
 - Deviation: `ProcessAssessmentAsync` now returns `AssessmentProcessingResult` (outcome, application ID, decision) instead of the enum; existing unit asserts changed from `outcome` to `outcome.Outcome` (no assert weakened).
