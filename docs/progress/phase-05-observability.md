@@ -135,6 +135,29 @@ Planning: lead agent only (no subagent yet).
 
 ## What was built (files)
 
+Implementation run by a delegated implementer agent on 2026-11-15, test-first, on `phase-05-observability` (no worktree).
+
+Source:
+- `src/MortgageApplications.Core/Applications/AssessmentProcessingResult.cs` (new): what `ProcessAssessmentAsync` did (`Outcome`), the `ApplicationId` (Completed, Failed, Skipped) and the `Decision` (Completed only). No input or output value. Core stays free of telemetry, logging and ASP.NET Core.
+- `src/MortgageApplications.Core/Applications/MortgageApplicationService.cs`: `ProcessAssessmentAsync` returns `AssessmentProcessingResult` instead of the bare `AssessmentProcessingOutcome` enum (kept as the `Outcome` field).
+- `src/MortgageApplications.Api/Observability/AssessmentTelemetry.cs` (new, singleton): `ActivitySource` and `IMeterFactory` meter named `MortgageApplications`; counter `mortgage.assessments.processed` (long, unit `{assessment}`) and histogram `mortgage.assessment.duration` (double, unit `s`, bucket advice in seconds); span `assessment.process` (Internal). Tags: `assessment.id`, `application.id` (span only), `assessment.outcome`, `assessment.decision` (Completed only), `assessment.rules_version` (Completed and Failed). Counter and histogram only for Completed and Failed. A processing error sets status Error with the exception type name only.
+- `src/MortgageApplications.Api/Assessments/AssessmentWorker.cs`: one root span per item (`Activity.Current` cleared first, P5-D3 A), duration from the injected `TimeProvider` (`GetTimestamp`/`GetElapsedTime`), rules version from `AffordabilityOptions`. The six log messages are unchanged.
+- `src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs`: after a successful queue, tags the request's server span (`IHttpActivityFeature`) with `assessment.id` and logs `AssessmentQueued` (EventId 7, Information, `AssessmentId` and `ApplicationId` only). Nothing for a 404.
+- `src/MortgageApplications.Api/Program.cs`: `AddOpenTelemetry()` with `ConfigureResource` (`AddService("mortgage-applications")` only when `OTEL_SERVICE_NAME` is not set), `WithTracing` (ASP.NET Core instrumentation, `AddSource("MortgageApplications")`), `WithMetrics` (ASP.NET Core instrumentation, `MortgageApplications`, `Microsoft.AspNetCore.Hosting`, `Microsoft.AspNetCore.Server.Kestrel`), `WithLogging()`; `UseOtlpExporter()` only when `builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]` is set. Comment "ADR in Phase 4" becomes "ADR 0002".
+- `src/MortgageApplications.Api/appsettings.json`: `Microsoft.EntityFrameworkCore.Database.Command` at `Warning` (P5-D5 A).
+- `src/MortgageApplications.Infrastructure/DatabaseMigration.cs`: comment "ADR in Phase 4" becomes "ADR 0002".
+- `Directory.Packages.props`, `src/MortgageApplications.Api/MortgageApplications.Api.csproj`: the 3 approved packages at 1.20.1 (transitive: `OpenTelemetry`, `OpenTelemetry.Api`, `OpenTelemetry.Api.ProviderBuilderExtensions`, all 1.20.1). `dotnet list package --vulnerable --include-transitive`: none.
+- `compose.observability.yaml` (new): `aspire-dashboard` on `mcr.microsoft.com/aspire/dashboard:13.6.2`, ports only `"127.0.0.1:18888:18888"`, no `ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS`; `api` gets `OTEL_EXPORTER_OTLP_ENDPOINT: http://aspire-dashboard:18889` and `depends_on: aspire-dashboard`. `compose.yaml` unchanged.
+
+Tests (`tests/MortgageApplications.IntegrationTests` unless noted):
+- `CapturingLoggerProvider.cs`: now also keeps structured state, scope values (`ISupportExternalScope`) and `Activity.Current`'s trace ID at log time. `Text` adds state and scopes, but not the activity-tracking scope IDs (random hex).
+- `TelemetryCapture.cs` (new): `ActivityListener` (sources `MortgageApplications`, `Microsoft.AspNetCore`) and `MeterListener` (instruments whose `Meter.Scope` is the host's `IMeterFactory`), copied at stop/record time into concurrent queues; the `Telemetry` collection (`DisableParallelization = true`); `TraceparentHandler` (fixed W3C trace ID per test client).
+- `ForbiddenNumbers.cs` (new) and `ForbiddenNumbersTests.cs` (new, self-test); `Telemetry.cs` (new, shared steps).
+- `TelemetryAllowlistTests.cs`, `AssessmentSpanTests.cs`, `AssessmentMetricTests.cs`, `ObservabilityLogTests.cs`, `OtlpExportTests.cs`, `ComposeFileTests.cs` (new); `StartupTests.cs` (O27); `AssessmentWorkerTests.cs` (one line: `.Outcome`).
+- `tests/MortgageApplications.UnitTests/Applications/MortgageApplicationServiceTests.cs`: asserts read `.Outcome`; 5 new cases for the IDs and the decision in the result.
+
+Commits: `019cffa` (red tests), `2b53c42` (core), `b4371e4` (packages), `3efacda` (api), `9c9e652` (compose), `4a22c4e` (ADR comment), `fcfc2db` (test settings fix).
+
 ## Tests
 
 ### Proposal (`test-designer`, P05-03; approved by Alessandro, P05-04)
@@ -180,6 +203,59 @@ Questions and the lead agent's recommended answers:
 - **Q12** The API has no query parameters. Check the ASP.NET Core instrumentation's query handling on its docs at implementation, and add one nice test that a query value like `?x=85123` does not reach a span.
 - **Q13** Time the worker with the injected **`TimeProvider`** (already there), so O17 asserts an exact value.
 
+### Results
+
+**Case to test map** (ID in a comment above each test):
+
+| Case | Test |
+|---|---|
+| O1, O2 | `TelemetryAllowlistTests.Assessment_numbers_reach_no_log_span_or_metric_tag` (E1, E2) |
+| O3 | `TelemetryAllowlistTests.Our_span_and_metric_tag_keys_are_in_the_allowlist` |
+| O5 | `TelemetryAllowlistTests.Failed_and_errored_items_leave_no_inputs_or_owner_in_telemetry` |
+| O22 | `TelemetryAllowlistTests.Our_log_field_names_are_in_the_allowlist` |
+| Q12 | `TelemetryAllowlistTests.Query_string_value_reaches_no_span` |
+| O9, O10, O11, O12, O13, O14, O15 | `AssessmentSpanTests` (one test each) |
+| O16, O17, O18 | `AssessmentMetricTests` (O18 also covers the Q5 NotFound and Skipped spans) |
+| O20, O21, O6, O7 (404 and 400), O8, O23 | `ObservabilityLogTests` |
+| O24, O25, O26 | `OtlpExportTests` |
+| O27 (X1) | `StartupTests.Startup_migrates_the_database_only_in_development` (Production, Development) |
+| O28 | `ComposeFileTests` (override file, default file) |
+| helper | `ForbiddenNumbersTests` (12 cases) |
+| Core | 5 new unit cases in `MortgageApplicationServiceTests` (`*_reports_*`) |
+
+**Red** (commit `019cffa`, tests against a Core stub that returned the outcome with null ID and decision; output kept in the session scratchpad, `p5-red.txt` and `p5-red-full.txt`):
+- Unit: 274 total, **4 failed**, 270 passed. The 4 are the new Completed (E1, E2), Failed and Skipped result cases (stub returned no application ID or decision). The new NotFound case passed: null and null is the right answer for it.
+- Integration: 157 total, **21 failed**, 136 passed. Failed for the expected reasons: 15 timed out after 10 s waiting for an `assessment.process` span, a counter or histogram measurement, or a server span tagged `assessment.id`; 3 found no `AssessmentQueued` entry (O20, O21 control, O22 control); O23 found EF command entries at Information; O25 and O26 received no OTLP request; O28 (override) found no `compose.observability.yaml`.
+- Of the 42 new integration cases, 21 passed while red, because they guard existing or not-yet-broken behaviour: the 12 `ForbiddenNumbersTests` cases, O6, O7 (2), O8 (trace ID and 500 handling exist since Phase 3), O24 (no exporter existed yet), Q12 (no query value reached a span), O27 (2, Development-only migration exists since Phase 3) and the O28 default-file case.
+
+**Green** (after the implementation commits):
+- First run: unit 274 passed; integration 155 of 157 passed, O25 and O26 failed (no OTLP request). Cause: `Program` reads `OTEL_EXPORTER_OTLP_ENDPOINT` before `Build()`, and `WebApplicationFactory` applies `ConfigureAppConfiguration` sources only at `Build()`; a temporary debug line (removed) showed the value empty at that point. Fix in the tests only: the OTLP settings go in per host with `UseSetting` (commit `fcfc2db`). Then all 3 `OtlpExportTests` passed.
+- `./scripts/verify.sh` (full), trimmed:
+  ```
+  ==> restore
+  ==> build (Release, warnings as errors)
+  ==> all tests
+    total: 431
+    failed: 0
+    succeeded: 431
+    skipped: 0
+    duration: 16s 321ms
+  ==> hook regression tests
+  hook tests: 90 passed, 0 failed
+  ==> format check
+  VERIFY PASSED (full)
+  ```
+- Integration tests 3 times in a row (`dotnet test --project tests/MortgageApplications.IntegrationTests -c Release --no-build`): run 1: 157 passed, 0 failed, 0 skipped (14 s); run 2: 157 passed, 0 failed, 0 skipped (14 s); run 3: 157 passed, 0 failed, 0 skipped (13 s). O24 did not skip in any run (port 4318 was free).
+- Verify steps: O29 `docker compose -f compose.yaml -f compose.observability.yaml config` renders (dashboard `13.6.2`, only `127.0.0.1:18888` published, `api` has the endpoint and `depends_on`). O31: `grep "ADR in Phase 4"` in `Program.cs` and `DatabaseMigration.cs` finds nothing.
+
+**How the tests work** (details the proposal left open):
+- `ForbiddenNumbers` forms per value: raw, trimmed, F2, N2, N0, comma decimal, dot grouping (N2 and N0), U+00A0 and U+202F grouping (N2 and N0); bare integers only with 5+ digits. Before the search it removes GUIDs, the rules version and also 32- and 16-character lowercase hex IDs (W3C trace and span IDs), which the log scopes and `traceparent` values carry. Summary: the exact E1 or E2 summary plus `checks passed`, `is above the`, `≤`, `×`.
+- O1/O2 scan the spans of the test's own trace (a fixed `traceparent` on every request, so the create POST with the inputs is included) plus the worker span, all metric tags of the host's meter factory, and every log entry of the factory.
+- O24: the protocol is set to `http/protobuf` and no endpoint, so a wrongly registered exporter would send to `localhost:4318`; the test listens there on 127.0.0.1 and ::1 with `TcpListener` and checks no connection is pending after the host is disposed (skips if 4318 is taken). O25/O26: an `HttpListener` on a free 127.0.0.1 port with `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`; disposing the host flushes; O25 expects `/v1/traces`, `/v1/metrics` and `/v1/logs`, O26 searches the protobuf bytes as text.
+- O17: a `TimeProvider` whose `GetTimestamp` steps 1.5 s per call, so the histogram records exactly `1.5`.
+- O27: a fresh named shared-cache in-memory database that `ApiFactory` did not migrate, swapped in with `ConfigureTestServices`; the check is whether `__EFMigrationsHistory` exists after startup (0 in Production, 1 in Development).
+- Q12, `url.query`: checked in `~/.nuget/packages/opentelemetry.instrumentation.aspnetcore/1.20.1/README.md` (lines 84 to 88): by default the instrumentation replaces every query value with `Redacted` (`?key1=Redacted`); `OTEL_DOTNET_EXPERIMENTAL_ASPNETCORE_DISABLE_URL_QUERY_REDACTION=true` turns that off. Not set anywhere in this repo. The Q12 test proves `85123` in a query reaches no span.
+
 ## Security gate
 
 ## Review gate
@@ -190,7 +266,15 @@ Questions and the lead agent's recommended answers:
 
 ## Open issues
 
-- The dashboard image tag to pin and its publish date (P4-D4 still uses tags, not digests; digest pinning is Phase 8).
+- Dashboard image: `mcr.microsoft.com/aspire/dashboard:13.6.2`. The lead agent checked the MCR catalog on 2026-11-15: 13.6.2 was published 2026-10-29, the newest tag at least two weeks old (13.6.4 is 2026-11-10, 13.6.5 is 2026-11-11). Still a tag, not a digest (P4-D4); digest pinning is Phase 8.
+- Deviation: `ProcessAssessmentAsync` now returns `AssessmentProcessingResult` (outcome, application ID, decision) instead of the enum; existing unit asserts changed from `outcome` to `outcome.Outcome` (no assert weakened).
+- Deviation: `OtlpExportTests` pass the `OTEL_EXPORTER_OTLP_*` keys with `UseSetting`, not `AddInMemoryCollection`, because `Program` reads them before `Build()` (see "Results"). Still per host, never an environment variable. Side effect worth knowing: a value for these keys that only comes from a configuration source added after `WebApplication.CreateBuilder` (for example in a test's `ConfigureAppConfiguration`) does not turn the exporter on. Environment variables, `appsettings*.json` and command-line arguments do.
+- Addition not in the plan: the duration histogram has bucket boundary advice in seconds (`InstrumentAdvice`, the same boundaries as `http.server.request.duration`); the SDK's default buckets are for milliseconds.
+- Addition not in the plan: `ForbiddenNumbers` also strips 32- and 16-hex trace and span IDs before searching, not only GUIDs and the rules version.
+- The worker's Skipped span carries `application.id` (the row exists); the plan said "only when known", which it is.
+- `CapturingLoggerProvider.Text` leaves out the activity-tracking scope values (`TraceId`, `SpanId`, `ParentId`), so random hex cannot make the existing sentinel tests (I-13, I-14) flaky; the trace ID is kept in its own field.
+- Not done by the implementer: Learn checks for the implementation-time APIs listed in plan step 2 (`ActivitySource`, `Meter`/`InstrumentAdvice`, `IMeterFactory` scope, `MeterListener`/`ActivityListener`, `UseOtlpExporter`, `IHttpActivityFeature`). Only the package READMEs in the NuGet cache were read (`UseOtlpExporter` behaviour, `IConfiguration` for `OTEL_*` keys, `url.query` redaction). The lead agent should add the Learn links to "Docs verified".
+- Not done: the manual dashboard check (O30, plan step 10) and the security and review gates; they are the lead agent's steps.
 
 ## Time spent (approx.)
 
