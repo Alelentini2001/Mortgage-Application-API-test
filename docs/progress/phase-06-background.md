@@ -111,6 +111,30 @@ Logged here during the parallel run and copied to `docs/ai/PROMPTS.md` on `main`
 
 ## What was built (files)
 
+Implemented by the `parallel-implementer` in commits `4a8ed68` (core), `e531691` (infra), `d249652` (api) and `7215f8d` (tests).
+
+- **Core** (`src/MortgageApplications.Core/Applications/`):
+  - `IAssessmentQueue.cs` (new): the port, `EnqueueAsync(Guid, CancellationToken)`.
+  - `AssessmentWorkItem.cs` (new): the assessment plus its application's stored `AffordabilityInputs` (Q1).
+  - `AssessmentProcessingOutcome.cs` (new): `NotFound`, `Skipped`, `Completed`, `Failed`, so the worker can log what happened.
+  - `IMortgageApplicationRepository.cs`: `FindForProcessingAsync`, `UpdateAssessmentAsync`, `ListPendingAssessmentIdsAsync` (not owner-scoped, worker only).
+  - `MortgageApplicationService.cs`: takes `IAssessmentQueue`; `AssessAsync` saves Pending, then enqueues; new `ProcessAssessmentAsync` (catches only the calculator call, Q5) and `ListPendingAssessmentIdsAsync`.
+- **Infrastructure**: `Persistence/EfMortgageApplicationRepository.cs`: one tracked join query for the processing load, `Update` + `SaveChangesAsync`, Pending IDs ordered by ID (version 7, so oldest first). No index on `Status` and no new migration: the list query runs once per startup.
+- **Api**:
+  - `Assessments/AssessmentQueueOptions.cs` (new): `Assessments:QueueCapacity`, default 100, `[Range(1, 10_000)]`.
+  - `Assessments/ChannelAssessmentQueue.cs` (new): `Channel.CreateBounded`, `BoundedChannelFullMode.Wait`, `SingleReader`, `WriteAsync` with the caller's token.
+  - `Assessments/AssessmentWorker.cs` (new): `BackgroundService`; the startup re-enqueue runs next to the read loop; one item at a time, `CreateAsyncScope` per item; `[LoggerMessage]` logs with the assessment ID only.
+  - `Program.cs`: options with `ValidateDataAnnotations().ValidateOnStart()`, queue singleton (also registered as `IAssessmentQueue`), `AddHostedService<AssessmentWorker>()`.
+  - `Applications/ApplicationEndpoints.cs`: POST returns `Results<Accepted<AssessmentResponse>, NotFound>`; OpenAPI summaries updated.
+  - `Applications/Responses.cs`: `AssessmentResponse` gains nullable `FailedAt` (Q11).
+  - `appsettings.json` (`Assessments` section) and `requests.http` (202 and poll steps).
+- **Tests**:
+  - Unit: `Applications/Fakes.cs` (new fake methods, `FakeAssessmentQueue`, settable `FixedTimeProvider`), `Applications/MortgageApplicationServiceTests.cs`.
+  - Integration, new: `AssessmentWorkerTests.cs`, `AssessmentRepositoryTests.cs`, `ChannelAssessmentQueueTests.cs`, `WorkerGate.cs` (holds the worker at its processing load), `CapturingLoggerProvider.cs`.
+  - Integration, changed: `ApiFactory.cs` (P6-D3 database, migrations before any host starts, worker only in the default host), `Http.cs` (polling helpers), `AssessmentTests.cs`, `NotFoundAndOwnerTests.cs`, `StartupTests.cs`, `ErrorHandlingTests.cs`, `ApiRecordsTests.cs`.
+
+A manual smoke run (`dotnet run`, Development, file database in the scratchpad) returned `HTTP/1.1 202 Accepted` with a `Location`; a GET 0.3 s later returned `"status":"Completed"`; the log showed `Re-enqueued 0 pending assessments at startup.`
+
 ## Tests
 
 ### Proposal (test-designer P06-01, approved by Alessandro P04-05: recommended selection and answers, including `failedAt` in the response)
@@ -164,6 +188,53 @@ Dropped as covered elsewhere: W-1 and W-2 (one reader loop and a scope per item 
 - **Q11. `failedAt` in the response.** Checked: `AssessmentResponse` has no `FailedAt` today (`src/MortgageApplications.Api/Applications/Responses.cs`); the column exists in `InitialCreate`. → Add `failedAt` (nullable) to the response. No failure reason is exposed.
 - **Q12.** Each POST still creates a new assessment; no change.
 
+### Results
+
+**Counts.** Before (plan commit `bc3ab50`, measured in a temporary checkout): 347 tests (258 unit + 89 integration). After: **373 tests (267 unit + 106 integration), 373 passing**, so 26 more. Every case in the recommended selection has a test:
+
+| Case | Test |
+|---|---|
+| U-A1, U-A2 | `AssessAsync_saves_pending_assessment_and_enqueues_its_id`, `AssessAsync_saves_before_it_enqueues` |
+| U-S1 | `AssessAsync_other_owner_…_queues_nothing`, `AssessAsync_unknown_application_…_queues_nothing` (existing tests, now also check the queue) |
+| U-P1, U-P2, U-P4 | `ProcessAssessmentAsync_E1_completes_with_golden_values_and_clock_time`, `…_E2_completes_as_declined_not_failed`, `…_calculation_error_saves_failed_without_throwing` |
+| U-P5, U-P6, U-P7 | `…_completed_assessment_is_skipped_unchanged`, `…_failed_assessment_is_skipped_unchanged`, `…_unknown_id_changes_nothing`, `…_assessment_without_application_changes_nothing` |
+| U-P10, U-P11 | `ProcessAssessmentAsync_save_failure_propagates`, `ListPendingAssessmentIdsAsync_returns_only_pending_ids` |
+| I-R1 to I-R3 | `AssessmentRepositoryTests` (3 tests) |
+| I-1, I-2, I-3 | `Post_assessment_returns_202_with_location_and_pending_body`, `Post_assessment_E1_completes_approved_with_golden_values`, `Post_assessment_E2_completes_declined_on_ltv` |
+| I-4, I-7, I-8 | `Get_assessment_while_pending_returns_200_with_pending_status`, `Startup_completes_pending_assessments_and_leaves_finished_ones`, `Same_id_queued_twice_is_processed_once` |
+| I-5, I-6 | `Post_assessment_for_unknown_malformed_or_other_owner_application_queues_nothing` (new); `Other_owner_gets_the_same_404_as_an_unknown_id` (existing I35) |
+| I-9, I-10, I-11 | `Full_queue_makes_the_post_wait_and_drops_nothing`, `Cancelled_waiting_post_leaves_pending_row_that_a_restart_completes`, `Shutdown_while_processing_leaves_the_assessment_pending` |
+| I-13, I-14 | `Failing_item_becomes_failed_the_next_completes_and_logs_hold_no_personal_data` |
+| W-5, W-6 | `ChannelAssessmentQueueTests` (2 tests), `Stopping_an_idle_worker_returns_within_5_seconds_without_errors` |
+| Q7 | `Startup_with_invalid_queue_capacity_fails` (0 and 10,001) |
+
+Changed existing tests: I4–I7 and F3 in `AssessmentTests` now expect 202 and poll; `NotFoundAndOwnerTests` I33, I35, I37 use the 202 flow; `ApiRecordsTests` passes the new `failedAt` argument; `ErrorHandlingTests.ThrowingRepository` implements the new repository methods.
+
+**Red, then green.** The tests were written against stubs (new methods threw `NotImplementedException`; the endpoint still returned 201; the worker did nothing). Outputs were kept in the session scratchpad, not in the repo:
+- Unit, `MortgageApplicationServiceTests`: 19 total, **11 failed**, 8 passed. Failures were `NotImplementedException` from `ProcessAssessmentAsync` / `ListPendingAssessmentIdsAsync`, `Expected: Pending, Actual: Completed` (U-A1) and an empty enqueue list (U-A2).
+- Integration: 106 total, **16 failed**, 90 passed. Failures were `Expected: Accepted` (I-1, I6, I7), `NotImplementedException` (queue, repository and I-7 tests), `Timed out after 10 s: the worker's startup re-enqueue` (gated worker tests, I-8, W-6) and a `NullReferenceException` in I-13.
+- Green before the implementation, and why: the E1, E2 and F3 polling tests (the synchronous 201 body was already Completed, so the poll ended at once; the 202 is asserted by I-1), I-5 (the 404 path did not change) and Q7 (the options registration was added together with the stubs).
+- After the implementation: unit 267 / 267 and integration 106 / 106 passing on the first run.
+
+**Full verify** (`./scripts/verify.sh`, after commit `7215f8d`), trimmed:
+```
+==> build (Release, warnings as errors)
+    0 Warning(s)
+    0 Error(s)
+==> all tests
+  total: 373
+  failed: 0
+  succeeded: 373
+  skipped: 0
+  duration: 4s 919ms
+==> hook regression tests
+hook tests: 91 passed, 0 failed
+==> format check
+VERIFY PASSED (full)
+```
+
+**Flakiness check (plan step 5).** `dotnet test --project tests/MortgageApplications.IntegrationTests`, 5 runs in a row: all 5 passed, 106 / 106 each (5.4 s, 4.9 s, 4.9 s, 5.0 s, 4.9 s). No SQLite locking errors, so Q10 stays with P6-D3.
+
 ## Security gate
 
 ## Review gate
@@ -173,6 +244,17 @@ Dropped as covered elsewhere: W-1 and W-2 (one reader loop and a scope per item 
 ## Optimisations considered
 
 ## Open issues
+
+Implementation notes and deviations, for the reviewers:
+- **`AssessmentProcessingOutcome` (not in the plan).** `ProcessAssessmentAsync` returns an outcome instead of nothing, so the worker can log Failed and NotFound at Warning (assessment ID only) without Core logging.
+- **Test timeouts.** The plan says `[Fact(Timeout = …)]` on polling tests. xUnit analyzer `xUnit1069` (an error under warnings-as-errors) needs a timed test to reference `TestContext.Current.CancellationToken` directly. Timeouts are kept only on the 4 tests that hold the worker (I-4, I-9, I-10, I-11). The other polling tests rely on the bounded poll helper (10 s).
+- **`CA1711` suppressed** on `IAssessmentQueue` and `ChannelAssessmentQueue` (the analyzer rejects names ending in `Queue`). The approved names were kept, each suppression with a justification.
+- **`ApiFactory.WithWebHostBuilder` hides the base method** (`new`), so that every existing call site gets a host without the worker (Q2). An overload with `runWorker: true` opts in. Calling the base method through a `WebApplicationFactory<Program>` reference would skip this.
+- **The startup re-enqueue runs next to the first requests.** A POST that arrives before the re-enqueue reads the database can be queued twice; the second run is skipped (idempotent). Tests that need an exact queue wait for the `PendingRequeued` log event first.
+- **EF Core change tracking** (flagged in "Docs verified"): the processing load is tracked, and `UpdateAssessmentAsync` calls `Update` before `SaveChangesAsync`. I-R2 and I-R3 prove the change survives a reload. This link was not checked on Learn in this run.
+- **APIs not checked on Learn in this run** (the implementer had no web access): `ValidateDataAnnotations`, `ChannelReader<T>.Count`, `BackgroundService.ExecuteTask`, `ExecuteUpdateAsync` (tests only), `SqliteConnection.ClearPool`.
+- **Clock going backwards (not fixed, outside scope).** If the clock reads earlier than the assessment's `CreatedAt` when it is processed, both `Complete` and `Fail` throw. The worker logs the error and the row stays Pending until a later startup. A fix would be one line (use the later of now and `CreatedAt`) and would need its own test and approval.
+- **Not done here:** ADR 0003 (written by the lead agent), the security and review gates (plan steps 6–7), and the rebase on `main` after Phase 4 (step 9).
 
 ## Time spent (approx.)
 
