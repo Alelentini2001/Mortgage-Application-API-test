@@ -92,6 +92,8 @@ Test-designer before tests; `security-auditor` (state files hold no secrets; hoo
 
 About 110 cases in nine groups, all bash with fixtures in temp repos (`CLAUDE_PROJECT_DIR` points at the fixture), a fixed clock (`HARNESS_NOW`), no network and no real account data; jq-less fallback tested the existing way (PATH without jq). Groups: SessionStart (S1–S16), SubagentStart and brief (B1–B10), PreCompact (C1–C10), status line and usage states (U1–U25), StopFailure (E1–E11), index and stale check (I1–I15), handovers (H1–H8), cross-cutting (X1–X9), and one manual check on 2.1.283 (a unique marker in the test-designer brief; a fresh subagent must echo it without reading files; repeated with spec-checker; recorded in the phase file and PROMPTS.md).
 
+The full proposal, verbatim: [`harness-01/test-proposal.md`](harness-01/test-proposal.md).
+
 **Recommended selection:** the designer's "minimum set" (about 70 cases: S1–S7, S12–S14, S16; B1–B5, B8–B9; C1, C4–C6, C8; U1, U2, U5–U8, U11–U13, U15–U16, U19–U22; E1–E2, E4–E5, E8–E9; I1, I3, I5–I8, I12–I13, I15; H1–H4, H6; X1–X4, X6–X7) plus the manual check. Riskiest areas it names: BSD vs GNU `date` (U10, add it), partial writes of `usage.json` (U15–U16), a timestamp inside generated files (I3), copying secrets into state (U21, C6, E4–E5).
 
 **Questions and recommended answers (lead agent):**
