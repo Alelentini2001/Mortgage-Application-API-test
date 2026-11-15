@@ -1,6 +1,6 @@
 # Phase 06: Background assessments
 
-Status: **In progress: implementation, security and review gates done; ADR 0003 drafted; waiting for the Phase 4 merge, rebase and PR** · Branch: `phase-06-background` (worktree, parallel with Phase 4) · PR: — · Started: 2026-11-14 · Finished: —
+Status: **In progress: rebased on `main`, gates re-run; PR next** · Branch: `phase-06-background` (worktree) · PR: — · Started: 2026-11-14 · Finished: —
 
 ## Goal
 
@@ -226,7 +226,42 @@ Logged here during the parallel run and copied to `docs/ai/PROMPTS.md` on `main`
 - **Purpose:** requirement traceability before the PR.
 - **Outcome:** see "Review gate", spec check.
 
-The human prompts for this phase (Checkpoint A approval, test approval, the usage-limit resume and the approval of the review-gate decisions) are in `phase-04-docker.md`, "Prompts".
+### P06-09 · agent→subagent (`security-auditor`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security gate re-run for Phase 6 (background assessments) after the rebase on main. Read only: do not edit files or switch branches.
+
+  Worktree: /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-acd40a009ddf8a3cd (branch phase-06-background, HEAD 45537a2, rebased on origin/main ede3605 + 6859276, which now include Phase 4: Dockerfile, compose.yaml, CI docker job). The first gate (docs/progress/phase-06-background.md, "Security gate", S1-S6) reviewed the diff at the old 850a3a8. Since then: a56a2e3 (TryWrite before WriteAsync), b234be6 and c352351 (tests), 9eae1f1 (clock: finish at the later of now and CreatedAt), 0773b2b (startup re-enqueue retried every Assessments:RequeueRetryDelaySeconds, new validated option, injected TimeProvider and IOptions, changed RequeueFailed log message), and docs.
+
+  Do:
+  1. Gitleaks on the branch commits (git log range origin/main..HEAD) and Semgrep (p/csharp, p/secrets) on the files changed in that range; dependency scan with dotnet list package --vulnerable --include-transitive. Say which tools ran; do not install anything.
+  2. Review the new commits for: personal data or amounts in any log message or exception that reaches a log (AGENTS.md: never log income, expenses, deposit, property value, tokens or personal data); the retry loop (can it spin, hide errors, or run after shutdown); the new option's validation; owner scoping unchanged; and how Phase 6 behaves in the Phase 4 container (compose runs as Development; the worker runs there; anything in Program.cs that changes what compose exposes).
+  3. Re-state S1-S6 only if their status changed.
+
+  Output: a findings table (tool/check, finding with file:line, severity, real or false positive, reason, fix) and a one-word verdict (PASS or FAIL). Keep it short.
+  ```
+- **Purpose:** security gate re-run after the rebase on `main` (plan step 9).
+- **Outcome:** PASS. No new finding above Info; the phase file cited pre-rebase hashes (fixed with the table under "Tests").
+
+### P06-10 · agent→subagent (`dotnet-reviewer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Fresh-context review re-run for Phase 6 (background assessments) after the rebase on main. Read only: do not edit files or switch branches.
+
+  Worktree: /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-acd40a009ddf8a3cd (branch phase-06-background, HEAD 45537a2, rebased on origin/main, which now includes Phase 4: Dockerfile, compose.yaml, CI docker job). The first review (docs/progress/phase-06-background.md, "Review gate", R1-R10) covered the diff at the old 850a3a8. Review only what changed since: a56a2e3, b234be6, c352351, 9eae1f1, 0773b2b (run git show for each), plus any interaction between Phase 6 and the Phase 4 files now on main.
+
+  Check at least:
+  - 9eae1f1: the later-of(now, CreatedAt) finish time in MortgageApplicationService.ProcessAssessmentAsync and its two unit tests.
+  - 0773b2b: AssessmentWorker.RequeuePendingAsync / TryRequeuePendingAsync retry loop: shutdown during the delay or during a retry, exceptions that escape, duplicates queued by a retry, Task.Delay(TimeSpan, TimeProvider, CancellationToken) use, the option's [Range(1, 3600)] and its startup test, and the integration test Startup_sweep_failure_is_retried_and_completes_pending_assessment (could it pass without the retry? is it timing-flaky?).
+  - That the R1, R2, R5, R9, R10 fixes do what the phase file says.
+  - Whether the rebased branch still matches the Phase 4 smoke test in .github/workflows/ci.yml (the CI job only POSTs and GETs an application; say whether it should also cover the 202 assessment flow).
+
+  Output: findings, most severe first, each as file:line | severity | problem | fix. Then a list of what you checked and found fine. Say plainly that you did not build or run tests, if you did not.
+  ```
+- **Purpose:** review gate re-run after the rebase, on the commits made after the first review.
+- **Outcome:** no critical, high or medium findings; six low (RR1–RR6). See "Review gate".
+
+The human prompts for this phase (Checkpoint A approval, test approval, the usage-limit resume and the approval of the review-gate decisions) are in `phase-04-docker.md`, "Prompts" (P04-01 to P04-13), and in `docs/ai/PROMPTS.md`.
 
 ## What was built (files)
 
@@ -380,6 +415,30 @@ The hook count is 90 rather than 91 because one case (the no-change skip of `ver
 
 Integration tests after `e4215a9`, 3 runs in a row: 112 / 112 each, no failures.
 
+**Rebase on `main`** (plan step 9, 2026-11-15). `phase-06-background` was rebased onto `6859276` (Phase 4 merged as `ede3605`, plus the docs update) with no conflicts. Commit hashes cited above and in the prompts are from before the rebase; the logged prompts stay verbatim. Old → new:
+
+| Before | After | Commit |
+|---|---|---|
+| `bc3ab50` | `9af870c` | plan, decisions and approved test cases |
+| `4a8ed68` | `7500d12` | Core: save Pending, process from a queue |
+| `e531691` | `a7c8133` | Infrastructure: worker queries |
+| `d249652` | `78e12ad` | Api: 202 and the background worker |
+| `7215f8d` | `95533dc` | tests: polling and the worker end to end |
+| `850a3a8` | `942ee55` | docs: build, results, open issues (first gates ran here) |
+| `8339c95` | `b234be6` | R10 |
+| `37b28b2` | `a56a2e3` | R2 |
+| `b505133` | `c352351` | R1, R5, R9 |
+| `e164567` | `9eae1f1` | R4 |
+| `e4215a9` | `0773b2b` | R3 |
+| `cce8f49` | `6df0e14` | docs: gates and ADR 0003 (spec check ran here) |
+| `3b2e16f` | `45537a2` | docs: spec check |
+
+After the rebase, at `45537a2`: `./scripts/verify.sh` full → `total: 381, failed: 0`, `hook tests: 91 passed`, `VERIFY PASSED (full)`. Integration tests 3 runs in a row: 112 / 112 each.
+
+**Local container check** (lead agent, `docker compose -p p6check up -d --build` from the worktree): `/health` 200; POST application 201; POST assessment 202 with body status `Pending`; the poll reached `Completed`, decision `Approved`, LTV `80.00`; `grep` for the E1 amounts in the container log found 0 matches. Cleaned up with `down -v --rmi local`.
+
+**After the re-review fixes** (`1055677`, `2d38a44`): `./scripts/verify.sh` full → `0 Warning(s)`, `total: 384, failed: 0` (269 unit + 115 integration), `VERIFY PASSED (full)` (hook count 90 with the change uncommitted; 91 after the commit). The new CI step was run locally with the other `docker` job steps, extracted from `ci.yml` and run with `bash -e` against compose: every step passed, ending with `POST returned 202 and the assessment completed as Approved.`
+
 ## Security gate
 
 `security-auditor` (P06-04) on the diff at `850a3a8`. **Verdict: PASS.** Tools: Gitleaks 8.30.1 (branch commits and working tree: no leaks), Semgrep 1.185.0 with `p/csharp` and `p/secrets` (27 changed files and a `--baseline-commit main` run: 0 findings), `dotnet list package --vulnerable --include-transitive` (no vulnerable packages), and a manual OWASP Top 10:2025 review. `Directory.Packages.props`, `global.json` and `.github/` are unchanged.
@@ -396,6 +455,8 @@ Integration tests after `e4215a9`, 3 runs in a row: 112 / 112 each, no failures.
 Checks that passed: worker logs hold only `Count`, `AssessmentId` and `Outcome`; logged exceptions carry no data values; ProblemDetails unchanged; 404s identical for unknown, malformed and other-owner IDs, with nothing saved or queued; queue capacity validated at startup; one bad item cannot stop the worker; shutdown never marks Failed; LINQ only, no raw SQL.
 
 The R3 and R4 fixes came after this gate. They add no endpoint, package or log field (the `RequeueFailed` message gains the retry delay in seconds). The gate was not re-run on them; it is re-run after the rebase on `main` (plan step 9).
+
+**Re-run after the rebase** (`security-auditor`, P06-09, at `45537a2`). **Verdict: PASS.** Gitleaks (13 commits and the working tree: no leaks), Semgrep `p/csharp` + `p/secrets` (30 changed files and a baseline run: 0 findings), `dotnet list package --vulnerable` (none). Manual review of `a56a2e3`, `9eae1f1`, `0773b2b` and the Phase 4 files: the new `RequeueFailed` field is a configured integer; the retry loop cannot spin (at least 1 s), logs every failure and stops on the stopping token; the option fails closed at startup; owner scoping unchanged; Phase 6 adds nothing that changes what compose exposes. Info only: Docker's default 10 s stop grace period can kill an item in progress, which stays Pending (optional `stop_grace_period: 30s`, not applied). S5's first and third cases confirmed fixed; S1–S4 and S6 unchanged.
 
 ## Review gate
 
@@ -415,6 +476,19 @@ The R3 and R4 fixes came after this gate. They add no endpoint, package or log f
 | R10 | U-P10 only checks that the exception propagates; U-P11 tests the fake's filter. | Low | U-P10 fixed, `8339c95` (exactly one save attempt, never Failed). U-P11 kept: I-R1 covers the real query. |
 
 Checked and found no problem: EF Core tracking of the processing load, the Q5 catch scope, leaving the worker loop only on shutdown, save-then-enqueue order, the 202/`Location`/`failedAt` shapes, timeout coverage of the polling tests, the CA1711 suppressions, the approved must-cases and the log fields.
+
+**Re-run after the rebase** (`dotnet-reviewer`, P06-10, on the commits after the first review). It did not build or run tests. No critical, high or medium findings.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| RR1 | The CI Docker smoke test never checks the 202 assessment flow, and it is the only Release, file-SQLite, non-root run of the worker. | Low | Fixed, `2d38a44`: new step POSTs an assessment, checks 202 and the `Location`, polls up to 30 s for Completed and Approved. Run locally (see "Tests"). |
+| RR2 | The R9 fix proves nothing: `Reader.Count == 1` is true before the third POST reaches the enqueue. | Low | Fixed, `1055677`: a test-only queue wrapper signals when an enqueue could not finish at once, and the test waits for that signal. Mutation check: with the full-queue write replaced by `ValueTask.CompletedTask` (a drop), the test failed with `TimeoutException`. |
+| RR3 | The phase file cites pre-rebase hashes. | Low | Fixed: old → new table under "Tests"; verify re-run on `45537a2`. |
+| RR4 | No test stops the worker during the retry delay. | Low | Fixed, `1055677`: `Stopping_during_the_sweep_retry_delay_returns_within_5_seconds`. Mutation check: with `CancellationToken.None` passed to `Task.Delay`, the test failed with `TimeoutException`. |
+| RR5 | The sweep retry test does not prove the delay is waited (a zero-delay loop would also pass). | Low | Open: needs a timestamp on the captured log entries. See "Open issues". |
+| RR6 | The retry delay's valid limits (1 and 3,600 s) are not tested. | Low | Fixed, `1055677`: `Startup_with_requeue_retry_delay_at_a_limit_starts`. |
+
+It also noted that the worker comment gave the wrong source for duplicate IDs (fixed in `1055677`) and found the R4 fix, the retry loop's shutdown and error paths, the option validation, R1, R2, R5 and R10, and the Phase 4 interaction correct.
 
 **`spec-checker` (P06-08)** at `cce8f49`, read-only, 2026-11-15. It did not build, run tests or open every test body. Spec requirement 3 (assess endpoint) and R30 (optional background processing): **met**. All 17 Phase 6 goals and must-cases it listed are met, except "the non-owner-scoped load is worker-only", which is **partial**: nothing in the code enforces it (accepted, S2 and ADR 0003). Its notes:
 - **202 and polling against the spec wording.** The spec says only "Provide an endpoint to assess affordability for a given application" and does not require a synchronous call, so the 202 + `Location` + polling flow meets it. The caveat: the POST response no longer holds the result, only a Pending body. Background processing is an optional enhancement in the spec.
@@ -445,7 +519,9 @@ Implementation notes and deviations, for the reviewers:
 - **EF Core change tracking** (flagged in "Docs verified"): the processing load is tracked, and `UpdateAssessmentAsync` calls `Update` before `SaveChangesAsync`. I-R2 and I-R3 prove the change survives a reload. Checked on Learn afterwards by the lead agent (see "Docs verified").
 - **APIs not checked on Learn by the implementer** (no web access): `ValidateDataAnnotations`, `ChannelReader<T>.Count`, `BackgroundService.ExecuteTask` and `SqliteConnection.ClearPool` were checked afterwards by the lead agent (see "Docs verified"). `ExecuteUpdateAsync` (tests only) was not checked.
 - **Clock going backwards:** fixed after the review gate (R4, `e164567`).
-- **Not done yet:** the rebase on `main` after Phase 4 merges, the gates re-run on the rebased branch (plan step 9), the spec check, the PR and Checkpoint B.
+- **Not done yet:** the PR and Checkpoint B.
+- **RR5:** the sweep retry test does not prove the delay is waited. Fix: timestamp `CapturingLoggerProvider` entries and assert the gap between `RequeueFailed` and `PendingRequeued`.
+- **Optional:** `stop_grace_period: 30s` in `compose.yaml` so a container stop lets an item in progress finish (security re-run, Info).
 
 Still open after the gates, for Alessandro:
 - **S1, accepted until Phase 8:** rate limiter and request timeout on `POST …/assessments`.
