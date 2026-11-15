@@ -1,6 +1,6 @@
 # Harness H1: context and usage awareness
 
-Status: **In progress: scope cut to the light version by Alessandro (2026-11-15); review and PR next** · Branch: `harness-01-context` · PR: — · Started: 2026-11-15 · Finished: —
+Status: **Merged** (squash `1d7ca9e`) · Branch: `harness-01-context` · PR: [#10](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/10) · Started: 2026-11-15 · Finished: 2026-11-15
 
 ## Goal
 
@@ -272,6 +272,12 @@ The full proposal, verbatim: [`harness-01/test-proposal.md`](harness-01/test-pro
   ```
 - **Purpose:** fresh-context review of the light version (docs-only diff).
 - **Outcome:** no critical or high findings; 5 medium and 10 low, see "Review gate".
+
+### H-12 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Approved, merge
+- **Purpose:** Checkpoint B approval of PR #10.
+- **Outcome:** squash-merged as `1d7ca9e` after both CI jobs passed on `5db990c`.
 
 ## What was built (files): full version, later removed
 

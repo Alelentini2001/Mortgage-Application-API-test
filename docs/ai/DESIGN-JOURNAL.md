@@ -91,3 +91,10 @@ Chronological record of ideas, options, rejected ideas, who decided, and what ch
 - **A Linux-only CI failure.** The export tests relied on the flush at host shutdown; on the CI runner the hosts shut down in milliseconds and sent nothing. Not reproduced locally or in a Linux container; fixed by exporting every 100 ms and waiting for the data before shutdown (cause inferred, not proven).
 - **Manual evidence.** The dashboard check (O30) confirmed traces, logs and metrics arrive with only the allowlisted tags. Rules section 6 now names the HTTP span keys the framework adds; `user_agent.original` is removed.
 
+## 2026-11-15 · Harness H1: usage awareness and model choice
+
+- **What was asked and what was built first.** Alessandro asked for agents that know the project's state and the usage limits. The lead's design (session-start and subagent context hooks, a status-line usage snapshot, compaction checkpoints, generated decision indexes, handovers, about 2,000 lines with tests) was approved and built.
+- **Why most of it was removed.** In use it added approval prompts and context output to his chat. He said he only meant being aware of usage and choosing models sensibly. The lead removed every hook and script; H1 kept an agent registry and short rules in `CLAUDE.md`.
+- **What is actually measurable.** Only what Claude Code shows the user: `/usage`, `/context`, an optional status line, and the limit message with its reset time. Plan name, remaining allowance and per-model quotas are not available to scripts.
+- **Lesson for later phases.** Ask what "aware" means in practice before building machinery; a smaller first version would have saved a day's usage. The review also found that shell commands can edit protected hook files without the "ask" prompt (open for Phase 8).
+

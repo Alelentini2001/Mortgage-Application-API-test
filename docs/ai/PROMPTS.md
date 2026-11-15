@@ -993,3 +993,144 @@ Copied from `docs/progress/phase-05-observability.md` after the merge. The CI fi
   > Approved, merge here
 - **Purpose:** Checkpoint B approval of PR #9. After "proceed", the lead agent asked: "Do you approve PR #9, with my two recommendations: name the extra HTTP span keys in rules section 6, and move the four low code-review findings to Phase 9?", and whether to merge here or in the Phase 5 session. "Approved, merge here" answers both.
 - **Outcome:** rules section 6 amended in this PR; the four PR `/code-review` findings carried to Phase 9; PR #9 squash-merged by the lead agent as `352c6c8` after both CI jobs passed on `6644435`.
+
+## Harness H1: usage awareness and model choice
+
+Copied from `docs/progress/harness-01-context.md` after the merge. H-00 (Alessandro's brief) is kept verbatim in `docs/progress/harness-01/brief-H-00.md`.
+
+### H-00 · human→agent · 2026-11-15
+- **Prompt (verbatim):** in [`harness-01/brief-H-00.md`](../progress/harness-01/brief-H-00.md) (460 lines, kept as a separate file because of its length).
+- **Purpose:** new scope of work.
+- **Outcome:** discovery, plan, Checkpoint A.
+
+### H-01 · agent→subagent (`claude-code-guide`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  I am designing context and usage awareness for a Claude Code project harness (installed Claude Code 2.1.283, macOS, Pro/Max subscription login, no API key). I need verified facts from the official Claude Code documentation only; for each answer give the doc URL and quote the exact field or event names. If something is not documented, say "not documented" rather than guessing.
+
+  1. Hooks: the full list of hook events supported today. For each of SessionStart (and its matcher sources: startup, resume, clear, compact), PreCompact, PostCompact (does it exist?), SubagentStart (does it exist?), SubagentStop, Stop, UserPromptSubmit, Notification, SessionEnd: the JSON input fields (e.g. session_id, transcript_path, cwd, trigger, custom_instructions, agent_id, agent_type, stop_hook_active), and which events can inject context into the model (hookSpecificOutput.additionalContext or plain stdout) versus only block or log. Can a SubagentStart hook add context to the subagent? Does PreCompact allow adding instructions to the compaction summary?
+  2. Subagents (.claude/agents/*.md): the supported frontmatter fields today (name, description, tools, disallowedTools, model, maxTurns, isolation, skills, memory, hooks, permissionMode, initialPrompt, effort, etc.). Is there a documented persistent "memory" field for subagents and how does it work (where is it stored)? Do subagents load CLAUDE.md / project memory automatically? Do they see the parent conversation?
+  3. Status line: the JSON object passed to a statusLine command on stdin: every documented field, in particular model (id, display_name), context window size and current usage (e.g. context_window, exceeds_200k_tokens, current usage percentages), cost (total_cost_usd, durations), and any rate-limit or subscription-usage fields (e.g. rate_limits, five-hour or weekly usage, reset times). Say exactly which ones exist.
+  4. Usage and limits: which documented commands or interfaces report subscription usage, remaining allowance and reset times for a subscription user (/usage, /status, /cost, /context, others), and whether any of these are available to hooks or scripts (not just the interactive UI). How does Claude Code surface a usage-limit or rate-limit hit (message text, hook event, exit status)?
+  5. Context window: how a user or script can read current context usage (/context, status line fields), the context-window size per model, and when auto-compaction triggers.
+  6. Environment variables documented as available inside hook and status-line commands (e.g. CLAUDE_PROJECT_DIR, CLAUDE_ENV_FILE, CLAUDE_CODE_*). Only documented ones.
+
+  Keep the answer structured by question number. Mark clearly anything that may depend on version and which version the docs describe.
+  ```
+- **Purpose:** verify hook events, status-line JSON, usage reporting and subagent options in the official docs.
+- **Outcome:** 33 hook events incl. PreCompact, PostCompact, SubagentStart, StopFailure; status-line `context_window` and `rate_limits` fields; no scriptable plan name, allowance or per-model quota. Items it marked "summary" (not quoted) are flagged in the discovery report.
+
+### H-02 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Approved, all A
+- **Purpose:** Checkpoint A approval (H-D1 to H-D5 all option A).
+- **Outcome:** test design started.
+
+### H-03 · agent→subagent (`test-designer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Harness phase H1 (context and usage awareness for the Claude Code harness) of a .NET 10 mortgage-application API repo. Propose test cases for the approved plan; do not write code or edit files.
+
+  Read first: the approved plan /private/tmp/claude-501/-Users-ale-ssd-Developer-Mortgage-Application-API-test/38287261-0d8e-41a1-a4c6-05aca4d87104/scratchpad/harness/H-discovery-and-plan.md (all decisions H-D1 to H-D5 are option A), then in /Users/ale_ssd/Developer/Mortgage-Application-API-test: .claude/settings.json, .claude/hooks/*.sh, .claude/hooks/tests/test-hooks.sh (how hook cases are written today: JSON piped to the hook, exit code checked), .claude/agents/*.md, scripts/verify.sh, CLAUDE.md, AGENTS.md, docs/PROGRESS.md (its "Resume here" section format), one phase file (docs/progress/phase-06-background.md: "Decisions" table and "Open issues" format), docs/adr/0003-background-assessment-queue.md (ADR header format).
+
+  Documented Claude Code facts the design relies on (installed version 2.1.283): SessionStart input has source = startup | resume | clear | compact (| fork) and hooks can return hookSpecificOutput.additionalContext or plain stdout; SubagentStart input has agent_id and agent_type and can return hookSpecificOutput.additionalContext; PreCompact input has trigger (manual | auto) and custom_instructions, and plain stdout on exit 0 becomes compaction instructions; StopFailure input has error (matcher rate_limit, overloaded, ...), optional error_details and last_assistant_message; the status line command receives JSON on stdin with model.id/display_name, context_window.context_window_size/used_percentage/remaining_percentage/current_usage (current_usage may be null), and rate_limits.five_hour and rate_limits.seven_day each with used_percentage and resets_at (Unix seconds), each window possibly absent, the whole rate_limits object absent for non-subscribers or before the first response.
+
+  What will be built: scripts/context/brief.sh <agent> (role-specific brief), scripts/context/index.sh (generates docs/ai/context/DECISIONS.md and OPEN-ITEMS.md from phase files and ADRs; verify.sh fails when they are stale), docs/ai/context/{CONTEXT-INDEX.md, AGENT-REGISTRY.md, CURRENT-WORK.md, HANDOVER-TEMPLATE.md, handovers/}, .claude/statusline.sh (prints model, context %, usage; writes .claude/state/usage.json atomically, gitignored), hooks session-context.sh (SessionStart all sources; keeps what reinject-context.sh prints today), subagent-context.sh (SubagentStart), pre-compact.sh (PreCompact: writes .claude/state/checkpoint.md, prints keep-instructions), usage-stop.sh (StopFailure: records the blocker, reset time if known, exact resume instruction). Usage states: normal < 75%, approaching >= 75%, exhausted at 100% or a rate-limit StopFailure, unknown when no data or stale.
+
+  Cover at least the brief's Part 7 list: new-session context loading for each SessionStart source; context after compaction; missing PROGRESS.md; missing or malformed phase files; invalid or incomplete context; context for fresh subagents (each of the five agent types and an unknown one: the brief names its responsibility, boundaries and the "decisions reserved for Alessandro" rule); retrieval of previous decisions (index contents, stale-index failure); no duplication of authoritative records (index rows link to sources, generated files are marked generated); handover creation, retrieval and malformed handovers; preservation of existing context (hooks never write PROGRESS.md, phase files, ADRs or PROMPTS.md); concurrent writes to the state files; usage available, unavailable, partially absent, null values, stale snapshot, model change, rate limit with and without reset info, exhaustion; human checkpoints and author/reviewer independence stated in every brief; no secrets or account data written to state files; hostile or malformed JSON on stdin; existing hook cases still pass. Say how each case is run (bash with fixtures, no network, no real account data), which need jq and how the jq-less fallback is tested, and how to keep tests deterministic (fixed clock via an env var or file timestamp, temp dirs). Name the one check that can only be done manually on 2.1.283 (SubagentStart context reaching the subagent) and how to record it.
+
+  Use your agent's output format. Mark each case must or nice, keep the list tight, and list ambiguities in the plan for Alessandro to settle.
+  ```
+- **Purpose:** propose H1 test cases.
+- **Outcome:** about 110 cases and 15 questions; see section 7.
+
+### H-04 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Approved
+- **Purpose:** approval of the recommended test set and answers A1–A15.
+- **Outcome:** recorded; implementation waited for the Phase 5 merge (H-D5).
+
+### H-05 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Approved, merge here
+- **Purpose:** Phase 5 Checkpoint B (recorded in `phase-05-observability.md`, P05-11); it also unblocked H1.
+- **Outcome:** PR #9 merged as `352c6c8`; branch `harness-01-context` created from `cd9f7be`.
+
+### H-06 · agent→subagent (`general-purpose`, implementer) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Implement harness phase H1 (context and usage awareness for the Claude Code agent harness) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, exactly as approved, test-first.
+
+  Where: the main checkout, branch harness-01-context (already checked out). Do not switch or create branches. Never push, never force, never --no-verify. No new tool or package (jq is already used; shellcheck may be used only if it is installed, never installed).
+
+  Source of truth, read first:
+  - docs/progress/harness-01-context.md: sections 1 (discovery), 2 (architecture), 3 (decisions H-D1 to H-D5, all option A), 4 to 6, and 7 (the APPROVED test selection and the approved answers A1 to A15, which are binding).
+  - docs/progress/harness-01/test-proposal.md: the full test cases. Implement the approved set: S1-S7, S12-S14, S16; B1-B5, B8-B9; C1, C4-C6, C8; U1, U2, U5-U8, U10, U11-U13, U15-U16, U19-U22; E1-E2, E4-E5, E8-E9; I1, I3, I5-I8, I12-I13, I15; H1-H4, H6; X1-X4, X6-X7. Put the case ID in a comment above each case.
+  - AGENTS.md, CLAUDE.md, .claude/settings.json, .claude/hooks/*.sh and .claude/hooks/tests/test-hooks.sh (keep its style and counters), .claude/agents/*.md, .claude/skills/*/SKILL.md, scripts/verify.sh, docs/ai/ORCHESTRATION.md, docs/PROGRESS.md, docs/CLAUDE.md, .claude/rules/security.md.
+
+  Documented Claude Code facts (2.1.283) you may rely on: SessionStart input source = startup|resume|clear|compact|fork, output hookSpecificOutput.additionalContext or plain stdout; SubagentStart input agent_id, agent_type, output hookSpecificOutput.additionalContext (hookEventName "SubagentStart"); PreCompact input trigger (manual|auto), custom_instructions, plain stdout on exit 0 becomes compaction instructions; StopFailure input error (e.g. rate_limit, overloaded), optional error_details, last_assistant_message, output ignored (work only through files, A15); status line stdin JSON: model.id, model.display_name, context_window.context_window_size, used_percentage, remaining_percentage, current_usage (may be null), rate_limits.five_hour / seven_day each with used_percentage and resets_at (Unix seconds), each possibly absent, the whole object absent for non-subscribers or before the first response. Do not rely on anything else; never invent fields, variables or commands.
+
+  Build (smallest robust version; names as in the plan):
+  1. docs/ai/context/: CONTEXT-INDEX.md (where each kind of fact lives and which sections to read for which task; links, not copies), AGENT-REGISTRY.md (each of the 5 agents: responsibility, boundaries, model and the reason for it, context it needs, reserved decisions, the rule "never downgrade a security or review model to save usage"; reviewers do not get earlier reviewers' findings by default, A3), CURRENT-WORK.md (short lead-maintained "now": phase, step, files in play, next exact action; fill it for H1 now), HANDOVER-TEMPLATE.md (the plan's headings), handovers/ (with a README line), and the generated DECISIONS.md and OPEN-ITEMS.md.
+  2. scripts/context/index.sh: generates DECISIONS.md (phase-file "Decisions" tables and ADR headers: ID, short summary capped, who decided, relative link) and OPEN-ITEMS.md (phase files' "Open issues" items and PROGRESS.md carry-overs, with links), "GENERATED ... do not edit" header, stable sort (numeric phase order), no timestamp inside; ignores _TEMPLATE.md; `--check` mode writes nothing and exits 1 when stale or when a phase file or handover is malformed (A1, A11), naming the file and the fix command. Wire `scripts/context/index.sh --check` into scripts/verify.sh full mode.
+  3. scripts/context/brief.sh <agent> [phase]: the role brief (agent name, responsibility, boundaries, phase, branch, CURRENT-WORK pointer, relevant open items, usage status line, newest 5 handovers by filename showing path and task line only, never bodies), plus one shared constant block with the human checkpoints (A: plan, B: PR, wait for Alessandro's approval), author/reviewer independence and "decisions reserved for Alessandro are never made by an agent". Under about 100 lines (A2). Unknown agent on the CLI: non-zero with usage (A4). Phase argument validated (digits only, path-safe).
+  4. .claude/hooks/session-context.sh (SessionStart, all sources): Resume here section verbatim (capped with a "truncated, see docs/PROGRESS.md" line), current branch, CURRENT-WORK pointer, usage status, blocker file if any, checkpoint if source is compact; visible one-line warnings for missing or malformed inputs; always exit 0; never eval file content. Keep .claude/hooks/reinject-context.sh as a thin shim that calls it so the existing test passes unchanged (A13).
+  5. .claude/hooks/subagent-context.sh (SubagentStart): valid JSON with hookSpecificOutput.hookEventName "SubagentStart" and additionalContext = brief.sh output for agent_type; generic brief for unknown, empty or hostile agent_type; JSON-escape everything (use jq to build it); always exit 0.
+  6. .claude/hooks/pre-compact.sh (PreCompact): writes .claude/state/checkpoint.md atomically (temp file in the same dir + mv): branch, changed file PATHS only, last verify line from PROGRESS.md, CURRENT-WORK content, UTC time from HARNESS_NOW or date; prints keep-instructions written as additions ("Also keep ...", A5) covering phase and step, modified files, test commands and last result, open decisions awaiting Alessandro; always exit 0.
+  7. .claude/hooks/usage-stop.sh (StopFailure): writes .claude/state/blocker.md (its own file, A9) atomically: error type from an allowlist (unknown otherwise), time, reset time from usage.json if present and in the future (else "reset time unknown"), and the resume sentence from A14; only rate_limit sets the usage state to exhausted (A10); never copies last_assistant_message or error_details; repeated calls replace, not append; always exit 0.
+  8. .claude/statusline.sh: one line (model display name sanitised of control characters, ctx %, 5h and 7d %, earliest reset, state); writes .claude/state/usage.json atomically with ONLY the A6 fields (allowlist copy, never session_id, transcript_path, cwd, cost, workspace or anything else); states per the plan (normal < 75, approaching >= 75, exhausted >= 100, unknown for absent, null, negative or non-numeric, A7); stale after 15 minutes by updated_at (A8); without jq prints and stores unknown (A12); BSD and GNU date both work (U10); a past reset clears an exhausted state written by usage-stop.sh (E8).
+  9. .gitignore: .claude/state/. .claude/settings.json: add SessionStart (session-context.sh; keep the existing compact entry only through the shim so it is not called twice), SubagentStart, PreCompact, StopFailure entries and a statusLine command entry, all via "$CLAUDE_PROJECT_DIR". Do not change permissions.
+  10. Every new script honours CLAUDE_PROJECT_DIR for the root and HARNESS_NOW for the clock, uses set -uo pipefail (not -e), quotes every expansion, has no network command, never reads ~/.claude, .env*, *.pem, secrets/ or credentials, and is executable (git mode 100755).
+  11. Agent definitions (.claude/agents/*.md): add a short "Context and handover" section to each: start from the brief and docs/ai/context/CONTEXT-INDEX.md, read only the sections it points to, and end the report with the handover headings from HANDOVER-TEMPLATE.md. Do NOT change name, description, tools, disallowedTools, model, maxTurns or isolation.
+  12. Docs (Part 8 of the brief): AGENTS.md and CLAUDE.md (where context lives, the usage states and what the lead does in each: normal, approaching = fewer subagents and less context loading, exhausted or rate-limited = stop retrying, keep progress, write the resume instruction; unknown is reported as unknown; no model switching without verification), docs/ai/ORCHESTRATION.md (new section with how context, handovers, checkpoints and usage awareness work, what is measurable, what is not: plan name, remaining allowance, per-model quotas as numbers, real billing; recovery after exhaustion; how to inspect: cat .claude/state/*.json|md, scripts/context/brief.sh <agent>), .claude/skills/phase/SKILL.md (step 1 reads CONTEXT-INDEX and CURRENT-WORK; delegation writes a handover; step 9 runs index.sh), and hook documentation where it lives today. Do not edit docs/PROGRESS.md or docs/ai/PROMPTS.md (the lead does at merge). Keep docs to what is implemented.
+
+  Order: tests first. Add the new cases to the hook test harness (a separate file sourced or called from .claude/hooks/tests/test-hooks.sh is fine) against stubs, run them, save the red output to /private/tmp/claude-501/-Users-ale-ssd-Developer-Mortgage-Application-API-test/38287261-0d8e-41a1-a4c6-05aca4d87104/scratchpad/harness/h1-red.txt, then implement until green. Small conventional commits (AGENTS.md "Commits and PRs"; scopes harness, docs, tests), each ending with: Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>. Then run ./scripts/verify.sh (full) and the hook tests 3 times, and keep the outputs.
+
+  Note: .claude/settings.json, .claude/hooks/** and scripts/verify.sh are on the "ask" permission list, so Alessandro is prompted for those edits; batch your edits to those files to keep prompts few. If an edit is denied, stop and report; do not work around it.
+
+  Do not run the manual SubagentStart delivery check (the lead does it). Phase file docs/progress/harness-01-context.md: fill only "What was built (files)", "Tests (results)" (red counts and why, green counts, verify output trimmed, the 3 runs) and "Open issues" (deviations, anything not done or not checked). Honesty rule: never claim a result you did not see; write "not done" with the reason. Stop and report if the same step fails 3 times. Keep tool use tight.
+
+  Report at the end: commits, files, red and green evidence, verify output, the 3 runs, and every deviation from the plan.
+  ```
+- **Purpose:** build the approved full design test-first.
+- **Outcome:** stopped by a usage limit before writing anything, then resumed (H-07); built and committed the full design; stopped by the lead after H-08.
+
+### H-07 · agent→subagent (implementer, resumed) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Your run stopped on a usage limit after you started .claude/hooks/tests/test-context.sh (untracked, not committed; branch harness-01-context, nothing else changed). The limit has reset. Continue from there with the same instructions as before: tests first against stubs, save the red output, implement until green, small commits, full verify, hook tests 3 times, phase-file sections, then report. Keep tool use tight.
+  ```
+- **Purpose:** resume after the usage limit.
+- **Outcome:** commits `d85a25b`, `e51a48e`, `f7fe43b`, `7d45ced`, `83f6193`; stopped by the lead (H-08) while adding one more test.
+
+### H-08 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > also its continously asking me to approve commands about the session context here... fix it, what i meant was just to be "aware" of our usages and smartly use AI models to complete the job making sure all its done correctly
+- **Purpose:** stop the approval prompts and narrow the scope.
+- **Outcome:** the implementer was stopped; the lead asked two questions (H-09).
+
+### H-09 · human→agent (answers to the lead's questions) · 2026-11-15
+- **Questions and answers (verbatim):** "What should H1 keep?" → "Light (Recommended)". "May I add these two entries to .claude/settings.json so they stop: Bash(.claude/hooks/tests/*) and Bash(scripts/context/*)?" → "Yes, add both (Recommended)".
+- **Outcome:** cut to the light version; the allow entries were later not needed (see "Scope change").
+
+### H-10 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > its still doing the same... do not check the context for now on the chat anymore, just continue as before
+- **Purpose:** remove the session-context output from the chat entirely.
+- **Outcome:** settings, hooks, `verify.sh` and `.gitignore` restored to `main`; the status line and the session-start hook removed as well; H1 is now written rules and the agent registry only.
+
+### H-11 · agent→subagent (`dotnet-reviewer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Fresh-context review of harness phase H1 (light version) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch harness-01-context. Read only. The diff is docs only: run git diff main...HEAD (AGENTS.md, CLAUDE.md, docs/ai/ORCHESTRATION.md, docs/ai/context/AGENT-REGISTRY.md, docs/progress/harness-01-context.md, docs/progress/harness-01/test-proposal.md).
+
+  Check: (1) every claim about Claude Code behaviour or usage reporting is either sourced in the phase file's discovery report or stated as not available, nothing invented; (2) the agent registry matches the real frontmatter in .claude/agents/*.md (models, tools, maxTurns) and changes no agent; (3) the rules keep the human checkpoints, author/reviewer independence and "decisions reserved for Alessandro"; (4) the phase file honestly records the scope change, what was removed and why, and that .claude/settings.json, .claude/hooks/, scripts/verify.sh and .gitignore equal main (check with git diff main -- those paths); (5) plain English per docs/CLAUDE.md, no contradictions between CLAUDE.md, AGENTS.md, ORCHESTRATION.md and the registry. Output: findings, most severe first, as file:line | severity | problem | fix, then what you checked and found fine.
+  ```
+- **Purpose:** fresh-context review of the light version (docs-only diff).
+- **Outcome:** no critical or high findings; 5 medium and 10 low, see "Review gate".
+
+### H-12 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Approved, merge
+- **Purpose:** Checkpoint B approval of PR #10.
+- **Outcome:** squash-merged as `1d7ca9e` after both CI jobs passed on `5db990c`.
