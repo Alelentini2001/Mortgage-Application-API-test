@@ -1,6 +1,6 @@
 # Phase 04: Docker
 
-Status: **In progress: plan and tests approved (2026-11-15), implementation next** · Branch: `phase-04-docker` (worktree, parallel with Phase 6) · PR: — · Started: 2026-11-14 · Finished: —
+Status: **In progress: implementation and gates done; LOCAL container checks not run yet (no Docker daemon); ADR 0002 not written** · Branch: `phase-04-docker` (worktree, parallel with Phase 6) · PR: — · Started: 2026-11-14 · Finished: —
 
 ## Goal
 
@@ -135,6 +135,59 @@ Logged here during the parallel run and copied to `docs/ai/PROMPTS.md` on `main`
 - **Purpose:** approval of the recommended test selections and answers for Phase 4 and Phase 6; "add it" is read as adding `failedAt` to `AssessmentResponse` (Phase 6, Q11), the last item the agent recommended adding.
 - **Outcome:** both phase branches created with their plan files; `parallel-implementer` started for each (P04-06, P06-02).
 
+### P04-06 · agent→subagent (`parallel-implementer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Implement Phase 4 (Docker) of this .NET 10 mortgage-application API, exactly as approved.
+
+  Branch: switch to the existing branch phase-04-docker (it holds one commit with the approved plan). Do not create another branch. Never push.
+
+  Scope: docs/progress/phase-04-docker.md. The sections "Parallel safety with Phase 6", "Plan (approved at Checkpoint A)", "Decisions" (P4-D1 to P4-D4), "Docs verified" and "Tests > Proposal" (the recommended checks C1-C11, C13, C14, C16 and the answers to ambiguities 1-6, all approved) are your scope. Read AGENTS.md, CLAUDE.md, .claude/rules/infra.md, .claude/rules/security.md first.
+
+  Key points from the approved answers (the phase file is the source of truth if anything differs):
+  - Dockerfile: sdk:10.0 build stage, aspnet:10.0 runtime (tags, not digests). Restore and publish src/MortgageApplications.Api/MortgageApplications.Api.csproj only, after copying the three src .csproj files, Directory.Build.props, Directory.Packages.props and global.json (the .slnx lists test projects that .dockerignore excludes). Runtime: create /app/data owned by $APP_UID, USER $APP_UID, EXPOSE 8080. No secrets, no ENV with connection strings.
+  - compose.yaml: service api, build ".", ports "127.0.0.1:8080:8080", ASPNETCORE_ENVIRONMENT=Development, ConnectionStrings__MortgageApplications=Data Source=/app/data/mortgage-applications.db, named volume data:/app/data. No Aspire dashboard.
+  - CI: new job "docker" in .github/workflows/ci.yml: job-level permissions contents: read, the same pinned actions/checkout SHA as the existing job with persist-credentials: false, timeout-minutes, `docker compose up -d --build`, a poll script on GET /health (60 s timeout, fails non-zero and prints `docker compose logs` on timeout or if the container exits), then the C4/C5 POST + GET round trip, and a final `if: always()` step running `docker compose down -v`. No secrets, no login, no push.
+  - No .NET code changes. Do not edit src/, tests/, Program.cs, docs/PROGRESS.md, docs/ai/*, or any ADR file (ADR 0002 is written later by the lead agent). Only the phase file under docs/.
+
+  Process:
+  1. Write the files in small conventional commits (scopes infra, ci). End each commit message with: Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+  2. Run ./scripts/verify.sh (full) and keep the final output (it must still pass).
+  3. Check whether Docker is reachable with `docker version`. If it is: run the approved LOCAL checks in a fresh clone of this branch in a new empty directory under /private/tmp/claude-501/ (clone from this repository's path, check out phase-04-docker), and record each check's command and result (C1-C11, C14, with the C9 planted files created only in that clone). Clean up containers, images you built and volumes afterwards. Never print request bodies containing amounts into the phase file beyond what the check needs. If Docker is NOT reachable: do not try to start it, do not wait for it; mark every LOCAL check as "not run: Docker daemon not available" and continue.
+  4. Do the C13 static review of the workflow yourself and record it.
+  5. In the phase file, fill "What was built (files)", "Tests" > a new "Results" subsection (one row per check: run / not run, command, result) and "Open issues". Commit that.
+
+  Report: files changed, commits, trimmed verify output, the result of each check (or "not run" and why), every place you deviated from the phase file and why. If the plan is ambiguous or a step fails three times, stop and report instead of guessing.
+  ```
+- **Purpose:** implement the approved Phase 4 plan in its own worktree.
+- **Outcome:** 4 commits (`7e83532`, `aeb932d`, `ee9c8ef`, `ce46e8f`); full verify passed; LOCAL container checks marked not run (no Docker daemon). See "Results".
+
+### P04-07 · agent→subagent (`security-auditor`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security gate for Phase 4 (Docker) of a .NET 10 mortgage-application API. Review only the branch diff: run `git diff main...phase-04-docker` from the repository root (the branch is checked out in another worktree; do not switch branches here). Files: Dockerfile, compose.yaml, .github/workflows/ci.yml (new `docker` job), docs/progress/phase-04-docker.md.
+
+  Read first: .claude/rules/security.md, .claude/rules/infra.md, .dockerignore, docs/progress/phase-04-docker.md (plan, decisions P4-D1 to P4-D4, approved answers to ambiguities 1-6).
+
+  Check at least: the image runs as non-root (`USER $APP_UID` after every root step) and nothing writes outside /app/data at run time; no secrets, connection strings or keys in any layer, ENV, ARG or build context (`COPY src/ src/` scope against .dockerignore: *.db, .env*, *.pem, bin/obj); compose binds to 127.0.0.1 only and the ADR-to-be says Development in compose exposes Scalar/OpenAPI without auth until Phase 7; the CI job: least-privilege permissions, pinned actions, persist-credentials false, no `${{ }}` expressions inside `run:` blocks (script injection), no secrets, no push/login, cleanup with `if: always()`, request bodies with amounts not printed to logs; supply chain of base images (tags not digests, P4-D4 accepted for now: say whether that acceptance is reasonable or should be raised now). Run Gitleaks on the branch commits (`gitleaks git --log-opts="main..phase-04-docker"` or the closest available form) and Semgrep on the changed files if the tools are installed; say which ran and which were not available. Do not install anything.
+
+  Use your output format: each finding with severity, file:line, evidence, real or false positive, and a proposed fix or justification. Do not edit files.
+  ```
+- **Purpose:** security gate on the Phase 4 diff.
+- **Outcome:** pass, 11 rows (S1–S11). See "Security gate".
+
+### P04-08 · agent→subagent (`dotnet-reviewer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Fresh-context review of Phase 4 (Docker) of a .NET 10 mortgage-application API. Review only the branch diff: run `git diff main...phase-04-docker` from the repository root (the branch is checked out in another worktree; do not switch branches here). Files: Dockerfile, compose.yaml, .github/workflows/ci.yml (new `docker` job), docs/progress/phase-04-docker.md.
+
+  Read first: AGENTS.md, .claude/rules/infra.md, docs/progress/phase-04-docker.md (goal, plan, decisions P4-D1 to P4-D4, "Docs verified", approved checks and answers), src/MortgageApplications.Api/Program.cs, src/MortgageApplications.Api/appsettings.json, src/MortgageApplications.Infrastructure/DatabaseMigration.cs, global.json, Directory.Build.props, .dockerignore.
+
+  Flag only correctness, security and requirement gaps, for example: will `dotnet restore` of the Api csproj alone succeed with central package management and Directory.Build.props as copied (anything else the build reads, such as a NuGet.config, analyzer config or .editorconfig with warnings-as-errors, missing from the build context so the image build behaves differently from verify.sh?); does `chown "$APP_UID"` expand in that RUN; does the named volume inherit /app/data ownership on first use; does the compose environment make the app migrate on startup and find the database; does the CI poll script really fail on every failure path (curl errors, container exit, timeout) and never exit 0 early; is the POST body valid for the API's strict JSON and validation rules; does the phase file's "Results" section claim anything that was not run (the Docker daemon was not available, so the LOCAL checks must be marked not run). Report each finding with severity, file:line, evidence and a proposed fix. Do not edit files.
+  ```
+- **Purpose:** fresh-context review of the Phase 4 diff.
+- **Outcome:** 9 findings (R1–R9), none critical or high. See "Review gate".
+
 ## What was built (files)
 
 Written by `parallel-implementer` on 2026-11-15 (P04-06). No .NET code, test project, `.dockerignore` or ADR file was changed; ADR 0002 is written later by the lead agent.
@@ -179,7 +232,7 @@ Ambiguities, with the recommended answer:
 3. **CI must use the same environment as compose.** → CI runs `docker compose up -d --build`, so compose is the one source of truth.
 4. **Port binding.** `8080:8080` listens on all interfaces, and until Phase 7 there is no authentication. → Bind to `127.0.0.1:8080:8080`; the README (Phase 10) says how to change it.
 5. A valid POST body for C4 is taken from the existing integration tests (`Http.cs`).
-6. The runtime image is the default Debian `aspnet:10.0` (it has `sh` and `id`, which C2 and C9 use). Chiseled images are a Phase 8 topic.
+6. The runtime image is the default `aspnet:10.0` (it has `sh` and `id`, which C2 and C9 use). Chiseled images are a Phase 8 topic. Correction (review gate, R8): since .NET 10 the default tags are Ubuntu 24.04, not Debian ([Learn: default .NET container tags now use Ubuntu](https://learn.microsoft.com/en-us/dotnet/core/compatibility/containers/10.0/default-images-use-ubuntu)); this answer first said Debian.
 
 ### Results (parallel-implementer, 2026-11-15)
 
@@ -220,19 +273,57 @@ The Docker daemon was not available on the implementer's machine: `docker versio
 
 ## Security gate
 
+`security-auditor` (prompt P04-07) on `git diff main...phase-04-docker` at `ce46e8f`, 2026-11-15. Verdict: pass, no high or critical findings. The file and scanner review only: the image had not been built (no Docker daemon).
+
+Tools: Gitleaks 8.30.1 on the branch commits (`5 commits scanned ... no leaks found`) and the full history (`63 commits scanned ... no leaks found`); Semgrep 1.185.0 with `p/csharp`, `p/secrets`, `p/dockerfile`, `p/github-actions` on the three changed files (`Ran 55 rules on 3 files: 0 findings`); `dotnet list ... package --vulnerable --include-transitive` (no vulnerable packages). hadolint, actionlint, zizmor and trivy are not installed and were not run.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| S1 | The image has never been built or run, so non-root, layer contents and `/app/data` ownership are checked only on paper | Medium (verification gap) | Open: LOCAL checks C1–C11 and C14 must run before Checkpoint B, and the CI `docker` job must pass |
+| S2 | `.dockerignore` patterns `.env`, `.env.*`, `*.pem`, `*.md` match only at the context root, so `COPY src/ src/` would copy nested ones into the build stage | Low (latent; no such files exist today) | Fixed: patterns made recursive (`**/.env`, `**/.env.*`, `**/*.pem`, `**/*.md`) and `**/secrets/` added |
+| S3 | Compose runs as Development: Scalar, OpenAPI and every endpoint are reachable without authentication until Phase 7 | Low, accepted (P4-D1) | Mitigated by the `127.0.0.1` bind. ADR 0002 must state it and say the bind must not be widened before Phase 7 |
+| S4 | Developer exception page in Development | None | False positive: `ProblemExceptionHandler` handles every 500 first and never writes exception text |
+| S5 | Base images by tag, not digest | Low, accepted (P4-D4) | Phase 8: pin digests and add a Dependabot `docker` entry |
+| S6 | Non-root user | None | Pass on paper; CI now checks it (see R2) |
+| S7 | Secrets in layers, `ENV` or `ARG` | None | Pass: none |
+| S8 | Workflow permissions, pinning, script injection, cleanup | None | Pass |
+| S9 | `$location` echoed in a `::error::` line | Info | False positive: the header comes from this repository's own code and the job has a read-only token and no secrets |
+| S10 | The E1 body appears in the Actions log | Info | False positive: synthetic test values already in `Http.cs`; a comment in the step now says so |
+| S11 | `runs-on: ubuntu-latest` floats | Info | Same as the `verify` job; revisit in Phase 8 with digest pinning |
+
 ## Review gate
 
+`dotnet-reviewer` (prompt P04-08) on the same diff, 2026-11-15. No critical or high findings.
+
+| # | Finding | Severity | Resolution |
+|---|---|---|---|
+| R1 | ADR 0002 is missing, and the comments in `Program.cs:54` and `DatabaseMigration.cs:11` point to it | Medium | Open: ADR 0002 is written before Checkpoint B (waiting for Alessandro: agent or `/adr`). The two code comments are not touched here because `Program.cs` belongs to Phase 6's file set; they still say "ADR in Phase 4", which becomes true when the ADR lands |
+| R2 | C2 was approved as LOCAL + CI, but the CI job never checked the UID | Medium | Fixed: new CI step "Check the container user" fails if `id -u` is empty or 0, or if `/app/data` is not owned by that UID (also covers C8) |
+| R3 | `diff <(jq …) <(jq …)` passes when both bodies are empty or not JSON | Low | Fixed: `jq -e` with `--slurpfile` checks exactly one JSON body, equality, and two submitted values |
+| R4 | A curl transport error ends the step before `docker compose logs` runs | Low | Fixed: `|| status="curl-exit-$?"` so the status branch prints the logs |
+| R5 | `.editorconfig` is not in the image build, so its analyzer settings differ from `verify.sh` | Low | Fixed: copied in the restore layer |
+| R6 | `sdk:10.0` can move to a newer SDK band than `verify`, adding analyzer warnings (warnings as errors) | Low | Accepted: recorded under "Open issues" with the Phase 8 digest pinning |
+| R7 | Phase file status line was stale | Low | Fixed |
+| R8 | Ambiguity 6 said the runtime is Debian | Low | Fixed: Learn confirms .NET 10 default tags are Ubuntu 24.04; the answer is corrected in place |
+| R9 | `.claude/rules/infra.md` globs do not match `compose.yaml` | Low | Fixed: `compose*.yaml` and `.dockerignore` added to its `paths` |
+
+The reviewer reproduced the restore and publish of the Api project from the Docker build context on the host (macOS, SDK 10.0.404): both succeeded. It also confirmed that `$APP_UID` expands in `RUN` and `USER`, that a new named volume takes the owner of `/app/data`, and that the POST body passes the strict JSON and validation rules.
+
 ## AI output corrected or rejected (REAL cases only)
+
+- **Lead agent, wrong base OS.** The lead agent's answer to ambiguity 6 (approved in P04-05) said the runtime image is "the default Debian `aspnet:10.0`". The `dotnet-reviewer` flagged it from memory (R8); the lead agent checked Learn, which says .NET 10 default tags are Ubuntu 24.04 and no Debian images ship. Corrected in place. No code depended on it.
+- **Implementer, approved check left out.** The approved selection lists C2 (non-root UID) as "LOCAL + CI". The `parallel-implementer` did not add it to CI and recorded it as "outside the approved plan". The `dotnet-reviewer` caught the contradiction (R2); the lead agent added the CI step.
 
 ## Optimisations considered
 
 ## Open issues
 
-- Image digest pinning: Learn calls it a best practice; P4-D4 chose tags for now. Revisit in Phase 8.
+- Image digest pinning: Learn calls it a best practice; P4-D4 chose tags for now. Revisit in Phase 8, with a Dependabot `docker` entry (security S5). Also covers review R6: a floating `sdk:10.0` can bring a newer SDK band than the `verify` job and fail on new analyzer warnings.
+- ADR 0002 not written yet (review R1, security S3).
 - X1 (no startup migration outside Development, as an xUnit test): deferred until Phase 4 and Phase 6 are both merged.
 - LOCAL checks C1-C11 and C14 were not run: the Docker daemon was not available to the implementer (see "Results"). They must be run in a fresh clone on a machine with Docker before Checkpoint B; until then the image has never been built.
 - C14's "one deliberate CI break" is not done: it needs a pushed commit that breaks the container, then a revert. Needs Alessandro's go-ahead, since it adds a red CI run to the PR.
-- C2 (non-root UID) and C8 (`/app/data` owner) are LOCAL only. CI proves the volume is writable (C5) but not the UID itself. Adding a `docker compose exec api id -u` step to CI is a small optional extension; not done because it is outside the approved plan.
+- C2 and C8 in CI: resolved after the review gate (R2); C2 was approved as LOCAL + CI, so the CI step is in scope.
 
 ## Time spent (approx.)
 

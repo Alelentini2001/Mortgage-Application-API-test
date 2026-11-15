@@ -2,6 +2,8 @@
 paths:
   - "Dockerfile"
   - "docker-compose*.yml"
+  - "compose*.yaml"
+  - ".dockerignore"
   - ".github/**"
 ---
 # Infra rules
