@@ -62,8 +62,9 @@ public sealed class ObservabilityLogTests
         Assert.Single(factory.Logs.Entries, e => e.EventName == "AssessmentQueued");
     }
 
-    // O6 (P5-D4, security S1 b): a real 500 is logged by the framework with its exception and no input value, and
-    // the ProblemDetails traceId and the log's trace ID are the trace ID of the sent traceparent.
+    // O6 (P5-D4, security S1 b): a real 500 is logged by the framework with its exception, and the ProblemDetails
+    // traceId and the log's trace ID are the trace ID of the sent traceparent. Security gate: neither the logs nor the
+    // request's server span (tags, status description, events) carry a sentinel input or the owner ID.
     [Fact]
     public async Task Real_500_is_logged_without_values_and_carries_the_request_trace_id()
     {
@@ -72,15 +73,24 @@ public sealed class ObservabilityLogTests
             services => services.AddScoped<IMortgageApplicationRepository, ValueFreeThrowingRepository>()));
         var traced = new TraceparentHandler(ActivityTraceId.CreateRandom());
         var client = throwing.CreateDefaultClient(traced);
+        using var capture = new TelemetryCapture(throwing.Services);
 
-        var response = await client.PostJsonAsync("/api/applications", Http.BaseBody);
+        var response = await client.PostJsonAsync("/api/applications", Telemetry.SentinelBody);
 
         var problem = await response.AssertProblemAsync(HttpStatusCode.InternalServerError);
         Assert.Contains(traced.TraceId, problem.GetProperty("traceId").GetString(), StringComparison.Ordinal);
         var error = Assert.Single(factory.Logs.Entries, e => e.Level >= LogLevel.Error);
         Assert.Contains(nameof(InvalidOperationException), error.Exception, StringComparison.Ordinal);
         Assert.Equal(traced.TraceId, error.TraceId);
-        Assert.Empty(GoldenExample.Get("E1").InputsOnly.FindIn(factory.Logs.Entries.Select(e => e.Text)));
+        var span = await capture.WaitForSpanAsync(
+            s => s.TraceId == traced.TraceId && s.Kind == ActivityKind.Server, "the 500 request's server span");
+        var owner = throwing.Services.GetRequiredService<ICurrentUser>().OwnerId;
+        var clean = new ForbiddenNumbers([], []);
+        var texts = factory.Logs.Entries.Select(e => e.Text).Append(span.Text).Select(clean.Sanitize).ToList();
+        foreach (var sentinel in new[] { "85123", "912.34", "61234", "301234", owner })
+        {
+            Assert.DoesNotContain(texts, t => t.Contains(sentinel, StringComparison.Ordinal));
+        }
     }
 
     // O7 (extends I40): a 404 ProblemDetails carries the trace ID of the sent traceparent.
@@ -143,26 +153,5 @@ public sealed class ObservabilityLogTests
     private sealed class OtherOwner : ICurrentUser
     {
         public string OwnerId => "other-owner";
-    }
-
-    /// <summary>Throws with a message that holds no value, so any number in the 500 log came from somewhere else.</summary>
-    private sealed class ValueFreeThrowingRepository : IMortgageApplicationRepository
-    {
-        public Task AddAsync(MortgageApplication application, CancellationToken cancellationToken) => throw Boom();
-
-        public Task<MortgageApplication?> FindAsync(Guid id, string ownerId, CancellationToken cancellationToken) => throw Boom();
-
-        public Task AddAssessmentAsync(AffordabilityAssessment assessment, CancellationToken cancellationToken) => throw Boom();
-
-        public Task<AffordabilityAssessment?> FindAssessmentAsync(
-            Guid applicationId, Guid assessmentId, string ownerId, CancellationToken cancellationToken) => throw Boom();
-
-        public Task<AssessmentWorkItem?> FindForProcessingAsync(Guid assessmentId, CancellationToken cancellationToken) => throw Boom();
-
-        public Task UpdateAssessmentAsync(AffordabilityAssessment assessment, CancellationToken cancellationToken) => throw Boom();
-
-        public Task<IReadOnlyList<Guid>> ListPendingAssessmentIdsAsync(CancellationToken cancellationToken) => throw Boom();
-
-        private static InvalidOperationException Boom() => new("Simulated repository failure.");
     }
 }

@@ -4,7 +4,7 @@ namespace MortgageApplications.IntegrationTests;
 public sealed class ForbiddenNumbersTests
 {
     private static readonly string[] _formsOf85000 =
-        ["85000.00", "85000", "85,000.00", "85,000", "85000,00", "85.000,00", "85.000", "85\u00A0000,00", "85\u00A0000", "85\u202F000,00", "85\u202F000"];
+        ["85000.00", "85000", "85,000.00", "85,000", "85000,00", "85.000,00", "85.000", "85\u00A0000,00", "85\u00A0000", "85\u202F000,00", "85\u202F000", "85000.0", "85000,0", "85000.0000", "85000,0000"];
 
     private static readonly ForbiddenNumbers _search = new([85_000.00m, 900.00m, 1_438.92m, 2.82m], ["is above the"]);
 
@@ -35,6 +35,7 @@ public sealed class ForbiddenNumbersTests
         { "payment 1.438,92", "1.438,92" },
         { "payment 1 438,92", "1 438,92" },
         { "LTI 2.82", "2.82" },
+        { "LTI 2.825", "2.82" },
         { "LTV 93.33% is above the 90.00% limit", "is above the" },
     };
 
@@ -48,7 +49,7 @@ public sealed class ForbiddenNumbersTests
 
     public static TheoryData<string> CleanTexts => new()
     {
-        "id 1850001 and 2.825 and 12.82",
+        "id 1850001 and 12.82",
         "application a1b2c3d4-0000-4000-8000-a85000b00000 done",
         "trace 4bf92f3577b34daa85000aa0e0e47360 span 00f067aa0ba85000",
         "900 a month over 30 years",
@@ -60,5 +61,22 @@ public sealed class ForbiddenNumbersTests
     public void Find_ignores_ids_longer_numbers_and_short_integers(string text)
     {
         Assert.Empty(_search.Find(text));
+    }
+
+    public static TheoryData<string> UnroundedLeaks => new()
+    {
+        "ltv=0.8",
+        "dti=0.3302",
+        "lti=2.8235",
+        "ltv 80.0%",
+        "payment 1438.9",
+    };
+
+    // Review gate: E1's unrounded values, fractions and 1 dp forms are forbidden too (prefix match).
+    [Theory]
+    [MemberData(nameof(UnroundedLeaks))]
+    public void Golden_E1_forbids_unrounded_and_fraction_forms(string text)
+    {
+        Assert.NotEmpty(GoldenExample.Get("E1").Forbidden.Find(text));
     }
 }

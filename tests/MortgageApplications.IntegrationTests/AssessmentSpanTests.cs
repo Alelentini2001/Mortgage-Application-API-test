@@ -104,13 +104,30 @@ public sealed class AssessmentSpanTests
         Assert.Single(capture.ProcessSpans(errored));
     }
 
-    // O14 (P5-D3 A): exactly one span per processed item, in its own trace, not the POST's.
+    // O14 (P5-D3 A): exactly one span per processed item, in its own trace, not the POST's. Review gate: the host
+    // (and so the worker's ExecuteAsync) starts while a sampled test activity is current, so the worker inherits it
+    // as a would-be parent; the span must still be a root span in its own trace.
     [Fact]
     public async Task Processed_item_has_exactly_one_span_in_a_trace_separate_from_the_post()
     {
         await using var factory = new ApiFactory();
         var traced = new TraceparentHandler(ActivityTraceId.CreateRandom());
-        var client = factory.CreateDefaultClient(traced);
+        using var parentSource = new ActivitySource("MortgageApplications.Tests.HostStart");
+        using var parentListener = new ActivityListener
+        {
+            ShouldListenTo = source => ReferenceEquals(source, parentSource),
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+        };
+        ActivitySource.AddActivityListener(parentListener);
+        HttpClient client;
+        string hostStartTrace;
+        using (var hostStart = parentSource.StartActivity("host.start"))
+        {
+            Assert.NotNull(hostStart);
+            hostStartTrace = hostStart.TraceId.ToHexString();
+            client = factory.CreateDefaultClient(traced);
+        }
+
         using var capture = new TelemetryCapture(factory.Services);
 
         var (_, assessmentId, _) = await Telemetry.AssessAsync(client, Http.BaseBody);
@@ -120,6 +137,7 @@ public sealed class AssessmentSpanTests
 
         var span = Assert.Single(capture.ProcessSpans(assessmentId));
         Assert.NotEqual(traced.TraceId, span.TraceId);
+        Assert.NotEqual(hostStartTrace, span.TraceId);
         Assert.Null(span.ParentSpanId);
     }
 

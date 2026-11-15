@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using MortgageApplications.Core.Applications;
@@ -83,6 +84,29 @@ public sealed class AssessmentMetricTests
         Assert.Equal(2, capture.MeasurementsOf(Telemetry.Counter).Count);
         Assert.Equal(2, capture.MeasurementsOf(Telemetry.Histogram).Count);
     }
+
+    // Security gate (instrument set) and review gate (O17 advice): the MortgageApplications meter publishes exactly
+    // the two allowed instruments, with their types and units, so a new instrument recording an amount cannot slip
+    // past the tag checks; the histogram advises second-based bucket boundaries (Instrument<T>.Advice, public in .NET 9+).
+    [Fact]
+    public async Task Our_meter_publishes_only_the_two_allowed_instruments_with_second_buckets()
+    {
+        await using var factory = new ApiFactory();
+        _ = factory.CreateClient();
+
+        using var capture = new TelemetryCapture(factory.Services);
+
+        var ours = capture.Published.Where(p => p.Meter == "MortgageApplications").OrderBy(p => p.Name, StringComparer.Ordinal).ToList();
+        Assert.Equal(
+            [
+                (Telemetry.Histogram, typeof(Histogram<double>), "s"),
+                (Telemetry.Counter, typeof(Counter<long>), "{assessment}"),
+            ],
+            ours.Select(p => (p.Name, p.Type, p.Unit)));
+        Assert.Equal(_durationBuckets, ours[0].BucketBoundaries);
+    }
+
+    private static readonly double[] _durationBuckets = [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10];
 
     private static string Tags(CapturedMeasurement m) =>
         $"{m.Tag("assessment.outcome")}/{m.Tag("assessment.decision") ?? "-"}/{m.Tag("assessment.rules_version")}";

@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using MortgageApplications.Core.Applications;
 using MortgageApplications.Infrastructure.Persistence;
 
 namespace MortgageApplications.IntegrationTests;
@@ -47,4 +48,25 @@ internal static class Telemetry
         Assert.Equal("Failed", Http.Status(await client.PollUntilFinishedAsync(posted.Headers.Location!.OriginalString)));
         return (applicationId, Guid.Parse(await posted.IdAsync()));
     }
+}
+
+/// <summary>Throws with a message that holds no value, so any number in the 500 log came from somewhere else.</summary>
+internal sealed class ValueFreeThrowingRepository : IMortgageApplicationRepository
+{
+    public Task AddAsync(MortgageApplication application, CancellationToken cancellationToken) => throw Boom();
+
+    public Task<MortgageApplication?> FindAsync(Guid id, string ownerId, CancellationToken cancellationToken) => throw Boom();
+
+    public Task AddAssessmentAsync(AffordabilityAssessment assessment, CancellationToken cancellationToken) => throw Boom();
+
+    public Task<AffordabilityAssessment?> FindAssessmentAsync(
+        Guid applicationId, Guid assessmentId, string ownerId, CancellationToken cancellationToken) => throw Boom();
+
+    public Task<AssessmentWorkItem?> FindForProcessingAsync(Guid assessmentId, CancellationToken cancellationToken) => throw Boom();
+
+    public Task UpdateAssessmentAsync(AffordabilityAssessment assessment, CancellationToken cancellationToken) => throw Boom();
+
+    public Task<IReadOnlyList<Guid>> ListPendingAssessmentIdsAsync(CancellationToken cancellationToken) => throw Boom();
+
+    private static InvalidOperationException Boom() => new("Simulated repository failure.");
 }

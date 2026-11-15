@@ -26,16 +26,26 @@ public sealed record CapturedSpan(
     ActivityStatusCode Status,
     string? StatusDescription,
     IReadOnlyList<KeyValuePair<string, string?>> Tags,
-    IReadOnlyList<string> Events)
+    IReadOnlyList<string> Events,
+    IReadOnlyList<string> Links)
 {
     public bool HasTag(string key) => Tags.Any(t => t.Key == key);
 
     public string? Tag(string key) => Tags.Where(t => t.Key == key).Select(t => t.Value).FirstOrDefault();
 
-    /// <summary>Everything an exporter sends as text for this span: name, status description, tags and events.</summary>
+    /// <summary>
+    /// Everything an exporter sends as text for this span: name, status description, tags, and each event and link
+    /// with its tags (security gate: an event or link tag could carry a value too).
+    /// </summary>
     public string Text =>
-        $"{Source} {Name} {StatusDescription} {string.Join(' ', Tags.Select(t => $"{t.Key}={t.Value}"))} {string.Join(' ', Events)}";
+        $"{Source} {Name} {StatusDescription} {Join(Tags)} {string.Join(' ', Events)} {string.Join(' ', Links)}";
+
+    internal static string Join(IEnumerable<KeyValuePair<string, string?>> tags) =>
+        string.Join(' ', tags.Select(t => $"{t.Key}={t.Value}"));
 }
+
+/// <summary>An instrument as published: meter, name, type, unit and, for a histogram, its advised bucket boundaries.</summary>
+public sealed record PublishedInstrument(string Meter, string Name, Type Type, string? Unit, IReadOnlyList<double>? BucketBoundaries);
 
 /// <summary>One metric measurement, copied when it was recorded.</summary>
 public sealed record CapturedMeasurement(
@@ -57,6 +67,7 @@ public sealed class TelemetryCapture : IDisposable
 {
     private readonly ConcurrentQueue<CapturedSpan> _spans = new();
     private readonly ConcurrentQueue<CapturedMeasurement> _measurements = new();
+    private readonly ConcurrentQueue<PublishedInstrument> _published = new();
     private readonly ActivityListener _activityListener;
     private readonly MeterListener _meterListener;
 
@@ -77,6 +88,12 @@ public sealed class TelemetryCapture : IDisposable
             {
                 if (ReferenceEquals(instrument.Meter.Scope, meterScope))
                 {
+                    _published.Enqueue(new PublishedInstrument(
+                        instrument.Meter.Name,
+                        instrument.Name,
+                        instrument.GetType(),
+                        instrument.Unit,
+                        (instrument as Histogram<double>)?.Advice?.HistogramBucketBoundaries));
                     listener.EnableMeasurementEvents(instrument);
                 }
             },
@@ -91,6 +108,9 @@ public sealed class TelemetryCapture : IDisposable
     public IReadOnlyList<CapturedSpan> Spans => [.. _spans];
 
     public IReadOnlyList<CapturedMeasurement> Measurements => [.. _measurements];
+
+    /// <summary>Every instrument of the host's meter factory, as published (also those created before the capture).</summary>
+    public IReadOnlyList<PublishedInstrument> Published => [.. _published];
 
     /// <summary>The worker's <c>assessment.process</c> spans for one assessment, in the order they stopped.</summary>
     public IReadOnlyList<CapturedSpan> ProcessSpans(Guid assessmentId) =>
@@ -136,8 +156,12 @@ public sealed class TelemetryCapture : IDisposable
         activity.ParentSpanId == default ? null : activity.ParentSpanId.ToHexString(),
         activity.Status,
         activity.StatusDescription,
-        [.. activity.TagObjects.Select(t => new KeyValuePair<string, string?>(t.Key, Convert.ToString(t.Value, CultureInfo.InvariantCulture)))],
-        [.. activity.Events.Select(e => e.Name)]);
+        [.. Strings(activity.TagObjects)],
+        [.. activity.Events.Select(e => $"{e.Name} {CapturedSpan.Join(Strings(e.Tags))}")],
+        [.. activity.Links.Select(l => $"link {CapturedSpan.Join(Strings(l.Tags ?? []))}")]);
+
+    private static IEnumerable<KeyValuePair<string, string?>> Strings(IEnumerable<KeyValuePair<string, object?>> tags) =>
+        tags.Select(t => new KeyValuePair<string, string?>(t.Key, Convert.ToString(t.Value, CultureInfo.InvariantCulture)));
 
     private void Record<T>(Instrument instrument, T value, ReadOnlySpan<KeyValuePair<string, object?>> tags)
         where T : struct, IConvertible

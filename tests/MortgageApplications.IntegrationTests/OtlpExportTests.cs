@@ -19,8 +19,12 @@ namespace MortgageApplications.IntegrationTests;
 [Collection(TelemetryGroup.Name)]
 public sealed class OtlpExportTests
 {
-    // O24: without an endpoint nothing is exported. With the protocol set to http/protobuf, the exporter's default
-    // endpoint would be localhost:4318, so the test listens there (IPv4 and IPv6 loopback) and sees no connection.
+    // O24: without an endpoint nothing is exported. With the protocol set to http/protobuf and no endpoint key, an
+    // exporter registered unconditionally would send to its default endpoint, localhost:4318, so the test listens
+    // there (IPv4 and IPv6 loopback) and expects no connection. The port is fixed on purpose: any endpoint key that
+    // points the exporter at a free port also turns the exporter on (Program checks all four keys), so only the
+    // default port can catch an unconditional registration. When 4318 is taken the test is skipped, visibly, with
+    // the reason; it never passes silently.
     [Fact]
     public async Task Without_an_endpoint_no_otlp_traffic_is_sent()
     {
@@ -28,11 +32,11 @@ public sealed class OtlpExportTests
         using var ipv6 = TryListen(IPAddress.IPv6Loopback, 4318);
         if (ipv4 is null)
         {
-            Assert.Skip("Port 4318 on 127.0.0.1 is in use, so the default OTLP/HTTP endpoint cannot be watched.");
+            Assert.Skip("port 4318 in use");
         }
 
         await using var factory = new ApiFactory();
-        var host = ExportingHost(factory, endpoint: null);
+        var host = ExportingHost(factory);
 
         await Telemetry.AssessAsync(host.CreateClient(), Http.BaseBody);
         await host.DisposeAsync();
@@ -47,7 +51,7 @@ public sealed class OtlpExportTests
     {
         using var collector = new FakeOtlpCollector();
         await using var factory = new ApiFactory();
-        var host = ExportingHost(factory, collector.Endpoint);
+        var host = ExportingHost(factory, ("OTEL_EXPORTER_OTLP_ENDPOINT", collector.Endpoint));
 
         await Telemetry.AssessAsync(host.CreateClient(), Http.BaseBody);
         await host.DisposeAsync();
@@ -63,7 +67,7 @@ public sealed class OtlpExportTests
     {
         using var collector = new FakeOtlpCollector();
         await using var factory = new ApiFactory();
-        var host = ExportingHost(factory, collector.Endpoint);
+        var host = ExportingHost(factory, ("OTEL_EXPORTER_OTLP_ENDPOINT", collector.Endpoint));
 
         await Telemetry.AssessAsync(host.CreateClient(), Http.BaseBody);
         await host.DisposeAsync();
@@ -76,12 +80,54 @@ public sealed class OtlpExportTests
         Assert.Empty(GoldenExample.Get("E1").Forbidden.Find(exported));
     }
 
-    private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> ExportingHost(ApiFactory factory, string? endpoint)
+    // O25b (review gate): a signal-specific endpoint alone turns the exporter on; with only the traces key set,
+    // trace data reaches the collector at that URL.
+    [Fact]
+    public async Task Traces_endpoint_alone_exports_traces()
+    {
+        using var collector = new FakeOtlpCollector();
+        await using var factory = new ApiFactory();
+        var host = ExportingHost(factory, ("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", $"{collector.Endpoint}/v1/traces"));
+
+        await Telemetry.AssessAsync(host.CreateClient(), Http.BaseBody);
+        await host.DisposeAsync();
+
+        var traces = collector.Requests.Where(r => r.Path == "/v1/traces").ToList();
+        Assert.NotEmpty(traces);
+        Assert.Contains("assessment.process", string.Concat(traces.Select(r => Encoding.UTF8.GetString(r.Body))), StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string, string, string> ServiceNameSettings => new()
+    {
+        { "OTEL_SERVICE_NAME", "svc-by-name", "svc-by-name" },
+        { "OTEL_RESOURCE_ATTRIBUTES", "deployment.environment=demo,service.name=svc-by-attributes", "svc-by-attributes" },
+    };
+
+    // Review gate: a service name from OTEL_SERVICE_NAME or from service.name in OTEL_RESOURCE_ATTRIBUTES is kept;
+    // the default name does not override it.
+    [Theory]
+    [MemberData(nameof(ServiceNameSettings))]
+    public async Task Configured_service_name_is_not_overridden_by_the_default(string key, string value, string expected)
+    {
+        using var collector = new FakeOtlpCollector();
+        await using var factory = new ApiFactory();
+        var host = ExportingHost(factory, ("OTEL_EXPORTER_OTLP_ENDPOINT", collector.Endpoint), (key, value));
+
+        Assert.Equal(HttpStatusCode.OK, (await host.CreateClient().GetPathAsync("/health")).StatusCode);
+        await host.DisposeAsync();
+
+        var exported = string.Concat(collector.Requests.Select(r => Encoding.UTF8.GetString(r.Body)));
+        Assert.Contains(expected, exported, StringComparison.Ordinal);
+        Assert.DoesNotContain("mortgage-applications", exported, StringComparison.Ordinal);
+    }
+
+    private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> ExportingHost(
+        ApiFactory factory, params (string Key, string Value)[] extra)
     {
         var settings = new Dictionary<string, string?> { ["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf" };
-        if (endpoint is not null)
+        foreach (var (key, value) in extra)
         {
-            settings["OTEL_EXPORTER_OTLP_ENDPOINT"] = endpoint;
+            settings[key] = value;
         }
 
         return factory.WithWebHostBuilder(

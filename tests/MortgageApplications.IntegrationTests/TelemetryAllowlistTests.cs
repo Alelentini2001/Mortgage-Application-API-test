@@ -3,6 +3,7 @@ using System.Net;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using MortgageApplications.Api.Identity;
+using MortgageApplications.Core.Applications;
 
 namespace MortgageApplications.IntegrationTests;
 
@@ -21,6 +22,15 @@ public sealed class TelemetryAllowlistTests
 
     private static readonly string[] _logKeys =
         ["AssessmentId", "ApplicationId", "Outcome", "Count", "RetryDelaySeconds", "{OriginalFormat}"];
+
+    // What the ASP.NET Core instrumentation (1.20.1) sets on our server spans today, minus the client-controlled
+    // user_agent.original, plus our assessment.id. Rules section 6 does not name these HTTP keys yet (see the phase
+    // file, "Open issues").
+    private static readonly string[] _serverSpanKeys =
+    [
+        "error.type", "http.request.method", "http.response.status_code", "http.route", "network.protocol.version",
+        "server.address", "url.path", "url.query", "url.scheme", "assessment.id",
+    ];
 
     public static TheoryData<string> GoldenCases => ["E1", "E2"];
 
@@ -100,6 +110,36 @@ public sealed class TelemetryAllowlistTests
         {
             Assert.DoesNotContain(texts, t => t.Contains(sentinel, StringComparison.Ordinal));
         }
+    }
+
+    // O4 (security and review gates; skipped in the proposal): the framework's server spans carry only the
+    // allowlisted keys, for a 201, a 202 with a query string, a 200, a 404 and a 500, all sent with a User-Agent.
+    [Fact]
+    public async Task Server_span_tag_keys_are_in_the_allowlist()
+    {
+        await using var factory = new ApiFactory();
+        // One handler per client: a DelegatingHandler belongs to one pipeline. Both send the same trace ID.
+        var traceId = ActivityTraceId.CreateRandom();
+        var traced = new TraceparentHandler(traceId);
+        var client = factory.CreateDefaultClient(traced);
+        using var throwing = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(
+            services => services.AddScoped<IMortgageApplicationRepository, ValueFreeThrowingRepository>()));
+        var throwingClient = throwing.CreateDefaultClient(new TraceparentHandler(traceId));
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("probe/85123");
+        throwingClient.DefaultRequestHeaders.UserAgent.ParseAdd("probe/85123");
+        using var capture = new TelemetryCapture(factory.Services);
+
+        var applicationId = await client.CreateApplicationAsync();
+        var posted = await client.PostJsonAsync($"/api/applications/{applicationId}/assessments?x=1", "");
+        await client.GetPathAsync(posted.Headers.Location!.OriginalString);
+        await client.GetPathAsync($"/api/applications/{Guid.NewGuid()}");
+        await throwingClient.GetPathAsync($"/api/applications/{Guid.NewGuid()}");
+
+        Func<CapturedSpan, bool> ours = s => s.TraceId == traced.TraceId && s.Kind == ActivityKind.Server;
+        await Http.EventuallyAsync(() => Task.FromResult(capture.Spans.Count(ours) >= 5), () => "the 5 server spans");
+        var keys = capture.Spans.Where(ours).SelectMany(s => s.Tags).Select(t => t.Key).Distinct().ToList();
+        Assert.Empty(keys.Except(_serverSpanKeys));
+        Assert.Empty(_serverSpanKeys.Except(keys));
     }
 
     // O22: our own log entries carry only allowlisted field names. Control: the new queued log is among them.
