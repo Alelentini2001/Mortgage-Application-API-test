@@ -34,21 +34,27 @@ builder.Services.AddSingleton<IAssessmentQueue>(sp => sp.GetRequiredService<Chan
 builder.Services.AddHostedService<AssessmentWorker>();
 
 // Telemetry (Phase 5, P5-D1 A): ASP.NET Core server spans and meters, our worker's span and metrics
-// (AssessmentTelemetry), and logs, through the OpenTelemetry SDK. The OTLP exporter is added only when
-// OTEL_EXPORTER_OTLP_ENDPOINT is set (read from configuration, which includes environment variables), so tests, CI
-// and a plain `dotnet run` never try to connect. The ASP.NET Core instrumentation redacts query-string values.
+// (AssessmentTelemetry), and logs, through the OpenTelemetry SDK. The OTLP exporter is added only when an OTLP
+// endpoint is configured (configuration includes environment variables), so tests, CI and a plain `dotnet run` never
+// try to connect. The ASP.NET Core instrumentation redacts query-string values.
 builder.Services.AddSingleton<AssessmentTelemetry>();
 var openTelemetry = builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource =>
     {
-        // AddService would override OTEL_SERVICE_NAME, so the default name applies only when that is not set.
-        if (string.IsNullOrWhiteSpace(builder.Configuration["OTEL_SERVICE_NAME"]))
+        // AddService would override a service name set through OTEL_SERVICE_NAME or as service.name in
+        // OTEL_RESOURCE_ATTRIBUTES, so the default name applies only when neither sets one.
+        var namedByAttributes = builder.Configuration["OTEL_RESOURCE_ATTRIBUTES"]?
+            .Contains("service.name=", StringComparison.Ordinal) ?? false;
+        if (string.IsNullOrWhiteSpace(builder.Configuration["OTEL_SERVICE_NAME"]) && !namedByAttributes)
         {
             resource.AddService("mortgage-applications");
         }
     })
     .WithTracing(tracing => tracing
-        .AddAspNetCoreInstrumentation()
+        // user_agent.original is client-controlled text and not in the rules section 6 allowlist: drop it. The
+        // package has no option for it; EnrichWithHttpRequest runs after the instrumentation sets its tags.
+        .AddAspNetCoreInstrumentation(options =>
+            options.EnrichWithHttpRequest = (activity, _) => activity.SetTag("user_agent.original", null))
         .AddSource(AssessmentTelemetry.Name))
     .WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
@@ -56,7 +62,17 @@ var openTelemetry = builder.Services.AddOpenTelemetry()
         .AddMeter("Microsoft.AspNetCore.Hosting")
         .AddMeter("Microsoft.AspNetCore.Server.Kestrel"))
     .WithLogging();
-if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+
+// The base endpoint or any signal-specific one turns the exporter on. With only a signal-specific key, the other
+// signals use the exporter's default endpoint (localhost), where nothing listens in a container.
+string[] otlpEndpointKeys =
+[
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+];
+if (otlpEndpointKeys.Any(key => !string.IsNullOrWhiteSpace(builder.Configuration[key])))
 {
     openTelemetry.UseOtlpExporter();
 }
