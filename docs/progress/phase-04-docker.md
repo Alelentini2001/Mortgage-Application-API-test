@@ -137,6 +137,15 @@ Logged here during the parallel run and copied to `docs/ai/PROMPTS.md` on `main`
 
 ## What was built (files)
 
+Written by `parallel-implementer` on 2026-11-15 (P04-06). No .NET code, test project, `.dockerignore` or ADR file was changed; ADR 0002 is written later by the lead agent.
+
+| File | What |
+|---|---|
+| `Dockerfile` (new) | `sdk:10.0` build stage: copies `global.json`, `Directory.Build.props`, `Directory.Packages.props` and the three `src` `.csproj` files, restores `src/MortgageApplications.Api/MortgageApplications.Api.csproj` only (ambiguity 1), then copies `src/` and runs `dotnet publish -c Release -o /app/publish --no-restore`. `aspnet:10.0` runtime stage: `mkdir -p /app/data && chown "$APP_UID" /app/data`, copies the publish output, `USER $APP_UID`, `EXPOSE 8080`, `ENTRYPOINT ["dotnet", "MortgageApplications.Api.dll"]`. No `ENV`, no secrets. |
+| `compose.yaml` (new) | Service `api`, `build: .`, port `127.0.0.1:8080:8080` (ambiguity 4), `ASPNETCORE_ENVIRONMENT: Development` (P4-D1), `ConnectionStrings__MortgageApplications: Data Source=/app/data/mortgage-applications.db`, named volume `data:/app/data`. No Aspire dashboard (P4-D2). |
+| `.github/workflows/ci.yml` | New `docker` job (P4-D3, ambiguities 2 and 3): job-level `permissions: contents: read`, `timeout-minutes: 15`, the same pinned `actions/checkout` SHA as `verify` with `persist-credentials: false`; `docker compose up -d --build`; a poll of `GET /health` (60 s, fails and prints `docker compose logs` on timeout or if the `api` container is not running); `POST /api/applications` with the golden E1 body from `Http.cs` (ambiguity 5), expects 201 and a `Location` header, then `GET` of that path expects 200 and a body equal to the POST response (compared with `jq -S`); final `if: always()` step `docker compose down -v`. Bodies are written to files and never echoed. |
+| `docs/progress/phase-04-docker.md` | This section, "Results" and "Open issues". |
+
 ## Tests
 
 ### Proposal (test-designer P04-04, approved by Alessandro P04-05: recommended selection and answers)
@@ -172,6 +181,43 @@ Ambiguities, with the recommended answer:
 5. A valid POST body for C4 is taken from the existing integration tests (`Http.cs`).
 6. The runtime image is the default Debian `aspnet:10.0` (it has `sh` and `id`, which C2 and C9 use). Chiseled images are a Phase 8 topic.
 
+### Results (parallel-implementer, 2026-11-15)
+
+The Docker daemon was not available on the implementer's machine: `docker version` printed the client (29.3.1, `desktop-linux` context) and then `failed to connect to the docker API at unix:///Users/ale_ssd/.docker/run/docker.sock ... no such file or directory`. As instructed, the daemon was not started and no LOCAL check was run. The CI rows run for the first time when the PR's CI runs.
+
+| ID | Run? | Command | Result |
+|---|---|---|---|
+| C1 | not run | `docker compose up --build -d` in a fresh clone | Not run: Docker daemon not available |
+| C2 | not run (LOCAL); CI pending | `docker inspect -f '{{.Config.User}}'`, `docker compose exec api id -u` | Not run locally: Docker daemon not available. The CI job does not check the UID directly; it only proves the non-root container can write `/app/data` (C5). |
+| C3 | not run (LOCAL); CI pending | `curl http://127.0.0.1:8080/health` | Not run locally: Docker daemon not available. CI step "Wait for GET /health (60 s)" covers it once CI runs. |
+| C4 | not run (LOCAL); CI pending | `POST /api/applications` with the E1 body | Not run locally: Docker daemon not available. CI step "POST then GET an application" covers it. |
+| C5 | not run (LOCAL); CI pending | `GET` of the returned `Location` | Not run locally: Docker daemon not available. Same CI step. |
+| C6 | not run | `docker compose down` then `up -d`, `GET` the old ID | Not run: Docker daemon not available |
+| C7 | not run | `docker compose down -v` then `up -d`, `GET` the old ID, new `POST` | Not run: Docker daemon not available |
+| C8 | not run | `docker compose exec api stat -c '%u' /app/data` | Not run: Docker daemon not available |
+| C9 | not run | planted `*.db`, `.env`, `.env.local`, `*.pem`, `docs/`, `tests/` files in the clone, then `find` in the image | Not run: Docker daemon not available (no planted files were created) |
+| C10 | not run | `docker history --no-trunc`, `docker inspect -f '{{.Config.Env}}'` | Not run: Docker daemon not available |
+| C11 | not run | `docker compose exec api dotnet --list-sdks`, `docker image ls` | Not run: Docker daemon not available |
+| C13 | run (review) | static review of `.github/workflows/ci.yml` | Pass, see below |
+| C14 | not run | compose with `Affordability__AssessmentRate` set to an invalid value, then the poll step | Not run locally: Docker daemon not available. The "one deliberate CI break" part is not done either (it needs a pushed branch, and pushing is out of the implementer's scope). |
+| C16 | CI pending | final `if: always()` step `docker compose down -v` | Present in the workflow (C13); runs for the first time with the PR's CI. |
+
+**C13 static review** of the `docker` job (`grep -n -E 'secrets|login|push|GITHUB_TOKEN|\$\{\{|uses:|permissions|timeout|persist|always' .github/workflows/ci.yml` and a read of the file):
+- Job-level `permissions: contents: read` (lines 36-37), on top of the workflow-level `contents: read`.
+- `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`, the same SHA as the `verify` job, with `persist-credentials: false`. No other action is used.
+- `timeout-minutes: 15`.
+- No `secrets.` reference, no `GITHUB_TOKEN`, no `docker login`, no `docker push`. The only `push` match is the workflow trigger (line 4).
+- No `${{ }}` expression inside any `run:` block, so no script injection from event data.
+- The final step has `if: always()` and runs `docker compose down -v`.
+- Request and response bodies go to files (`created.json`, `fetched.json`) and are not printed; on failure only status codes, the `Location` path and `docker compose logs` are printed. The app does not log amounts (AGENTS.md rule), so the logs hold no money values.
+- The `docker` job does not depend on `verify`; the two run in parallel.
+
+**Supporting checks that are not container checks** (done because Docker was not available; they test the scripts and the build commands, not the image):
+- The workflow parses as YAML (`ruby -ryaml`: jobs `verify` and `docker`, steps as listed above) and every `run:` block passes `bash -n`.
+- The two CI scripts were run with `bash -e` against the API started with `dotnet run --no-launch-profile` on `http://127.0.0.1:8080` (`ASPNETCORE_ENVIRONMENT=Development`, a scratchpad SQLite file). Poll: `GET /health returned 200.`, exit 0. Round trip: `POST returned 201 and GET /api/applications/<id> returned the same application.`, exit 0. The `docker compose ps` / `logs` branches were not reached.
+- The Dockerfile's restore and publish commands were run on the host in a copy of the build context (only `global.json`, `Directory.Build.props`, `Directory.Packages.props` and `src/` without `bin/` and `obj/`): `dotnet restore src/MortgageApplications.Api/MortgageApplications.Api.csproj` restored the three projects, and `dotnet publish ... -c Release -o publish --no-restore` succeeded (output includes `MortgageApplications.Api.dll`, `appsettings*.json` and the SQLite native `runtimes/`). This supports ambiguity 1 but is not the Linux build.
+- `./scripts/verify.sh` (full): build 0 warnings, 0 errors; tests 347 passed, 0 failed; hook tests 91 passed; format check passed; `VERIFY PASSED (full)`.
+
 ## Security gate
 
 ## Review gate
@@ -184,6 +230,9 @@ Ambiguities, with the recommended answer:
 
 - Image digest pinning: Learn calls it a best practice; P4-D4 chose tags for now. Revisit in Phase 8.
 - X1 (no startup migration outside Development, as an xUnit test): deferred until Phase 4 and Phase 6 are both merged.
+- LOCAL checks C1-C11 and C14 were not run: the Docker daemon was not available to the implementer (see "Results"). They must be run in a fresh clone on a machine with Docker before Checkpoint B; until then the image has never been built.
+- C14's "one deliberate CI break" is not done: it needs a pushed commit that breaks the container, then a revert. Needs Alessandro's go-ahead, since it adds a red CI run to the PR.
+- C2 (non-root UID) and C8 (`/app/data` owner) are LOCAL only. CI proves the volume is writable (C5) but not the UID itself. Adding a `docker compose exec api id -u` step to CI is a small optional extension; not done because it is outside the approved plan.
 
 ## Time spent (approx.)
 
