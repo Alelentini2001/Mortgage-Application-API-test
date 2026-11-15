@@ -104,9 +104,75 @@ Planning: lead agent only (no subagent yet).
 - **Purpose:** Checkpoint A approval. The agent had asked: "Do you approve the plan with A on all five, including adding the 3 OpenTelemetry packages?"
 - **Outcome:** decisions recorded (all A), packages approved; branch created; `test-designer` run (P05-03).
 
+### P05-03 · agent→subagent (`test-designer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Phase 5 (logging + instrumentation) of a .NET 10 mortgage-application API (Minimal APIs, EF Core SQLite, a background assessment worker). Propose test cases for the approved plan; do not write code.
+
+  Read first: docs/progress/phase-05-observability.md (goal, plan, approved decisions P5-D1 to P5-D5), docs/spec/affordability-rules.md (section 6 logging allowlist, section 8 golden examples E1 and E2), docs/layers/PRODUCTION-LAYERS.md (Observability row), .claude/rules/tests.md, tests/CLAUDE.md, .claude/rules/security.md, AGENTS.md, and the current code and tests: src/MortgageApplications.Api/Program.cs, src/MortgageApplications.Api/Assessments/AssessmentWorker.cs, src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs, src/MortgageApplications.Api/Errors/ProblemExceptionHandler.cs, src/MortgageApplications.Api/appsettings.json, src/MortgageApplications.Infrastructure/DatabaseMigration.cs, tests/MortgageApplications.IntegrationTests/ (ApiFactory, CapturingLoggerProvider, AssessmentWorkerTests, ErrorHandlingTests, StartupTests, Http). Existing tests already cover the six worker log messages without amounts (I-14) and a non-empty traceId in every ProblemDetails (I40): don't repeat them, but say which ones should be extended.
+
+  What will be built (not written yet):
+  - AssessmentTelemetry in the Api project: ActivitySource and Meter both named "MortgageApplications"; counter mortgage.assessments.processed and histogram mortgage.assessment.duration (seconds), tags assessment.outcome (Completed or Failed), assessment.decision (Approved or Declined, only when Completed), assessment.rules_version.
+  - AssessmentWorker starts span "assessment.process" per item with tags assessment.id, application.id, then outcome, decision, rules_version; status Error on a processing error with the exception type only, no message.
+  - Program.cs: AddOpenTelemetry with service name, ASP.NET Core tracing and metrics, our source and meter, the Microsoft.AspNetCore.Hosting and Microsoft.AspNetCore.Server.Kestrel meters, and the OpenTelemetry log provider; the OTLP exporter only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+  - A new [LoggerMessage] when an assessment is queued (assessment ID and application ID only). The framework's 500 error log stays (P5-D4). Microsoft.EntityFrameworkCore.Database.Command at Warning in appsettings.json (P5-D5).
+  - compose.observability.yaml adds the Aspire dashboard (UI on 127.0.0.1:18888, OTLP only on the compose network) and sets OTEL_EXPORTER_OTLP_ENDPOINT on api; plain compose and CI unchanged.
+  - Carry-overs: "ADR in Phase 4" comments become "ADR 0002"; test X1: outside Development the app does not run migrations at startup (note ApiFactory migrates its own database before any host starts, so X1 needs a database that the factory did not migrate).
+  - Tests must not add packages: listen with ActivityListener and MeterListener (built into .NET).
+
+  Cover at least: the allowlist test the layer table asks for (none of an assessment's input or output numbers, raw or formatted, in captured log text including exception text, span tag values, or metric tag values) for an Approved (E1) and a Declined (E2) case, and say exactly which number forms to check (raw decimal, 2 dp, thousands separators, invariant and current culture); span and metric tag KEYS limited to an allowlist; exactly one assessment.process span per processed item with the expected tags and the right status for Completed, Failed and a processing error; the counter and the histogram per outcome and decision; the new queued log; a real 500 is logged by the framework with no input values and its ProblemDetails traceId matches the request's trace ID; the OTLP exporter is not registered when the endpoint is not set (and how to prove that without a network); EF command logs no longer at Information; X1; the compose override (what can be checked in CI or locally without the dashboard UI). Say which cases are unit tests and which are integration tests, how to keep listener tests isolated when xUnit runs test classes in parallel (ActivityListener and MeterListener are process-wide), and how to avoid timing flakiness.
+
+  Use the agent's output format. Mark each case must or nice, keep the list tight (no redundant cases), and list any ambiguities in the plan you need Alessandro to settle.
+  ```
+- **Purpose:** propose Phase 5 test cases before any test is written.
+- **Outcome:** 31 cases (O1–O31) and 13 questions (Q1–Q13). See "Tests", "Proposal".
+
 ## What was built (files)
 
 ## Tests
+
+### Proposal (`test-designer`, P05-03; waiting for Alessandro)
+
+All new cases are integration tests: `tests/CLAUDE.md` limits unit tests to Core, and the new code is in the Api project. No test package: `ActivityListener` and `MeterListener` are built in.
+
+Facts it found that shape the tests (checked by the lead agent where marked):
+- `InvariantGlobalization=true`, so culture forms (`85.000,00`, `85 000,00`) are built with hand-made `NumberFormatInfo`, not named cultures.
+- `CapturingLoggerProvider` keeps only the formatted message and exception text; it must also keep structured state, scopes and the current trace ID, which the OpenTelemetry log provider exports.
+- `ThrowingRepository` in `ErrorHandlingTests` puts `SECRET-MARKER-123` in its message, so the 500-log test needs its own thrower with no value in the message.
+- The worker saves before it ends the span and records the metric, so every telemetry assertion waits (bounded) on the captured span or measurement itself.
+- Listeners are process-wide: telemetry test classes go in one collection with parallelisation off, spans are filtered by the test's own assessment IDs, and the `Meter` comes from `IMeterFactory` (lead agent: Learn confirms factory meters are isolated per service collection, "especially useful for testing").
+- The ProblemDetails `traceId` format (bare trace ID or the W3C `00-…` string) was not confirmed on Learn; O6 compares only the 32-hex trace-ID part.
+
+Recommended selection (lead agent):
+
+| Group | Cases | Recommended |
+|---|---|---|
+| Allowlist and security | O1 E1 scan of logs, spans and metric tags for every forbidden number form, with a control that the GET body has the numbers; O2 the same for E2; O3 our span and metric tag keys limited to the allowlist; O5 extend I-13/I-14 to spans, metrics and structured state; O6 a 500 is logged by the framework with no input values and its `traceId` matches a sent `traceparent`; O9 a processing error sets span status Error with the type only | all must |
+| | O7 `traceparent` correlation for 404 and 400 (extend I40); O8 a malformed body logs no Error and no value | nice, include |
+| | O4 deny-pattern on framework tag keys | skip: O1 already scans every source |
+| Spans | O10 Completed/Approved; O11 Declined is not an error; O12 Failed has no decision tag; O13 processing error, worker continues; O14 one span per item, separate traces from the POST (P5-D3); O15 the POST server span carries `assessment.id` | all must |
+| Metrics | O16 counter per outcome and decision; O17 histogram in seconds, exact value with a fake `TimeProvider`; O18 a re-queued ID is not counted twice | all must |
+| | O19 counter on a processing error | skip: settled by Q3 (not counted) |
+| Logs | O20 the new queued log; O21 no queued log for an unknown or another owner's application; O22 log field keys limited to the allowlist; O23 EF command logs below Warning are gone, with a control host at Information | all must |
+| Export and startup | O24 no OTLP traffic without an endpoint (loopback listener); O25 traffic with one (positive control); O27 X1, no startup migration outside Development, with a Development control | all must |
+| | O26 the exported bytes contain our span and meter names and none of the forbidden numbers | nice, include (only proof that `AddSource`/`AddMeter` are registered) |
+| Compose and carry-overs | O30 manual dashboard check (plan step 10) | must (manual) |
+| | O28 file-text check of the override; O29 `docker compose config` locally; O31 grep for "ADR in Phase 4" | nice, include (O29 and O31 as verify steps, not tests) |
+
+Questions and the lead agent's recommended answers:
+- **Q1** Failed outcome (calculation threw, row marked Failed): span status **Unset** with `assessment.outcome=Failed`; the worker did its job.
+- **Q2** POST span: **build it**, the endpoint tags its server span with `assessment.id` (P5-D3 says both spans carry it).
+- **Q3** Processing error (row stays Pending): span status **Error**, type only; **no counter or histogram** measurement; no `assessment.outcome` tag.
+- **Q4** `assessment.rules_version` on Failed: **the configured value** (from the options).
+- **Q5** NotFound and Skipped: a span with `assessment.outcome` = `NotFound` or `Skipped`; **no counter or histogram**, so a re-queued item is never counted twice.
+- **Q6** **`IMeterFactory`**. Whether OpenTelemetry's `AddMeter` picks up a factory meter is proved by O25/O26.
+- **Q7** Event `AssessmentQueued`, logged by `ApplicationEndpoints` after a successful queue (Core has no logger).
+- **Q8** Read `OTEL_EXPORTER_OTLP_ENDPOINT` from **`builder.Configuration`** (environment variables are part of it), so tests set it per host.
+- **Q9** Config constants (rate, limits) are **not** in the forbidden set: rules section 6 does not list them.
+- **Q10** **OTLP/gRPC on 18889** (the exporter's default); no protocol variable.
+- **Q11** Keep the full exception on `ProcessingError` (P5-D4: stack traces for real bugs). EF never logs parameter values without `EnableSensitiveDataLogging`; accepted.
+- **Q12** The API has no query parameters. Check the ASP.NET Core instrumentation's query handling on its docs at implementation, and add one nice test that a query value like `?x=85123` does not reach a span.
+- **Q13** Time the worker with the injected **`TimeProvider`** (already there), so O17 asserts an exact value.
 
 ## Security gate
 
