@@ -1,10 +1,12 @@
+using Microsoft.Extensions.Options;
 using MortgageApplications.Core.Applications;
 
 namespace MortgageApplications.Api.Assessments;
 
 /// <summary>
 /// Processes queued assessments one at a time, each in its own DI scope (the DbContext is scoped; this service is a
-/// singleton). At startup it re-enqueues every Pending assessment, so nothing saved before a restart is lost.
+/// singleton). At startup it re-enqueues every Pending assessment, so nothing saved before a restart is lost; if that
+/// fails (for example the database is not reachable yet), it retries after a delay until it succeeds or the host stops.
 /// <para>
 /// An exception escaping <see cref="ExecuteAsync"/> stops the host (.NET 6+ default), so every item is caught and
 /// logged, and only shutdown leaves the loop. Shutdown is never a failure: an unfinished item stays Pending and is
@@ -14,6 +16,8 @@ namespace MortgageApplications.Api.Assessments;
 public sealed partial class AssessmentWorker(
     ChannelAssessmentQueue queue,
     IServiceScopeFactory scopeFactory,
+    IOptions<AssessmentQueueOptions> options,
+    TimeProvider timeProvider,
     ILogger<AssessmentWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -26,6 +30,23 @@ public sealed partial class AssessmentWorker(
     }
 
     private async Task RequeuePendingAsync(CancellationToken stoppingToken)
+    {
+        var retryDelay = TimeSpan.FromSeconds(options.Value.RequeueRetryDelaySeconds);
+        try
+        {
+            while (!await TryRequeuePendingAsync(stoppingToken))
+            {
+                await Task.Delay(retryDelay, timeProvider, stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Shutdown during startup: the rows are still Pending for the next start.
+        }
+    }
+
+    // A retry may queue an ID a second time; processing is idempotent, so the second run is skipped.
+    private async Task<bool> TryRequeuePendingAsync(CancellationToken stoppingToken)
     {
         try
         {
@@ -42,14 +63,16 @@ public sealed partial class AssessmentWorker(
             }
 
             LogPendingRequeued(pending.Count);
+            return true;
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // Shutdown during startup: the rows are still Pending for the next start.
+            throw;
         }
         catch (Exception exception)
         {
-            LogRequeueFailed(exception);
+            LogRequeueFailed(options.Value.RequeueRetryDelaySeconds, exception);
+            return false;
         }
     }
 
@@ -103,8 +126,8 @@ public sealed partial class AssessmentWorker(
     private partial void LogPendingRequeued(int count);
 
     [LoggerMessage(EventId = 2, EventName = "RequeueFailed", Level = LogLevel.Error,
-        Message = "Re-enqueueing pending assessments at startup failed; they stay Pending until the next start.")]
-    private partial void LogRequeueFailed(Exception exception);
+        Message = "Re-enqueueing pending assessments at startup failed; retrying in {RetryDelaySeconds} s.")]
+    private partial void LogRequeueFailed(int retryDelaySeconds, Exception exception);
 
     [LoggerMessage(EventId = 3, EventName = "AssessmentProcessed", Level = LogLevel.Debug,
         Message = "Assessment {AssessmentId} processed: {Outcome}.")]

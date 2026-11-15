@@ -303,6 +303,33 @@ public sealed class AssessmentWorkerTests
         }
     }
 
+    // R3: a failed startup sweep is retried after the configured delay, so a Pending row saved before the restart is
+    // still completed without another restart.
+    [Fact]
+    public async Task Startup_sweep_failure_is_retried_and_completes_pending_assessment()
+    {
+        await using var factory = new ApiFactory();
+        string location;
+        await using (var withoutWorker = factory.WithWebHostBuilder(_ => { }))
+        {
+            var seeding = withoutWorker.CreateClient();
+            var applicationId = await seeding.CreateApplicationAsync();
+            location = (await seeding.PostAssessmentAsync(applicationId)).Headers.Location!.OriginalString;
+        }
+
+        var host = factory.WithWebHostBuilder(
+            builder => builder
+                .ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
+                    new Dictionary<string, string?> { ["Assessments:RequeueRetryDelaySeconds"] = "1" }))
+                .ConfigureTestServices(services => services.FailFirstSweep(new FailFirstSaveState())),
+            runWorker: true);
+        var client = host.CreateClient();
+
+        Assert.Equal("Completed", Http.Status(await client.PollUntilFinishedAsync(location)));
+        Assert.Single(factory.Logs.Entries, e => e.EventName == "RequeueFailed");
+        Assert.Single(factory.Logs.Entries, e => e.EventName == "PendingRequeued");
+    }
+
     // W-6: stopping an idle worker returns quickly, ends its loop normally and logs no error.
     [Fact]
     public async Task Stopping_an_idle_worker_returns_within_5_seconds_without_errors()

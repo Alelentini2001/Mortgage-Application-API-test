@@ -59,6 +59,23 @@ public sealed class StartupTests
 
     public static TheoryData<string> InvalidQueueCapacities => ["0", "10001"];
 
+    // R3: the startup re-enqueue retry delay is validated at startup (1 to 3,600 seconds).
+    [Theory]
+    [MemberData(nameof(InvalidRetryDelays))]
+    public void Startup_with_invalid_requeue_retry_delay_fails(string seconds)
+    {
+        using var factory = new ApiFactory();
+        using var invalid = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Assessments:RequeueRetryDelaySeconds"] = seconds })));
+
+        var ex = Assert.ThrowsAny<Exception>(() => invalid.CreateClient());
+
+        Assert.Contains("RequeueRetryDelaySeconds", FindOptionsFailure(ex).Message, StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string> InvalidRetryDelays => ["0", "3601"];
+
     // I44 (replaces the Phase 0 placeholder)
     [Fact]
     public async Task Health_returns_200()

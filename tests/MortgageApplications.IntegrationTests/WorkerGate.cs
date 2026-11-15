@@ -45,6 +45,10 @@ public static class WorkerGateServices
     public static IServiceCollection FailFirstSave(this IServiceCollection services, FailFirstSaveState state) =>
         services.DecorateRepository(inner => new FailFirstSaveRepository(inner, state));
 
+    /// <summary>Wraps the app's repository so the first <c>ListPendingAssessmentIdsAsync</c> throws (a failed sweep).</summary>
+    public static IServiceCollection FailFirstSweep(this IServiceCollection services, FailFirstSaveState state) =>
+        services.DecorateRepository(inner => new FailFirstSweepRepository(inner, state));
+
     private static IServiceCollection DecorateRepository(
         this IServiceCollection services, Func<IMortgageApplicationRepository, IMortgageApplicationRepository> decorate)
     {
@@ -88,6 +92,15 @@ public static class WorkerGateServices
                 : base.UpdateAssessmentAsync(assessment, cancellationToken);
     }
 
+    private sealed class FailFirstSweepRepository(IMortgageApplicationRepository inner, FailFirstSaveState state)
+        : DelegatingRepository(inner)
+    {
+        public override Task<IReadOnlyList<Guid>> ListPendingAssessmentIdsAsync(CancellationToken cancellationToken) =>
+            state.TryTakeFailure()
+                ? throw new InvalidOperationException("Simulated sweep failure.")
+                : base.ListPendingAssessmentIdsAsync(cancellationToken);
+    }
+
     private abstract class DelegatingRepository(IMortgageApplicationRepository inner) : IMortgageApplicationRepository
     {
         public Task AddAsync(MortgageApplication application, CancellationToken cancellationToken) =>
@@ -109,12 +122,12 @@ public static class WorkerGateServices
         public virtual Task UpdateAssessmentAsync(AffordabilityAssessment assessment, CancellationToken cancellationToken) =>
             inner.UpdateAssessmentAsync(assessment, cancellationToken);
 
-        public Task<IReadOnlyList<Guid>> ListPendingAssessmentIdsAsync(CancellationToken cancellationToken) =>
+        public virtual Task<IReadOnlyList<Guid>> ListPendingAssessmentIdsAsync(CancellationToken cancellationToken) =>
             inner.ListPendingAssessmentIdsAsync(cancellationToken);
     }
 }
 
-/// <summary>Shared by every scope of one host: exactly one save fails.</summary>
+/// <summary>Shared by every scope of one host: exactly one call fails.</summary>
 public sealed class FailFirstSaveState
 {
     private int _failed;
