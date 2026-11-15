@@ -1,6 +1,6 @@
 # Phase 07: Authentication + authorisation
 
-Status: **In progress: plan approved (2026-11-15), test design next** · Branch: `phase-07-auth` · PR: — · Started: 2026-11-15 · Finished: —
+Status: **In progress: plan and tests approved (2026-11-15), implementation next** · Branch: `phase-07-auth` · PR: — · Started: 2026-11-15 · Finished: —
 
 ## Goal
 
@@ -105,11 +105,17 @@ Planning: lead agent only.
 - **Purpose:** propose Phase 7 test cases before any test is written.
 - **Outcome:** about 70 cases (AU01–AU112) and 14 questions (A1–A14); full text in [`phase-07/test-proposal.md`](phase-07/test-proposal.md).
 
+### P07-04 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Approved
+- **Purpose:** approval of the recommended test selection and the answers A1–A14.
+- **Outcome:** implementation delegated, test-first (P07-05).
+
 ## What was built (files)
 
 ## Tests
 
-### Proposal (`test-designer`, P07-03; waiting for Alessandro)
+### Proposal (`test-designer`, P07-03; approved by Alessandro, P07-04)
 
 Full proposal, verbatim: [`phase-07/test-proposal.md`](phase-07/test-proposal.md). All are integration tests (`tests/CLAUDE.md`: unit tests cover Core only; the auth code is in the Api project). Tokens are made in tests with `Microsoft.IdentityModel.JsonWebTokens` (comes with the approved package) or by hand for the malformed ones; no new test package.
 
