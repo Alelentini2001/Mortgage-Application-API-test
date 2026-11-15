@@ -22,10 +22,10 @@ public static class ApplicationEndpoints
             .WithSummary("Get an application")
             .ProducesProblem(StatusCodes.Status404NotFound);
         group.MapPost("/{id:guid}/assessments", AssessAsync)
-            .WithSummary("Assess affordability (synchronous; Declined is a 201 result, not an error)")
+            .WithSummary("Start an affordability assessment (202 Accepted; poll the Location until Completed or Failed)")
             .ProducesProblem(StatusCodes.Status404NotFound);
         group.MapGet("/{id:guid}/assessments/{assessmentId:guid}", GetAssessmentAsync)
-            .WithSummary("Get an assessment")
+            .WithSummary("Get an assessment (always 200; status is Pending, Completed or Failed; Declined is a Completed result)")
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         return endpoints;
@@ -53,7 +53,9 @@ public static class ApplicationEndpoints
             : TypedResults.Ok(ApplicationResponse.From(application));
     }
 
-    private static async Task<Results<Created<AssessmentResponse>, NotFound>> AssessAsync(
+    // 202 + Location (P6-D4): the body is the Pending assessment; the client polls the Location until the status is
+    // Completed or Failed. When the queue is full the request waits for room (P6-D2), bounded by its own token.
+    private static async Task<Results<Accepted<AssessmentResponse>, NotFound>> AssessAsync(
         Guid id,
         MortgageApplicationService service,
         ICurrentUser user,
@@ -62,7 +64,7 @@ public static class ApplicationEndpoints
         var assessment = await service.AssessAsync(user.OwnerId, id, cancellationToken);
         return assessment is null
             ? TypedResults.NotFound()
-            : TypedResults.Created(
+            : TypedResults.Accepted(
                 $"/api/applications/{id}/assessments/{assessment.Id}",
                 AssessmentResponse.From(assessment));
     }
