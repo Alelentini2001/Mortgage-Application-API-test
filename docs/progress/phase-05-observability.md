@@ -86,6 +86,12 @@ Checked before planning, 2026-11-15:
 - [Aspire dashboard standalone](https://aspire.dev/dashboard/standalone/) (the Learn URL redirects here): image `mcr.microsoft.com/aspire/dashboard`, UI port 18888, OTLP/gRPC 18889 and OTLP/HTTP 18890 inside the container; the login token is in the container log (`login?t=`); `ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS=true` turns login off and is for local development only (not planned).
 - NuGet registration API, 2026-11-15: the versions and dates in plan step 3. MCR tag list for `aspire/dashboard`: newest tags `13.6.x`; the publish date of the tag to pin is checked at implementation (two-week rule).
 
+Checked by the lead agent after implementation, 2026-11-15 (the implementer read only the package READMEs):
+- [Creating metrics](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/metrics-instrumentation): in DI apps "create the Meter object using IMeterFactory"; the factory keeps meters "in different service collections isolated from each other even if they use an identical name", "especially useful for testing". Durations: "prefer units of seconds recorded as a floating point". `InstrumentAdvice<T>` sets recommended histogram buckets and is supported by the OpenTelemetry .NET SDK from 1.10.0. Tag names: lowercase dotted, and avoid unbounded tag combinations (so the IDs stay off the metrics).
+- [Add distributed tracing instrumentation](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/distributed-tracing-instrumentation-walkthroughs): `StartActivity` returns null when nobody listens (hence `activity?.`), the default kind is Internal, and `SetStatus(ActivityStatusCode.Error, description)` sets the span status. It recommends one long-lived `ActivitySource`; ours lives in the `AssessmentTelemetry` singleton.
+- [IHttpActivityFeature](https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.http.features.ihttpactivityfeature?view=aspnetcore-10.0): "Feature to access the Activity associated with a request"; used to tag the POST's server span.
+- Not on Learn: `UseOtlpExporter` and the `url.query` redaction are OpenTelemetry package features, checked in the package READMEs (see "Open issues").
+
 ## Orchestration used
 
 Planning: lead agent only (no subagent yet).
