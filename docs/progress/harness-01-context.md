@@ -175,7 +175,60 @@ The full proposal, verbatim: [`harness-01/test-proposal.md`](harness-01/test-pro
 
 ## What was built (files)
 
+Implemented by a `general-purpose` subagent on `harness-01-context` (commits `d85a25b`, `e51a48e`, `f7fe43b`, `7d45ced`, plus this evidence commit).
+
+| File | What it does |
+|---|---|
+| `scripts/context/lib.sh` | Shared helpers: root from `CLAUDE_PROJECT_DIR`, clock from `HARNESS_NOW`, UTC formatting by arithmetic (no `date -d` / `date -r`), atomic write (temp file in the same dir + `mv`), handover check, the usage status line. Not named in the plan; added so the hooks, `brief.sh` and the status line share one implementation. |
+| `scripts/context/brief.sh` | `brief.sh <agent> [phase]` and `brief.sh --generic`. About 25 lines on the real repo. Exit 2 with usage on an unknown agent or a bad phase. |
+| `scripts/context/index.sh` | Generates `DECISIONS.md` (39 rows today) and `OPEN-ITEMS.md` (67 rows); `--check` writes nothing and exits 1 on a stale file, a malformed Decisions table, ADR header or handover. |
+| `docs/ai/context/CONTEXT-INDEX.md`, `AGENT-REGISTRY.md`, `CURRENT-WORK.md`, `HANDOVER-TEMPLATE.md`, `handovers/README.md` | Hand-written context files. The registry adds a `Kind` line (reviewer, author, designer), not in the plan, so the brief can leave open items out for reviewers (A3). |
+| `docs/ai/context/DECISIONS.md`, `OPEN-ITEMS.md` | Generated; marked "GENERATED ... Do not edit". |
+| `.claude/hooks/session-context.sh` | SessionStart, all sources. |
+| `.claude/hooks/reinject-context.sh` | Now a 6-line shim: `session-context.sh --source compact` (A13). |
+| `.claude/hooks/subagent-context.sh` | SubagentStart; JSON built with `jq -n --arg`. |
+| `.claude/hooks/pre-compact.sh` | PreCompact; writes `.claude/state/checkpoint.md`. |
+| `.claude/hooks/usage-stop.sh` | StopFailure; writes `.claude/state/blocker.md`. |
+| `.claude/statusline.sh` | Status line; writes `.claude/state/usage.json` (A6 fields only). |
+| `.claude/hooks/tests/test-context.sh` | The H1 cases, sourced by `test-hooks.sh`. |
+| `.claude/settings.json` | SessionStart `startup|resume|clear|fork` → `session-context.sh`; the existing `compact` entry → the shim (so nothing runs twice); SubagentStart, PreCompact, StopFailure; `statusLine`. Permissions unchanged. |
+| `.gitignore` | `.claude/state/`. |
+| `scripts/verify.sh` | Full mode: step "context index check" runs `scripts/context/index.sh --check`. |
+| `.claude/agents/*.md` | New "Context and handover" section in each; frontmatter unchanged. |
+| `AGENTS.md`, `CLAUDE.md`, `docs/ai/ORCHESTRATION.md`, `.claude/skills/phase/SKILL.md` | Where context lives, usage states and actions, hook list, inspection commands. |
+
 ## Tests (results)
+
+**Red** (before any implementation, scripts as stubs that exit 0 and print nothing; output saved in the session scratchpad as `harness/h1-red.txt`): `hook tests: 300 passed, 300 failed`. The 300 passes are the 91 existing cases plus negative assertions a silent stub meets trivially (for example "the secret is not in stdout", "no file changed"). The failures were every positive assertion: no output, no state files, no generated index, and no registry or template in the fixture (those docs did not exist yet).
+
+**Fixes during green**, both in the tests, not the scripts:
+- E2 "a reset in the past is not used" expected "reset time unknown", but the fixture's 7-day window still had a future reset, which the rule correctly picks. The case now checks that the past 5-hour reset is skipped and the 7-day reset is used.
+- X1 compared against a hard-coded count that was wrong; it now compares the case lines with `main:.claude/hooks/tests/test-hooks.sh`.
+- One script bug: `statusline.sh` used `label` as a jq function argument (a jq keyword), so every jq status line fell back to unknown. Renamed.
+
+**Green:** `hook tests: 611 passed, 0 failed` (602 before the files were committed; 9 more git-mode `100755` checks apply once the scripts are tracked).
+
+Cases not in the approved set but added because the build list asks for them, labelled in the file: S11 (Resume cap, A2), E7 (repeated StopFailure replaces), I9 subset (malformed phase file fails `--check`, A1), and the A4 check inside B8.
+
+**Full verify** at `7d45ced` (trimmed):
+```
+==> restore
+==> build (Release, warnings as errors)
+==> all tests
+Test run summary: Passed!
+  total: 442
+  failed: 0
+  succeeded: 442
+==> hook regression tests
+hook tests: 611 passed, 0 failed
+==> context index check
+==> format check
+VERIFY PASSED (full)
+```
+
+**Hook tests, 3 runs** (`.claude/hooks/tests/test-hooks.sh`, 2026-11-15): run 1 `611 passed, 0 failed` (35 s), run 2 `611 passed, 0 failed` (36 s), run 3 `611 passed, 0 failed` (39 s). The real repo's `.claude/state/` did not exist after the runs, so no test wrote outside its fixture.
+
+Not run: `shellcheck` (not installed; the X3 case skips it). The manual SubagentStart delivery check is for the lead.
 
 ## Security gate
 
@@ -184,6 +237,18 @@ The full proposal, verbatim: [`harness-01/test-proposal.md`](harness-01/test-pro
 ## AI output corrected or rejected (REAL cases only)
 
 ## Open issues
+- Not done: the manual check that SubagentStart `additionalContext` reaches a subagent on 2.1.283 (left to the lead, as instructed).
+- Not checked live: that `$CLAUDE_PROJECT_DIR` is set for the `statusLine` command (if it is not, the command path becomes `/.claude/statusline.sh` and no status line shows); that the SessionStart matcher `startup|resume|clear|fork` fires as expected; how PreCompact stdout combines with a manual `/compact` instruction (A5).
+- Interpretation: a window with a valid `used_percentage` but a null or non-numeric `resets_at` still counts for the state; only the reset shows as `?`. The test proposal (U7) suggested treating the whole window as unknown.
+- Interpretation: a window whose `resets_at` is now or in the past is treated as unknown (stale), so it never counts as exhausted (U10).
+- StopFailure error allowlist is only `rate_limit` and `overloaded` (the documented examples given); any other value is stored as `unknown`.
+- The blocker file is never deleted. Newer status-line data, or a reset time in the past, stops it from forcing `exhausted`; the file stays as a record until the next StopFailure replaces it.
+- The H1 decisions (H-D1 to H-D5) and Phase 0's D1 to D9 are not in `DECISIONS.md`: this file has no "Decisions" table in the template format, and Phase 0 records them as prose. Adding a template table here would index them.
+- `dotnet-reviewer.md` says "Output only a list"; the new section then asks for the handover headings at the end. The two may need one wording.
+- Capped summaries in the generated files can end with an added backtick inside a word (it keeps code spans balanced); cosmetic.
+- X6 timing uses whole seconds (bash 3.2 has no sub-second clock), so "within 1 s" means under 2 s measured.
+- The full hook suite now takes about 35 to 39 s (the earlier runtime was not measured), because the H1 cases build about 8 fixture repos.
+- `docs/PROGRESS.md` and `docs/ai/PROMPTS.md` were not edited (the lead does it at merge). No handover file was written for this delegation.
 
 ## Time spent (approx.)
 

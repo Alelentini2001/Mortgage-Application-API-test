@@ -69,6 +69,18 @@ Open issues from the phase files ("Open issues" sections, resolved items left ou
 | [phase-06-background](../../progress/phase-06-background.md) | R8: I-10's reliance on TestServer aborting the request synchronously is not verified against TestServer's source or docs. |
 | [phase-06-background](../../progress/phase-06-background.md) | ADR 0003 is a draft for Alessandro to accept or change at Checkpoint B. |
 | [phase-06-background](../../progress/phase-06-background.md) | Concurrency today: `DevelopmentCurrentUser` gives every caller the same owner (`dev-owner-0001`) until Phase 7, so per-user isolation under... |
+| [harness-01-context](../../progress/harness-01-context.md) | Not done: the manual check that SubagentStart `additionalContext` reaches a subagent on 2.1.283 (left to the lead, as instructed). |
+| [harness-01-context](../../progress/harness-01-context.md) | Not checked live: that `$CLAUDE_PROJECT_DIR` is set for the `statusLine` command (if it is not, the command path becomes `/.claude/statuslin`... |
+| [harness-01-context](../../progress/harness-01-context.md) | Interpretation: a window with a valid `used_percentage` but a null or non-numeric `resets_at` still counts for the state; only the reset sho... |
+| [harness-01-context](../../progress/harness-01-context.md) | Interpretation: a window whose `resets_at` is now or in the past is treated as unknown (stale), so it never counts as exhausted (U10). |
+| [harness-01-context](../../progress/harness-01-context.md) | StopFailure error allowlist is only `rate_limit` and `overloaded` (the documented examples given); any other value is stored as `unknown`. |
+| [harness-01-context](../../progress/harness-01-context.md) | The blocker file is never deleted. Newer status-line data, or a reset time in the past, stops it from forcing `exhausted`; the file stays as... |
+| [harness-01-context](../../progress/harness-01-context.md) | The H1 decisions (H-D1 to H-D5) and Phase 0's D1 to D9 are not in `DECISIONS.md`: this file has no "Decisions" table in the template format,... |
+| [harness-01-context](../../progress/harness-01-context.md) | `dotnet-reviewer.md` says "Output only a list"; the new section then asks for the handover headings at the end. The two may need one wording... |
+| [harness-01-context](../../progress/harness-01-context.md) | Capped summaries in the generated files can end with an added backtick inside a word (it keeps code spans balanced); cosmetic. |
+| [harness-01-context](../../progress/harness-01-context.md) | X6 timing uses whole seconds (bash 3.2 has no sub-second clock), so "within 1 s" means under 2 s measured. |
+| [harness-01-context](../../progress/harness-01-context.md) | The full hook suite now takes about 35 to 39 s (the earlier runtime was not measured), because the H1 cases build about 8 fixture repos. |
+| [harness-01-context](../../progress/harness-01-context.md) | `docs/PROGRESS.md` and `docs/ai/PROMPTS.md` were not edited (the lead does it at merge). No handover file was written for this delegation. |
 
 ## Carry-overs (docs/PROGRESS.md, "Resume here")
 
