@@ -7,28 +7,53 @@ using MortgageApplications.Infrastructure.Persistence;
 
 namespace MortgageApplications.IntegrationTests;
 
-/// <summary>I4–I7: synchronous assessments end to end, with the golden numbers from rules section 8 (not recomputed).</summary>
+/// <summary>
+/// I-1 to I-3, I4–I7: background assessments end to end. The POST returns 202 with a Pending body; polling the
+/// <c>Location</c> reaches the golden numbers from rules section 8 (not recomputed). Polling is bounded (Http).
+/// </summary>
 public sealed class AssessmentTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    // I4: golden E1, every output and check, scale 2 in the raw JSON, and the Location resolves to the same body.
+    // I-1: 202, the exact Location, and a Pending body with explicit nulls in the raw JSON.
     [Fact]
-    public async Task Post_assessment_E1_returns_201_approved_with_golden_values()
+    public async Task Post_assessment_returns_202_with_location_and_pending_body()
     {
         var applicationId = await _client.CreateApplicationAsync();
 
-        var response = await _client.PostJsonAsync($"/api/applications/{applicationId}/assessments", "");
+        var response = await _client.PostAssessmentAsync(applicationId);
 
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.Equal("application/json", response.ContentType()?.MediaType);
         var text = await response.BodyAsync();
         using var body = JsonDocument.Parse(text);
         var root = body.RootElement;
         var assessmentId = root.GetProperty("id").GetGuid();
         Assert.Equal($"/api/applications/{applicationId}/assessments/{assessmentId}", response.Headers.Location?.OriginalString);
         Assert.Equal(applicationId, root.GetProperty("applicationId").GetString());
+        Assert.Equal("Pending", root.GetProperty("status").GetString());
+        Assert.Equal(TimeSpan.Zero, root.GetProperty("createdAt").GetDateTimeOffset().Offset);
+        Assert.Contains("\"assessedAt\":null", text, StringComparison.Ordinal);
+        Assert.Contains("\"failedAt\":null", text, StringComparison.Ordinal);
+        Assert.Contains("\"result\":null", text, StringComparison.Ordinal);
+    }
+
+    // I-2 (was I4): golden E1, every output and check, scale 2 in the raw JSON, and the Location keeps giving the same body.
+    [Fact]
+    public async Task Post_assessment_E1_completes_approved_with_golden_values()
+    {
+        var applicationId = await _client.CreateApplicationAsync();
+        var response = await _client.PostAssessmentAsync(applicationId);
+
+        var text = await _client.PollUntilFinishedAsync(response.Headers.Location!.OriginalString);
+
+        using var body = JsonDocument.Parse(text);
+        var root = body.RootElement;
         Assert.Equal("Completed", root.GetProperty("status").GetString());
+        Assert.Equal(applicationId, root.GetProperty("applicationId").GetString());
         Assert.Equal(TimeSpan.Zero, root.GetProperty("assessedAt").GetDateTimeOffset().Offset);
+        Assert.True(root.GetProperty("assessedAt").GetDateTimeOffset() >= root.GetProperty("createdAt").GetDateTimeOffset());
+        Assert.Contains("\"failedAt\":null", text, StringComparison.Ordinal);
         var result = root.GetProperty("result");
         Assert.Equal(240000.00m, result.GetProperty("loanAmount").GetDecimal());
         Assert.Equal(80.00m, result.GetProperty("loanToValuePercent").GetDecimal());
@@ -57,16 +82,18 @@ public sealed class AssessmentTests(ApiFactory factory) : IClassFixture<ApiFacto
         Assert.Equal(text, await fetched.BodyAsync());
     }
 
-    // I5: golden E2; Declined is a 201 result, not an error.
+    // I-3 (was I5): golden E2; Declined completes (it is a result, not a failure).
     [Fact]
-    public async Task Post_assessment_E2_returns_201_declined_on_ltv()
+    public async Task Post_assessment_E2_completes_declined_on_ltv()
     {
         var applicationId = await _client.CreateApplicationAsync(Http.BodyWith("""{"depositAmount":20000.00}"""));
+        var response = await _client.PostAssessmentAsync(applicationId);
 
-        var response = await _client.PostJsonAsync($"/api/applications/{applicationId}/assessments", "");
+        var text = await _client.PollUntilFinishedAsync(response.Headers.Location!.OriginalString);
 
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        using var body = JsonDocument.Parse(await response.BodyAsync());
+        using var body = JsonDocument.Parse(text);
+        Assert.Equal("Completed", body.RootElement.GetProperty("status").GetString());
+        Assert.Contains("\"failedAt\":null", text, StringComparison.Ordinal);
         var result = body.RootElement.GetProperty("result");
         Assert.Equal("Declined", result.GetProperty("decision").GetString());
         Assert.Equal(280000.00m, result.GetProperty("loanAmount").GetDecimal());
@@ -85,13 +112,11 @@ public sealed class AssessmentTests(ApiFactory factory) : IClassFixture<ApiFacto
     {
         var applicationId = await _client.CreateApplicationAsync(
             """{"annualIncome":1,"monthlyExpenses":1000000,"depositAmount":0,"propertyValue":100000000,"termYears":5}""");
-        var created = await _client.PostJsonAsync($"/api/applications/{applicationId}/assessments", "");
+        var created = await _client.PostAssessmentAsync(applicationId);
 
-        var fetched = await _client.GetPathAsync(created.Headers.Location!.OriginalString);
+        var text = await _client.PollUntilFinishedAsync(created.Headers.Location!.OriginalString);
 
-        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, fetched.StatusCode);
-        var text = await fetched.BodyAsync();
+        Assert.Equal(HttpStatusCode.Accepted, created.StatusCode);
         Assert.Contains("\"debtToIncomePercent\":3519936183.53", text, StringComparison.Ordinal);
         Assert.Contains("\"loanToIncomeMultiple\":100000000.00", text, StringComparison.Ordinal);
         Assert.Contains("\"maxBorrowing\":0.00", text, StringComparison.Ordinal);
@@ -106,20 +131,20 @@ public sealed class AssessmentTests(ApiFactory factory) : IClassFixture<ApiFacto
         Assert.Equal("Declined", result.GetProperty("decision").GetString());
     }
 
-    // I7: not idempotent (P3-D4): each POST is a new assessment.
+    // I7 (Q12): not idempotent (P3-D4): each POST is a new assessment, and both complete.
     [Fact]
     public async Task Post_assessment_twice_creates_two_assessments()
     {
         var applicationId = await _client.CreateApplicationAsync();
 
-        var first = await _client.PostJsonAsync($"/api/applications/{applicationId}/assessments", "");
-        var second = await _client.PostJsonAsync($"/api/applications/{applicationId}/assessments", "");
+        var first = await _client.PostAssessmentAsync(applicationId);
+        var second = await _client.PostAssessmentAsync(applicationId);
 
-        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
-        Assert.Equal(HttpStatusCode.Created, second.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, second.StatusCode);
         Assert.NotEqual(first.Headers.Location, second.Headers.Location);
-        Assert.Equal(HttpStatusCode.OK, (await _client.GetPathAsync(first.Headers.Location!.OriginalString)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await _client.GetPathAsync(second.Headers.Location!.OriginalString)).StatusCode);
+        Assert.Equal("Completed", Http.Status(await _client.PollUntilFinishedAsync(first.Headers.Location!.OriginalString)));
+        Assert.Equal("Completed", Http.Status(await _client.PollUntilFinishedAsync(second.Headers.Location!.OriginalString)));
     }
 
     // Review F3: a result loaded from the database keeps read-only checks, like one stored by Complete.
@@ -127,9 +152,9 @@ public sealed class AssessmentTests(ApiFactory factory) : IClassFixture<ApiFacto
     public async Task Loaded_result_checks_are_read_only()
     {
         var applicationId = await _client.CreateApplicationAsync();
-        var created = await _client.PostJsonAsync($"/api/applications/{applicationId}/assessments", "");
-        using var body = JsonDocument.Parse(await created.BodyAsync());
-        var assessmentId = body.RootElement.GetProperty("id").GetGuid();
+        var created = await _client.PostAssessmentAsync(applicationId);
+        var assessmentId = Guid.Parse(await created.IdAsync());
+        await _client.PollUntilFinishedAsync(created.Headers.Location!.OriginalString);
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MortgageApplicationsDbContext>();
 

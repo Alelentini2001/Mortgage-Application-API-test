@@ -43,6 +43,22 @@ public sealed class StartupTests
         Assert.NotNull(FindOptionsFailure(ex));
     }
 
+    // Q7: the queue capacity is validated at startup (1 to 10,000), like the affordability options.
+    [Theory]
+    [MemberData(nameof(InvalidQueueCapacities))]
+    public void Startup_with_invalid_queue_capacity_fails(string capacity)
+    {
+        using var factory = new ApiFactory();
+        using var invalid = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(new Dictionary<string, string?> { ["Assessments:QueueCapacity"] = capacity })));
+
+        var ex = Assert.ThrowsAny<Exception>(() => invalid.CreateClient());
+
+        Assert.Contains("QueueCapacity", FindOptionsFailure(ex).Message, StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string> InvalidQueueCapacities => ["0", "10001"];
+
     // I44 (replaces the Phase 0 placeholder)
     [Fact]
     public async Task Health_returns_200()
