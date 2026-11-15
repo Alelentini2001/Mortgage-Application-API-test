@@ -214,6 +214,18 @@ Logged here during the parallel run and copied to `docs/ai/PROMPTS.md` on `main`
 - **Purpose:** restart the P06-06 fixes after the usage limit reset.
 - **Outcome:** commits `8339c95` (R10), `37b28b2` (R2) and `b505133` (R1, R5, R9). Only the R2 test failed before its fix (`TaskCanceledException`). Full verify passed (376 tests); integration tests passed 3 runs in a row.
 
+### P06-08 · agent→subagent (`spec-checker`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Spec check for Phase 6 (background assessments) of a .NET 10 mortgage-application API. Read only; do not edit anything.
+
+  Read the branch files in the worktree /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-acd40a009ddf8a3cd (branch phase-06-background): docs/spec/ORIGINAL_SPEC.md, docs/spec/affordability-rules.md, docs/progress/phase-06-background.md (goal, plan, decisions P6-D1 to P6-D4, the approved test list and answers Q1-Q12, the security and review gates), docs/adr/0003-background-assessment-queue.md, the traceability notes in docs/progress/phase-01-spec.md and phase-03-api.md for the requirement IDs, and the code under src/ and tests/ that the phase file names.
+
+  Map every spec requirement and every Phase 6 goal and approved must-case this phase touches (assess endpoint now 202 + Location, polling GET, Pending/Completed/Failed, no silent drops, startup recovery, owner scoping and 404s, no personal data in logs, validation at the boundary unchanged) to the file and test that meet it. Mark each met / partial / missing with a one-line reason and the file:line or test name. Check that the spec's original wording about the assessment endpoint is still satisfied by a 202 + polling flow, and say plainly if it is not. List anything the phase file claims that you could not find. Keep it short: one table plus at most 5 notes.
+  ```
+- **Purpose:** requirement traceability before the PR.
+- **Outcome:** see "Review gate", spec check.
+
 The human prompts for this phase (Checkpoint A approval, test approval, the usage-limit resume and the approval of the review-gate decisions) are in `phase-04-docker.md`, "Prompts".
 
 ## What was built (files)
@@ -403,6 +415,13 @@ The R3 and R4 fixes came after this gate. They add no endpoint, package or log f
 | R10 | U-P10 only checks that the exception propagates; U-P11 tests the fake's filter. | Low | U-P10 fixed, `8339c95` (exactly one save attempt, never Failed). U-P11 kept: I-R1 covers the real query. |
 
 Checked and found no problem: EF Core tracking of the processing load, the Q5 catch scope, leaving the worker loop only on shutdown, save-then-enqueue order, the 202/`Location`/`failedAt` shapes, timeout coverage of the polling tests, the CA1711 suppressions, the approved must-cases and the log fields.
+
+**`spec-checker` (P06-08)** at `cce8f49`, read-only, 2026-11-15. It did not build, run tests or open every test body. Spec requirement 3 (assess endpoint) and R30 (optional background processing): **met**. All 17 Phase 6 goals and must-cases it listed are met, except "the non-owner-scoped load is worker-only", which is **partial**: nothing in the code enforces it (accepted, S2 and ADR 0003). Its notes:
+- **202 and polling against the spec wording.** The spec says only "Provide an endpoint to assess affordability for a given application" and does not require a synchronous call, so the 202 + `Location` + polling flow meets it. The caveat: the POST response no longer holds the result, only a Pending body. Background processing is an optional enhancement in the spec.
+- It did not find the R3 test by grep. The test is `Startup_sweep_failure_is_retried_and_completes_pending_assessment` in `AssessmentWorkerTests.cs`.
+- The security gate was not re-run after R3 and R4 (already noted above; it is re-run after the rebase).
+- R7 and R8 stay open, so the tests that depend on them are only as sound as those assumptions.
+- `docs/PROGRESS.md` (Phase 6 "Not started", R13 as 201, R30 "missing") is updated on `main` after the merge.
 
 ## AI output corrected or rejected (REAL cases only)
 
