@@ -43,6 +43,56 @@ public sealed class StartupTests
         Assert.NotNull(FindOptionsFailure(ex));
     }
 
+    // Q7: the queue capacity is validated at startup (1 to 10,000), like the affordability options.
+    [Theory]
+    [MemberData(nameof(InvalidQueueCapacities))]
+    public void Startup_with_invalid_queue_capacity_fails(string capacity)
+    {
+        using var factory = new ApiFactory();
+        using var invalid = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(new Dictionary<string, string?> { ["Assessments:QueueCapacity"] = capacity })));
+
+        var ex = Assert.ThrowsAny<Exception>(() => invalid.CreateClient());
+
+        Assert.Contains("QueueCapacity", FindOptionsFailure(ex).Message, StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string> InvalidQueueCapacities => ["0", "10001"];
+
+    // R3: the startup re-enqueue retry delay is validated at startup (1 to 3,600 seconds).
+    [Theory]
+    [MemberData(nameof(InvalidRetryDelays))]
+    public void Startup_with_invalid_requeue_retry_delay_fails(string seconds)
+    {
+        using var factory = new ApiFactory();
+        using var invalid = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Assessments:RequeueRetryDelaySeconds"] = seconds })));
+
+        var ex = Assert.ThrowsAny<Exception>(() => invalid.CreateClient());
+
+        Assert.Contains("RequeueRetryDelaySeconds", FindOptionsFailure(ex).Message, StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string> InvalidRetryDelays => ["0", "3601"];
+
+    // Re-review: the exact limits of the retry delay start the app.
+    [Theory]
+    [MemberData(nameof(ValidRetryDelayLimits))]
+    public async Task Startup_with_requeue_retry_delay_at_a_limit_starts(string seconds)
+    {
+        using var factory = new ApiFactory();
+        using var valid = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Assessments:RequeueRetryDelaySeconds"] = seconds })));
+
+        var response = await valid.CreateClient().GetPathAsync("/health");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    public static TheoryData<string> ValidRetryDelayLimits => ["1", "3600"];
+
     // I44 (replaces the Phase 0 placeholder)
     [Fact]
     public async Task Health_returns_200()

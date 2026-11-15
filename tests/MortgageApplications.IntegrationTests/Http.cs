@@ -52,6 +52,59 @@ internal static class Http
         return document.RootElement.GetProperty("id").GetString()!;
     }
 
+    /// <summary>Starts an assessment of an application (202 Accepted when the application is the caller's).</summary>
+    public static Task<HttpResponseMessage> PostAssessmentAsync(this HttpClient client, string applicationId) =>
+        client.PostJsonAsync($"/api/applications/{applicationId}/assessments", "");
+
+    /// <summary>
+    /// Polls an assessment until it is no longer Pending and returns that body. Every poll must be a 200 (P6-D4).
+    /// Bounded (25 ms interval, 10 s timeout), so a worker that never runs fails the test instead of hanging it.
+    /// </summary>
+    public static async Task<string> PollUntilFinishedAsync(this HttpClient client, string location)
+    {
+        var last = "";
+        await EventuallyAsync(
+            async () =>
+            {
+                var response = await client.GetPathAsync(location);
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                last = await response.BodyAsync();
+                return Status(last) != "Pending";
+            },
+            () => $"assessment still Pending; last body: {last}");
+        return last;
+    }
+
+    /// <summary>Re-checks a condition every 25 ms for up to 10 s; the message says what was awaited.</summary>
+    public static async Task EventuallyAsync(Func<Task<bool>> condition, Func<string> failureMessage)
+    {
+        var timeout = TimeSpan.FromSeconds(10);
+        var started = TimeProvider.System.GetTimestamp();
+        while (!await condition())
+        {
+            if (TimeProvider.System.GetElapsedTime(started) > timeout)
+            {
+                Assert.Fail($"Timed out after {timeout.TotalSeconds} s: {failureMessage()}");
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(25), Ct);
+        }
+    }
+
+    /// <summary>The <c>status</c> field of an assessment body.</summary>
+    public static string Status(string assessmentJson)
+    {
+        using var document = JsonDocument.Parse(assessmentJson);
+        return document.RootElement.GetProperty("status").GetString()!;
+    }
+
+    /// <summary>The <c>id</c> field of a response body.</summary>
+    public static async Task<string> IdAsync(this HttpResponseMessage response)
+    {
+        using var document = JsonDocument.Parse(await response.BodyAsync());
+        return document.RootElement.GetProperty("id").GetString()!;
+    }
+
     /// <summary>
     /// I40: every error is a ProblemDetails (RFC 9457) with status, title and a non-empty traceId.
     /// Returns the parsed body for further asserts.

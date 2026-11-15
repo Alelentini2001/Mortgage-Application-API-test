@@ -43,7 +43,7 @@ public sealed class ApiRecordsTests
         var result = new AssessmentResultResponse(
             123_456.78m, 123_456.78m, 123_456.78m, 123_456.78m, 123_456.78m, 123_456.78m,
             Decision.Declined, [check], "Declined: LTV 123456.78% is above the 90.00% limit.", 0.06m, "1.0");
-        var assessment = new AssessmentResponse(Guid.Empty, Guid.Empty, AssessmentStatus.Completed, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, result);
+        var assessment = new AssessmentResponse(Guid.Empty, Guid.Empty, AssessmentStatus.Completed, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null, result);
 
         Assert.DoesNotContain(_sentinel, check.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(_sentinel, result.ToString(), StringComparison.Ordinal);

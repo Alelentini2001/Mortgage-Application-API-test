@@ -27,13 +27,17 @@ public sealed record ApplicationResponse(
     public override string ToString() => $"{nameof(ApplicationResponse)} {{ Id = {Id} }}";
 }
 
-/// <summary>One assessment. <see cref="Result"/> is null unless the status is Completed (Phase 6 adds Pending).</summary>
+/// <summary>
+/// One assessment: Pending until the background worker finishes it, then Completed (with <see cref="AssessedAt"/>
+/// and <see cref="Result"/>) or Failed (with <see cref="FailedAt"/> only; no failure reason is exposed).
+/// </summary>
 public sealed record AssessmentResponse(
     Guid Id,
     Guid ApplicationId,
     AssessmentStatus Status,
     DateTimeOffset CreatedAt,
     DateTimeOffset? AssessedAt,
+    DateTimeOffset? FailedAt,
     AssessmentResultResponse? Result)
 {
     public static AssessmentResponse From(AffordabilityAssessment assessment) => new(
@@ -42,6 +46,7 @@ public sealed record AssessmentResponse(
         assessment.Status,
         assessment.CreatedAt,
         assessment.AssessedAt,
+        assessment.FailedAt,
         assessment.Result is null ? null : AssessmentResultResponse.From(assessment.Result));
 
     /// <summary>Logging allowlist fields only (rules section 6).</summary>

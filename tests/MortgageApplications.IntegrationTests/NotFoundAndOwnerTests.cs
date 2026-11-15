@@ -1,8 +1,10 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using MortgageApplications.Api.Assessments;
 using MortgageApplications.Api.Identity;
 using MortgageApplications.Core.Applications;
 using MortgageApplications.Infrastructure.Persistence;
@@ -64,8 +66,8 @@ public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<Ap
     {
         var first = await _client.CreateApplicationAsync();
         var second = await _client.CreateApplicationAsync();
-        var assessment = await _client.PostJsonAsync($"/api/applications/{first}/assessments", "");
-        var assessmentId = await IdAsync(assessment);
+        var assessment = await _client.PostAssessmentAsync(first);
+        var assessmentId = await assessment.IdAsync();
 
         var response = await _client.GetPathAsync($"/api/applications/{second}/assessments/{assessmentId}");
 
@@ -77,9 +79,8 @@ public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<Ap
     public async Task Other_owner_gets_the_same_404_as_an_unknown_id()
     {
         var applicationId = await _client.CreateApplicationAsync();
-        var assessmentId = await IdAsync(await _client.PostJsonAsync($"/api/applications/{applicationId}/assessments", ""));
-        using var otherFactory = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(
-            services => services.AddSingleton<ICurrentUser>(new TestUser("other-owner"))));
+        var assessmentId = await (await _client.PostAssessmentAsync(applicationId)).IdAsync();
+        using var otherFactory = OtherOwnerFactory();
         var other = otherFactory.CreateClient();
         var unknown = await (await other.GetPathAsync($"/api/applications/{Guid.NewGuid()}")).AssertProblemAsync(HttpStatusCode.NotFound);
         // Review F2: the other owner's host must see the same database, or the 404s below would prove nothing.
@@ -103,13 +104,35 @@ public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<Ap
             (await _client.GetPathAsync($"/api/applications/{applicationId}/assessments/{assessmentId}")).StatusCode);
     }
 
+    // I-5: unknown, malformed and another owner's application IDs give the same 404, save no assessment and queue
+    // nothing. The other owner's host runs without the worker, so its queue count shows what was enqueued.
+    [Fact]
+    public async Task Post_assessment_for_unknown_malformed_or_other_owner_application_queues_nothing()
+    {
+        var applicationId = await _client.CreateApplicationAsync();
+        using var otherFactory = OtherOwnerFactory();
+        var other = otherFactory.CreateClient();
+        var queue = otherFactory.Services.GetRequiredService<ChannelAssessmentQueue>();
+        var assessmentsBefore = await CountAssessmentsAsync();
+
+        var unknown = await other.PostAssessmentAsync(Guid.NewGuid().ToString());
+        var malformed = await other.PostAssessmentAsync("not-a-guid");
+        var otherOwners = await other.PostAssessmentAsync(applicationId);
+
+        var expected = Strip(await unknown.AssertProblemAsync(HttpStatusCode.NotFound));
+        Assert.Equal(expected, Strip(await malformed.AssertProblemAsync(HttpStatusCode.NotFound)));
+        Assert.Equal(expected, Strip(await otherOwners.AssertProblemAsync(HttpStatusCode.NotFound)));
+        Assert.Equal(assessmentsBefore, await CountAssessmentsAsync());
+        Assert.Equal(0, queue.Reader.Count);
+    }
+
     // I37: the owner never appears in an assessment or an error.
     [Fact]
     public async Task Assessment_and_error_bodies_never_contain_the_owner()
     {
         var owner = factory.Services.GetRequiredService<ICurrentUser>().OwnerId;
         var applicationId = await _client.CreateApplicationAsync();
-        var created = await _client.PostJsonAsync($"/api/applications/{applicationId}/assessments", "");
+        var created = await _client.PostAssessmentAsync(applicationId);
         var fetched = await _client.GetPathAsync(created.Headers.Location!.OriginalString);
         var invalid = await _client.PostJsonAsync("/api/applications", Http.BodyWith("""{"termYears":4}"""));
 
@@ -121,11 +144,9 @@ public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<Ap
         }
     }
 
-    private static async Task<string> IdAsync(HttpResponseMessage response)
-    {
-        using var document = JsonDocument.Parse(await response.BodyAsync());
-        return document.RootElement.GetProperty("id").GetString()!;
-    }
+    private WebApplicationFactory<Program> OtherOwnerFactory() =>
+        factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(
+            services => services.AddSingleton<ICurrentUser>(new TestUser("other-owner"))));
 
     // Everything except the per-request fields.
     private static string Strip(JsonElement problem) =>

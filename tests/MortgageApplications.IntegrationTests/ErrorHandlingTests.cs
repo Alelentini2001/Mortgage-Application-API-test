@@ -62,6 +62,12 @@ public sealed class ErrorHandlingTests(ApiFactory factory) : IClassFixture<ApiFa
         public Task<AffordabilityAssessment?> FindAssessmentAsync(
             Guid applicationId, Guid assessmentId, string ownerId, CancellationToken cancellationToken) => throw Boom();
 
+        public Task<AssessmentWorkItem?> FindForProcessingAsync(Guid assessmentId, CancellationToken cancellationToken) => throw Boom();
+
+        public Task UpdateAssessmentAsync(AffordabilityAssessment assessment, CancellationToken cancellationToken) => throw Boom();
+
+        public Task<IReadOnlyList<Guid>> ListPendingAssessmentIdsAsync(CancellationToken cancellationToken) => throw Boom();
+
         private static InvalidOperationException Boom() => new($"{_marker} at C:\\secret\\path.cs:line 1");
     }
 }

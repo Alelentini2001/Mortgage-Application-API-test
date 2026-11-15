@@ -23,11 +23,11 @@ Content-Type: application/json
 ### Get it back (the id comes from the response above)
 GET {{baseUrl}}/api/applications/{{create.response.body.id}}
 
-### Assess affordability (201 Created; the Location header points at the assessment)
+### Start an assessment (202 Accepted, status Pending; the Location header points at the assessment)
 # @name assess
 POST {{baseUrl}}/api/applications/{{create.response.body.id}}/assessments
 
-### Get the assessment
+### Poll the assessment: always 200. Repeat until status is Completed (with the result) or Failed (with failedAt)
 GET {{baseUrl}}/api/applications/{{create.response.body.id}}/assessments/{{assess.response.body.id}}
 
 ### Create a high-LTV application (golden example E2: deposit 20,000, expected Declined on LTV)
@@ -43,8 +43,12 @@ Content-Type: application/json
   "termYears": 30
 }
 
-### Assess it: still 201, a Declined result is not an error
+### Assess it: still 202, and it completes as Declined (a result, not an error)
+# @name assessDeclined
 POST {{baseUrl}}/api/applications/{{createDeclined.response.body.id}}/assessments
+
+### Poll it until status is Completed; result.decision is Declined
+GET {{baseUrl}}/api/applications/{{createDeclined.response.body.id}}/assessments/{{assessDeclined.response.body.id}}
 
 ### Invalid input: 400 ValidationProblemDetails naming termYears
 POST {{baseUrl}}/api/applications
