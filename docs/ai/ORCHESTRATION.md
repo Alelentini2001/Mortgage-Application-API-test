@@ -71,7 +71,7 @@ flowchart TD
 
 ## Usage and model choice (harness H1, light version)
 
-- **What is measurable:** only what Claude Code shows the user (`/usage`, `/context`, the status line, and the limit message with its reset time). No script in this repo reads usage or account data; plan name, remaining allowance and per-model quotas are not available to scripts.
+- **What is measurable:** subscription usage in `/usage` (and in a status line only if one is set up to print `rate_limits`), the context window in `/context`, and the limit message with its reset time. No script in this repo reads usage or account data; plan name, remaining allowance and per-model quotas are not available to scripts. Sources: the Docs verified section of `docs/progress/harness-01-context.md`.
 - **How the lead uses it:** delegate where a fresh context adds value, reuse agents for follow-ups, keep briefs short, and on a limit stop and leave the repo docs ready to resume (see `CLAUDE.md`, "Usage awareness and model choice").
 - **Models:** `docs/ai/context/AGENT-REGISTRY.md` explains each agent's model and when cheaper models are fine (broad read-only search) and when they are not (code, tests, security, review, money maths).
 - **Recovery after a usage limit:** start a new session after the reset; `CLAUDE.md` makes it read `docs/PROGRESS.md` "Resume here" and the current phase file first. Interrupted subagents are resumed with `SendMessage` where possible.

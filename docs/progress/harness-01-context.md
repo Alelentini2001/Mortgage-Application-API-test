@@ -5,7 +5,7 @@ Status: **In progress: scope cut to the light version by Alessandro (2026-11-15)
 ## Goal
 
 Make every agent start from the project's real state (phase, decisions, open items, other agents' work) and make the lead agent aware of context-window and subscription-usage limits, using only documented Claude Code interfaces. Source: Alessandro's brief "Project-wide agent context intelligence & subscription-aware orchestration" (prompt H-00). Not a phase of the mortgage API: a harness phase run between Phase 5 and Phase 7 (H-D5).
-Status: **Plan approved at Checkpoint A (2026-11-15): Alessandro chose A on H-D1 to H-D5 ("Approved, all A").** Implementation starts on branch `harness-01-context` after Phase 5 merges (H-D5 A). Test design runs now (read-only). Written 2026-11-15 by the lead agent from a read of the repo and the Claude Code docs (prompt H-01 to the `claude-code-guide` agent; facts it marked "summary" rather than quoted are flagged below).
+Plan status (at Checkpoint A): **Plan approved at Checkpoint A (2026-11-15): Alessandro chose A on H-D1 to H-D5 ("Approved, all A").** Implementation starts on branch `harness-01-context` after Phase 5 merges (H-D5 A). Test design runs now (read-only). Written 2026-11-15 by the lead agent from a read of the repo and the Claude Code docs (prompt H-01 to the `claude-code-guide` agent; facts it marked "summary" rather than quoted are flagged below).
 
 ## Scope change (Alessandro, 2026-11-15)
 
@@ -22,6 +22,17 @@ What H1 keeps (final):
 What was removed: every new hook (session context, subagent context, pre-compact, rate-limit), the status line and its usage snapshot, `scripts/context/` (briefs, indexes, shared library), the generated decision and open-item indexes, handovers and their template, CURRENT-WORK, the 832-line test file, and the edits to the agents, the phase skill and `verify.sh`. `.claude/settings.json`, `.claude/hooks/`, `scripts/verify.sh` and `.gitignore` are back to exactly what `main` has. The two allow entries Alessandro approved (H-09) were not added, because the scripts they were for no longer exist.
 
 The sections below record the full build as it happened; they describe files that are no longer on the branch.
+
+## Docs verified (links)
+
+Returned by `claude-code-guide` (H-01) on 2026-11-15; the facts used are in the discovery report:
+- Hooks reference: https://code.claude.com/docs/en/hooks.md (events, input fields, `additionalContext`, `StopFailure` with matcher `rate_limit`)
+- Subagents: https://code.claude.com/docs/en/sub-agents.md (frontmatter, `memory`, subagents do not see the parent conversation)
+- Status line: https://code.claude.com/docs/en/statusline.md (`context_window`, `rate_limits` for Pro, Max and Ultra)
+- Costs and `/usage`: https://code.claude.com/docs/en/costs.md (`/usage`; limit messages name the limit and show the reset time)
+- Context window: https://code.claude.com/docs/en/context-window.md (`/context`, re-injection after compaction)
+- Model configuration: https://code.claude.com/docs/en/model-config.md (window sizes, auto-compaction)
+- Environment variables: https://code.claude.com/docs/en/env-vars.md
 
 ## 1. Discovery report
 
@@ -104,7 +115,7 @@ Test-designer before tests; `security-auditor` (state files hold no secrets; hoo
 1. A fresh subagent started with only "continue the open item X" gets its brief from the hook and finds the decision and handover without the previous conversation.
 2. With the usage snapshot removed or stale, every brief says `usage: unknown (no status-line data since …)`; with a fixture `StopFailure` rate-limit input, the checkpoint gets the blocker, the reset time if present, and the resume instruction.
 
-## 7. Test proposal (`test-designer`, prompt H-02; approved by Alessandro 2026-11-15: recommended set + manual check + U10, answers A1–A15 as recommended)
+## 7. Test proposal (`test-designer`, prompt H-03; approved in H-04: recommended set + manual check + U10, answers A1–A15 as recommended)
 
 About 110 cases in nine groups, all bash with fixtures in temp repos (`CLAUDE_PROJECT_DIR` points at the fixture), a fixed clock (`HARNESS_NOW`), no network and no real account data; jq-less fallback tested the existing way (PATH without jq). Groups: SessionStart (S1–S16), SubagentStart and brief (B1–B10), PreCompact (C1–C10), status line and usage states (U1–U25), StopFailure (E1–E11), index and stale check (I1–I15), handovers (H1–H8), cross-cutting (X1–X9), and one manual check on 2.1.283 (a unique marker in the test-designer brief; a fresh subagent must echo it without reading files; repeated with spec-checker; recorded in the phase file and PROMPTS.md).
 
@@ -132,7 +143,7 @@ The full proposal, verbatim: [`harness-01/test-proposal.md`](harness-01/test-pro
 ## Prompts
 
 ### H-00 · human→agent · 2026-11-15
-- **Prompt:** the brief "FOLLOW-UP TASK: PROJECT-WIDE AGENT CONTEXT INTELLIGENCE & SUBSCRIPTION-AWARE ORCHESTRATION" (Parts 1–9, execution rules, final objective), pasted in full. Not copied verbatim here because of its length; its headings and requirements are reflected in "Goal", the plan and the tests. Kept in the session transcript.
+- **Prompt (verbatim):** in [`harness-01/brief-H-00.md`](harness-01/brief-H-00.md) (460 lines, kept as a separate file because of its length).
 - **Purpose:** new scope of work.
 - **Outcome:** discovery, plan, Checkpoint A.
 
@@ -252,6 +263,16 @@ The full proposal, verbatim: [`harness-01/test-proposal.md`](harness-01/test-pro
 - **Purpose:** remove the session-context output from the chat entirely.
 - **Outcome:** settings, hooks, `verify.sh` and `.gitignore` restored to `main`; the status line and the session-start hook removed as well; H1 is now written rules and the agent registry only.
 
+### H-11 · agent→subagent (`dotnet-reviewer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Fresh-context review of harness phase H1 (light version) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch harness-01-context. Read only. The diff is docs only: run git diff main...HEAD (AGENTS.md, CLAUDE.md, docs/ai/ORCHESTRATION.md, docs/ai/context/AGENT-REGISTRY.md, docs/progress/harness-01-context.md, docs/progress/harness-01/test-proposal.md).
+
+  Check: (1) every claim about Claude Code behaviour or usage reporting is either sourced in the phase file's discovery report or stated as not available, nothing invented; (2) the agent registry matches the real frontmatter in .claude/agents/*.md (models, tools, maxTurns) and changes no agent; (3) the rules keep the human checkpoints, author/reviewer independence and "decisions reserved for Alessandro"; (4) the phase file honestly records the scope change, what was removed and why, and that .claude/settings.json, .claude/hooks/, scripts/verify.sh and .gitignore equal main (check with git diff main -- those paths); (5) plain English per docs/CLAUDE.md, no contradictions between CLAUDE.md, AGENTS.md, ORCHESTRATION.md and the registry. Output: findings, most severe first, as file:line | severity | problem | fix, then what you checked and found fine.
+  ```
+- **Purpose:** fresh-context review of the light version (docs-only diff).
+- **Outcome:** no critical or high findings; 5 medium and 10 low, see "Review gate".
+
 ## What was built (files): full version, later removed
 
 Implemented by a `general-purpose` subagent on `harness-01-context` (commits `d85a25b`, `e51a48e`, `f7fe43b`, `7d45ced`, plus this evidence commit).
@@ -311,7 +332,33 @@ Not run: `shellcheck` (not installed; the X3 case skips it). The manual Subagent
 
 ## Security gate
 
+The light version changes docs only (`git diff main...HEAD -- .claude scripts .gitignore` is empty). Gitleaks ran on every commit through the repo's git hook ("no leaks found" on each). `security-auditor`, Semgrep and the dependency scan were **not run**: no code, configuration, script or package changed, so they have nothing to scan; the reviewer (H-11) checked that no permission, hook or setting changed.
+
 ## Review gate
+
+`dotnet-reviewer` (H-11), static. No critical or high findings.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| R1 | `docs/PROGRESS.md` "Resume here" still described the full design. | Medium | Fixed on this branch. |
+| R2 | Usage wording claimed things the discovery did not source (`/context` for usage, "only in the UI", reset time). | Medium | Fixed: `/usage` and an optional status line for usage, `/context` for the window; reset time sourced (Costs page, and the limit message seen in this session). |
+| R3 | This session still uses the agent definitions loaded before the cut (the reviewer's own definition had the removed "Context and handover" section). | Medium | Recorded; Alessandro restarts Claude Code before the next delegation. On disk `.claude/agents/*.md` equals `main`. |
+| R4 | The lead's Python-in-Bash edit of a `.claude/hooks/**` file bypassed the "ask" rule, and no follow-up was recorded. | Medium | Open, for Alessandro (see "Open issues"). |
+| R5 | The registry used the removed "approaching" state. | Medium | Fixed: "when `/usage` shows a limit is close, or a limit message has appeared". |
+| R6 | `parallel-implementer` is for parallel phases only, and sequential phases had no implementer rule. | Low | Fixed in the registry. |
+| R7 | `SendMessage` and `Explore` were not sourced. | Low | Fixed: H-07 cited; `Explore` "after checking it is available". |
+| R8 | No "Docs verified" section with URLs. | Low | Fixed. |
+| R9 | Wrong prompt ID for the test proposal. | Low | Fixed (H-03, approved in H-04). |
+| R10 | A second, stale "Status:" line. | Low | Fixed (renamed "Plan status (at Checkpoint A)"). |
+| R11 | H-00 not verbatim; harness prompts not in `docs/ai/PROMPTS.md`. | Low | H-00 now verbatim in `harness-01/brief-H-00.md`; H-00 to H-11 go to `PROMPTS.md` at merge. |
+| R12 | "read-only" reads as enforced although the reviewers have Bash. | Low | Fixed in the registry. |
+| R13 | No verify run recorded for the light version. | Low | Fixed: see below. |
+| R14 | "15-question test proposal" wording. | Low | Fixed. |
+| R15 | Registry and CLAUDE.md differed on where prompts are logged. | Low | Fixed. |
+
+**Verify at `35d6f95`** (light version, lead agent): `./scripts/verify.sh` full → `0 Warning(s)`, `total: 442, failed: 0`, `hook tests: 91 passed, 0 failed`, `VERIFY PASSED (full)`.
+
+Spec check: not run. H1 is a harness phase with no requirement in `docs/spec/ORIGINAL_SPEC.md`; the brief's own Parts were cut by Alessandro to the light version.
 
 ## AI output corrected or rejected (REAL cases only)
 
@@ -320,9 +367,12 @@ Not run: `shellcheck` (not installed; the X3 case skips it). The manual Subagent
 
 ## Open issues
 
+- **Bash can edit `.claude/hooks/**` without the "ask" prompt** (R4). Options for Alessandro: (A) add a `block-dangerous-bash.sh` rule and a regression case that block shell writes under `.claude/hooks/` and `.claude/settings*.json`; (B) accept the risk and rely on the instruction. Recommended: A, in Phase 8 (security hardening).
+- **Restart Claude Code** before the next delegation, so agents load the current definitions (R3).
+
 - The full design's open issues no longer apply (its files were removed).
 - Not measurable by any script in this repo: subscription usage, remaining allowance, reset times, per-model quotas. The lead reads them in Claude Code's UI when needed.
-- The 15-question test proposal and the approved test set (section 7) are not implemented: the light version has no scripts to test.
+- The test proposal (about 110 cases) and the approved set (section 7) are not implemented: the light version has no scripts to test.
 
 ## Time spent (approx.)
 
