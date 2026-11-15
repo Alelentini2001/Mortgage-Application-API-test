@@ -69,14 +69,18 @@ public sealed class MortgageApplicationService(
             return AssessmentProcessingOutcome.Skipped;
         }
 
+        // If the clock moved back since the row was saved (time sync), finish at the creation time instead of
+        // throwing: the entity rejects a finish time before CreatedAt.
+        var now = timeProvider.GetUtcNow();
+        var finishedAt = now < assessment.CreatedAt ? assessment.CreatedAt : now;
         var result = TryAssess(work.Inputs);
         if (result is null)
         {
-            assessment.Fail(timeProvider.GetUtcNow());
+            assessment.Fail(finishedAt);
         }
         else
         {
-            assessment.Complete(result, timeProvider.GetUtcNow());
+            assessment.Complete(result, finishedAt);
         }
 
         await repository.UpdateAssessmentAsync(assessment, cancellationToken);

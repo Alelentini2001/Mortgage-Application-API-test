@@ -301,6 +301,36 @@ public sealed class MortgageApplicationServiceTests
         Assert.Null(assessment.FailedAt);
     }
 
+    // R4: a clock that has moved back since the assessment was saved (time sync) must not make Complete throw;
+    // the finish time is the creation time instead.
+    [Fact]
+    public async Task ProcessAssessmentAsync_clock_behind_created_at_completes_at_created_at()
+    {
+        var assessment = await PendingAssessmentAsync(TestData.E1);
+        _clock.Now = _now.AddSeconds(-5);
+
+        var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
+
+        Assert.Equal(AssessmentProcessingOutcome.Completed, outcome);
+        Assert.Equal(AssessmentStatus.Completed, assessment.Status);
+        Assert.Equal(_now, assessment.AssessedAt);
+    }
+
+    // R4: the same for the Failed path.
+    [Fact]
+    public async Task ProcessAssessmentAsync_clock_behind_created_at_fails_at_created_at()
+    {
+        var assessment = await PendingAssessmentAsync(TestData.E1);
+        _repository.StoredInputsOverride = TestData.E1 with { TermYears = 50 };
+        _clock.Now = _now.AddSeconds(-5);
+
+        var outcome = await _service.ProcessAssessmentAsync(assessment.Id, Ct);
+
+        Assert.Equal(AssessmentProcessingOutcome.Failed, outcome);
+        Assert.Equal(AssessmentStatus.Failed, assessment.Status);
+        Assert.Equal(_now, assessment.FailedAt);
+    }
+
     // U-P11: the startup re-enqueue lists only Pending assessments.
     [Fact]
     public async Task ListPendingAssessmentIdsAsync_returns_only_pending_ids()
