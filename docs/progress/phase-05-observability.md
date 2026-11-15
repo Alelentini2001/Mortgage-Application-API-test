@@ -244,6 +244,18 @@ Planning: lead agent only (no subagent yet).
 - **Purpose:** fix the gate findings that need no decision.
 - **Outcome:** commits `0eccb16`, `f25c203`, `bcd3028`; 442 tests; 3 clean integration runs (168 / 168).
 
+### P05-09 · agent→subagent (`spec-checker`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Spec check for Phase 5 (logging + instrumentation) of a .NET 10 mortgage-application API. Read only; do not edit anything.
+
+  Repository: /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-05-observability (checked out). Read: docs/spec/ORIGINAL_SPEC.md, docs/spec/affordability-rules.md section 6, docs/layers/PRODUCTION-LAYERS.md (the Observability row), docs/progress/phase-05-observability.md (goal, plan, decisions, approved tests and answers, gates, open issues), the requirement table in docs/PROGRESS.md, and the code and tests the phase file names.
+
+  Map every spec requirement this phase touches (the spec's logging, instrumentation or observability wording if any, the README "design decisions" expectations it feeds, and the security constraints on personal data), every Phase 5 goal (allowlisted [LoggerMessage] logs, OpenTelemetry tracing with one span per assessment, the two metrics, OTLP export only when configured, the opt-in dashboard, trace ID in ProblemDetails, the allowlist test over logs, spans and metric tags, the carry-overs: ADR 0002 comments and test X1) and the Observability row's "evidence" column to the file and test that meet it. Mark each met / partial / missing with a one-line reason and the file or test name. List any requirement-table rows in docs/PROGRESS.md whose status should change after this phase, and anything the phase file claims that you could not find. Keep it short: one table plus at most 5 notes.
+  ```
+- **Purpose:** requirement traceability before the PR.
+- **Outcome:** see "Review gate", spec check.
+
 ## What was built (files)
 
 Implementation run by a delegated implementer agent on 2026-11-15, test-first, on `phase-05-observability` (no worktree).
@@ -439,7 +451,16 @@ Checked and found fine by the reviewer: span lifecycle and tags per outcome (Q1�
 After the fixes: `./scripts/verify.sh` full → `0 Warning(s)`, `total: 442, failed: 0, skipped: 0`, `hook tests: 91 passed`, `VERIFY PASSED (full)` (lead agent, at `bcd3028`).
 
 
+**`spec-checker` (P05-09)**, static, at `f0bb7b5`. The spec's only related line is the optional enhancement "Logging or instrumentation" (R33): **met**. All Phase 5 goals and carry-overs met (logs, tracing, one span per assessment, the two metrics, conditional OTLP export, opt-in dashboard, trace ID in ProblemDetails, the allowlist tests, ADR 0002 comments, X1). Two rows partial against the layers table wording:
+- "no EF `EnableSensitiveDataLogging`": no test for it. The lead agent grepped `src/`: it appears nowhere.
+- The layers row names "HTTP" client instrumentation, which P5-D5 left out. The API makes no outbound HTTP calls (no `HttpClient` in `src/`, lead agent grep), so there is nothing to instrument; the layers row wording is updated in Phase 10 with the README.
+Rows to update in `docs/PROGRESS.md` after the merge: R33 to met, the Phase 5 table row, the resume section and its carry-overs.
+
 ## AI output corrected or rejected (REAL cases only)
+
+- **Lead agent, invented commit reference.** When writing the security gate section, the lead agent typed a placeholder hash (`ab0e6b1`-era) instead of the real commit the gates ran at. Caught on re-reading the output of its own edit and replaced with `4c7442c` in the next commit.
+- **Implementer, OTLP tests could not have passed as first written.** They set the endpoint with `ConfigureAppConfiguration`, which `WebApplicationFactory` applies only at `Build()`, after `Program` reads the key. Found by the implementer's own first green run (O25/O26 still red); fixed with `UseSetting`.
+- **Implementer, leak search too narrow.** `ForbiddenNumbers` matched fixed-scale forms only, so an unrounded LTI `2.8235` passed (its own self-test listed `2.825` as clean). Caught by `dotnet-reviewer` (R1), fixed in `0eccb16`.
 
 ## Optimisations considered
 
