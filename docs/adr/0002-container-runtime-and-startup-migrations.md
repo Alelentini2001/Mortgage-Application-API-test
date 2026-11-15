@@ -37,5 +37,6 @@ Option 1.
 - **Security, accepted until Phase 7:** in compose, Scalar, the OpenAPI document and every endpoint are reachable without authentication. The port is bound to `127.0.0.1` only. That bind must not be widened (for example to `0.0.0.0` or a bare `8080:8080`) before Phase 7 adds authentication.
 - The compose run is not a production-like configuration. A production-like smoke test would need option 3 or a real deployment.
 - If a future change needs a production-like container locally, option 3 is the upgrade path, with no change to the startup rule.
+- **Run the image with an init process.** The fix for the PID 1 hang is `init: true` in compose, not in the image. Any other runner must do the same (`docker run --init`, or the orchestrator's equivalent); otherwise a failed startup hangs instead of exiting. An init inside the image (for example tini) would add an OS package and needs approval (PR #7 `/code-review` finding 1).
 - Base images are referenced by tag, not digest (P4-D4). Digest pinning is revisited in Phase 8.
 - The comments in `Program.cs` and `DatabaseMigration.cs` that say "ADR in Phase 4" point here. They are updated to "ADR 0002" after Phase 6 merges, because Phase 6 owns `Program.cs`.

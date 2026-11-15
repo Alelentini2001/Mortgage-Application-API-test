@@ -91,11 +91,14 @@ jobs:
             docker compose logs --no-color
             exit 1
           fi
-          location=$(grep -i '^location:' headers.txt | tr -d '\r' | cut -d' ' -f2)
-          if [ -z "$location" ]; then
-            echo "::error::POST /api/applications returned no Location header."
-            exit 1
-          fi
+          location=$(awk 'tolower($1) == "location:" { print $2 }' headers.txt | tr -d '\r')
+          case "$location" in
+            /api/applications/*) ;;
+            *)
+              echo "::error::POST /api/applications returned Location '$location', expected a relative /api/applications/ path."
+              exit 1
+              ;;
+          esac
           status=$(curl -sS --max-time 10 -o fetched.json -w '%{http_code}' "http://127.0.0.1:8080$location") \
             || status="curl-exit-$?"
           if [ "$status" != "200" ]; then
