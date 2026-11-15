@@ -66,7 +66,7 @@ public sealed class MortgageApplicationService(
         var assessment = work.Assessment;
         if (assessment.Status != AssessmentStatus.Pending)
         {
-            return new AssessmentProcessingResult(AssessmentProcessingOutcome.Skipped, null, null);
+            return new AssessmentProcessingResult(AssessmentProcessingOutcome.Skipped, assessment.ApplicationId, null);
         }
 
         // If the clock moved back since the row was saved (time sync), finish at the creation time instead of
@@ -84,8 +84,9 @@ public sealed class MortgageApplicationService(
         }
 
         await repository.UpdateAssessmentAsync(assessment, cancellationToken);
-        return new AssessmentProcessingResult(
-            result is null ? AssessmentProcessingOutcome.Failed : AssessmentProcessingOutcome.Completed, null, null);
+        return result is null
+            ? new AssessmentProcessingResult(AssessmentProcessingOutcome.Failed, assessment.ApplicationId, null)
+            : new AssessmentProcessingResult(AssessmentProcessingOutcome.Completed, assessment.ApplicationId, result.Decision);
     }
 
     /// <summary>For the worker's startup re-enqueue: every Pending assessment, oldest first. Not owner-scoped.</summary>
