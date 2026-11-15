@@ -1,6 +1,6 @@
 # Phase 04: Docker
 
-Status: **In progress: implementation, gates, LOCAL container checks and ADR 0002 draft done; spec check and PR next** · Branch: `phase-04-docker` (worktree, parallel with Phase 6) · PR: — · Started: 2026-11-14 · Finished: —
+Status: **Checkpoint B: PR open, waiting for Alessandro**  · Branch: `phase-04-docker` (worktree, parallel with Phase 6) · PR: [#7](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/7) · Started: 2026-11-14 · Finished: —
 
 ## Goal
 
@@ -212,6 +212,28 @@ Logged here during the parallel run and copied to `docs/ai/PROMPTS.md` on `main`
 - **Purpose:** requirement traceability before the PR.
 - **Outcome:** see "Review gate", spec check.
 
+### P04-12 · agent→subagent (`general-purpose`, from the `/security-review` skill) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security review sub-task for PR #7 (Phase 4, Docker) of a .NET 10 mortgage-application API. Read only: do not edit files and do not run Docker.
+
+  Repository worktree: /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-afcd22232b922d159 (branch phase-04-docker). The diff to review: run `git diff main...HEAD` there. Changed files: .claude/rules/infra.md, .dockerignore, .github/workflows/ci.yml, Dockerfile, compose.yaml, docs/adr/0002-container-runtime-and-startup-migrations.md, docs/progress/phase-04-docker.md. Context to read: src/MortgageApplications.Api/Program.cs, src/MortgageApplications.Api/appsettings*.json, .claude/rules/security.md, AGENTS.md.
+
+  OBJECTIVE: identify HIGH-CONFIDENCE security vulnerabilities newly added by this PR that could have real exploitation potential. Not a general code review. Do not comment on existing security concerns.
+  1. Minimise false positives: only flag issues where you are >80% confident of actual exploitability.
+  2. Skip theoretical issues, style concerns and low-impact findings.
+  3. Prioritise vulnerabilities that could lead to unauthorized access, data breaches or system compromise.
+  4. Do NOT report: denial of service; secrets or sensitive data stored on disk; rate limiting or resource exhaustion.
+
+  Categories to examine: input validation (SQL/command/XXE/template/NoSQL injection, path traversal); authentication and authorization (bypass, privilege escalation, sessions, JWT); crypto and secrets (hardcoded keys, weak crypto, key storage, randomness, certificate validation); injection and code execution (deserialization, YAML, eval, XSS); data exposure (sensitive data logging or storage, PII, endpoint data leakage, debug information exposure). Even if only exploitable from the local network, it can be HIGH.
+
+  Method: (1) research the repository's security model and existing patterns; (2) compare the new changes against them and look for new attack surface; (3) assess each modified file, trace data from inputs to sensitive operations, look for privilege boundaries crossed unsafely.
+
+  For each candidate give: file, line, severity (HIGH / MEDIUM / LOW), category slug, description, exploit scenario, fix recommendation, and a confidence from 1 to 10. Focus on HIGH and MEDIUM; MEDIUM only if obvious and concrete. If there are no candidates, say so plainly. Keep the report short.
+  ```
+- **Purpose:** the find step of the local `/security-review` on PR #7.
+- **Outcome:** no HIGH or MEDIUM candidates, so the skill's false-positive filter step had nothing to run on.
+
 ## What was built (files)
 
 Written by `parallel-implementer` on 2026-11-15 (P04-06). No .NET code, test project, `.dockerignore` or ADR file was changed; ADR 0002 is written later by the lead agent.
@@ -316,7 +338,9 @@ Docker Desktop came up after the implementer had finished (server 29.3.1, arm64)
 | C14 | **Failed first, then fixed** | With `Affordability__AssessmentRate=0.987` (compose override), the extracted CI poll script exited 1 after 60 s with `::error::GET /health did not return 200 within 60 s.` and printed the logs (`OptionsValidationException: AssessmentRate must be between 0.001 and 0.25 …`; no amounts in the 129 log lines). But the container never exited: `dotnet` stayed at 99% CPU (`docker top`) and `Up 40 seconds` after the unhandled exception. Cause: `dotnet` was PID 1, and PID 1 ignores the abort signal the runtime raises on an unhandled exception. With `init: true` the same container exits at once with code 134. Fix: `init: true` in `compose.yaml`. Re-run: poll exit 1 after 3 s with `::error::The api container is not running.` (this also covers nice-to-have C15) |
 | CI steps | Pass | All four `docker` job scripts, extracted from `ci.yml` and run against the fixed compose: `GET /health returned 200.`, `The api container runs as uid 1654, which owns /app/data.`, `POST returned 201 and GET /api/applications/<id> returned the same application.` |
 
-Not done: C14's deliberate CI break (needs a pushed failing commit; waiting for Alessandro). The containers, the `p4check` volume and the test images were removed afterwards.
+The containers, the `p4check` volume and the test images were removed afterwards.
+
+**C14 in CI** (approved in P04-10). Commit `b9791bb` set `Affordability__AssessmentRate: "0.987"` in `compose.yaml`. CI run [43708662262](https://github.com/Alelentini2001/Mortgage-Application-API-test/actions/runs/43708662262) on PR #7: "Build, test, format" passed; "Docker image build and smoke test" **failed** at "Wait for GET /health (60 s)" about 2 s after the poll started, with `##[error]The api container is not running.` and the container log line `Unhandled exception. Microsoft.Extensions.Options.OptionsValidationException: AssessmentRate must be between 0.001 and 0.25 with at most 4 decimal places.` Reverted in `e0ac72a`. The previous run on `0ffb141` ([43708485803](https://github.com/Alelentini2001/Mortgage-Application-API-test/actions/runs/43708485803)) passed both jobs.
 
 ## Security gate
 
@@ -356,11 +380,15 @@ Tools: Gitleaks 8.30.1 on the branch commits (`5 commits scanned ... no leaks fo
 
 The reviewer reproduced the restore and publish of the Api project from the Docker build context on the host (macOS, SDK 10.0.404): both succeeded. It also confirmed that `$APP_UID` expands in `RUN` and `USER`, that a new named volume takes the owner of `/app/data`, and that the POST body passes the strict JSON and validation rules.
 
-**`spec-checker` (P04-11)** at `a2b2edf`, read-only, 2026-11-15. R32 (optional Docker support): **met** in code, with the local checks C1–C11 passing. R46 (build and run from a fresh clone): **partial**, as planned (README in Phase 10, live demo in Phase 11). Goal G5 (startup-migration ADR) partial until ADR 0002 is accepted. C14 partial until the CI break runs. Every other goal, decision and approved check is met. Its notes:
+**`spec-checker` (P04-11)** at `a2b2edf`, read-only, 2026-11-15. R32 (optional Docker support): **met** in code, with the local checks C1–C11 passing. R46 (build and run from a fresh clone): **partial**, as planned (README in Phase 10, live demo in Phase 11). Goal G5 (startup-migration ADR) partial until ADR 0002 is accepted. C14 partial until the CI break runs (it ran afterwards and failed the job as expected; see "Results"). Every other goal, decision and approved check is met. Its notes:
 - The `docker` job has not run in CI yet, so the CI-side claims rest on the script tests and the review.
 - The local numbers (44 s, 305 MB, uid 1654) and the C9 and C14 outputs are in this file only, not in a log in the repo.
 - The plan table named the ADR file `0002-database-migrations-on-startup.md`; fixed to the real name.
 - R32 and R46 still read "missing" in `docs/PROGRESS.md`, which is updated on `main` after the merge.
+
+**Local PR reviews** on PR #7 at `0ffb141`, posted as [one PR comment](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/7#issuecomment-6893782315):
+- `/code-review` (high effort, run by the lead agent in its own context): 4 findings. 1) the PID 1 fix is only in compose, not the image: ADR 0002 now says the image must run with an init process (an init in the image would add an OS package, which needs approval). 2) the CI `Location` parse assumed one space and a relative path: fixed with `awk` and a check for a relative `/api/applications/` path, tested locally on four sample header files. 3) `.editorconfig` in the restore layer broke the restore cache: moved after the restore. 4) an existing `data` volume keeps its old owner: `docker compose down -v` goes into the README (Phase 10). Fixes in `55d3daa`; the image built locally after them.
+- `/security-review`: no findings (P04-12).
 
 ## AI output corrected or rejected (REAL cases only)
 
@@ -373,8 +401,8 @@ The reviewer reproduced the restore and publish of the Api project from the Dock
 
 - Image digest pinning: Learn calls it a best practice; P4-D4 chose tags for now. Revisit in Phase 8, with a Dependabot `docker` entry (security S5). Also covers review R6: a floating `sdk:10.0` can bring a newer SDK band than the `verify` job and fail on new analyzer warnings.
 - ADR 0002 is a draft for Alessandro to accept or change at Checkpoint B.
+- README (Phase 10): document `docker compose down -v` as the reset when a `data` volume has the wrong owner (PR `/code-review` finding 4).
 - The "ADR in Phase 4" comments in `Program.cs` and `DatabaseMigration.cs` are updated to "ADR 0002" after both merges.
-- C14 in CI (a deliberately broken startup must fail the `docker` job): approved in P04-10, run on the PR branch as a temporary commit that is reverted.
 - X1 (no startup migration outside Development, as an xUnit test): deferred until Phase 4 and Phase 6 are both merged.
 - LOCAL checks: not run by the implementer (no Docker daemon); run afterwards by the lead agent, all pass after the `init: true` fix (see "Results (lead agent, with Docker)"). The CI `docker` job has not run yet: it runs with the PR.
 - C14's "one deliberate CI break" is not done: it needs a pushed commit that breaks the container, then a revert. Needs Alessandro's go-ahead, since it adds a red CI run to the PR.
