@@ -78,6 +78,13 @@ Approved by Alessandro on 2026-11-15 (P05-02), with option A on every decision a
 
 No ADR: none of the chosen options changes the architecture (an ADR was proposed only for P5-D1 C or P5-D3 B).
 
+## Checkpoint B outcome (2026-11-15)
+
+Alessandro: "proceed", then "Approved, merge here" (P05-11).
+- Rules section 6 (`docs/spec/affordability-rules.md`) now names the HTTP server-span keys (review R4).
+- The four PR `/code-review` findings go to Phase 9.
+- The CI fix (`2ca41ee`) was made in a separate session started from this one; this session committed its phase-file note and merged.
+
 ## Docs verified (links)
 
 Checked before planning, 2026-11-15:
@@ -277,6 +284,14 @@ Planning: lead agent only (no subagent yet).
   ```
 - **Purpose:** the find step of the local `/security-review` on PR #9.
 - **Outcome:** no HIGH or MEDIUM candidates, so the skill's false-positive filter step had nothing to run on.
+
+### P05-11 · human→agent · 2026-11-15
+- **Prompts (verbatim), in order:**
+  > proceed
+
+  > Approved, merge here
+- **Purpose:** Checkpoint B approval of PR #9. After "proceed", the lead agent asked: "Do you approve PR #9, with my two recommendations: name the extra HTTP span keys in rules section 6, and move the four low code-review findings to Phase 9?", and whether to merge here or in the Phase 5 session. "Approved, merge here" answers both.
+- **Outcome:** rules section 6 amended in this PR; the four PR `/code-review` findings carried to Phase 9; PR #9 squash-merged by the lead agent after green CI.
 
 ## What was built (files)
 
@@ -482,10 +497,16 @@ After the fixes: `./scripts/verify.sh` full → `0 Warning(s)`, `total: 442, fai
 - The layers row names "HTTP" client instrumentation, which P5-D5 left out. The API makes no outbound HTTP calls (no `HttpClient` in `src/`, lead agent grep), so there is nothing to instrument; the layers row wording is updated in Phase 10 with the README.
 Rows to update in `docs/PROGRESS.md` after the merge: R33 to met, the Phase 5 table row, the resume section and its carry-overs.
 
+**CI failure on PR #9 and fix** (2026-11-15). CI "Build, test, format" failed on `0e0a1f0` (run 43722308183) and `cd849d3` (run 43722941889): 442 tests, 3 failed, all in `OtlpExportTests` — `With_an_endpoint_traces_metrics_and_logs_are_exported` (paths `[]`), `Traces_endpoint_alone_exports_traces` (no `/v1/traces` request) and `Exported_data_has_our_span_and_instruments_and_no_assessment_numbers` (empty body). The fake collector received nothing, and each test took only 79–271 ms. "Docker image build and smoke test" passed.
+- **Not reproduced locally:** the same tests passed on macOS, in a Linux arm64 `sdk:10.0` container for the class alone (6 / 6, 31 s) and for the full integration suite in Release (168 / 168). There, each export test took seconds, because the host's shutdown flushes the exporters.
+- **Cause (inferred, not proven):** the tests depended only on that flush at host shutdown. On the CI runner the hosts were disposed in milliseconds and nothing reached the collector.
+- **Fix** (`2ca41ee`, tests only): each exporting host sets `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BLRP_SCHEDULE_DELAY` and `OTEL_METRIC_EXPORT_INTERVAL` to 100 ms (read through `IConfiguration`, OTLP exporter README "Environment Variables"), and each test waits, bounded at 10 s, for the expected data while the host is running, then disposes it. The assertions are unchanged. Mutation check: with `UseOtlpExporter()` commented out, all five positive tests failed with "received 0 request(s)" and O24 still passed. `./scripts/verify.sh` full: 442 passed, `VERIFY PASSED (full)`.
+
 ## AI output corrected or rejected (REAL cases only)
 
 - **Lead agent, invented commit reference.** When writing the security gate section, the lead agent typed a placeholder hash (`ab0e6b1`-era) instead of the real commit the gates ran at. Caught on re-reading the output of its own edit and replaced with `4c7442c` in the next commit.
 - **Implementer, OTLP tests could not have passed as first written.** They set the endpoint with `ConfigureAppConfiguration`, which `WebApplicationFactory` applies only at `Build()`, after `Program` reads the key. Found by the implementer's own first green run (O25/O26 still red); fixed with `UseSetting`.
+- **Implementer, export tests relied on the shutdown flush.** The OTLP export tests passed locally but received no data on the Linux CI runner (see "CI failure on PR #9 and fix" under Tests). Caught by CI, fixed in `2ca41ee`.
 - **Implementer, leak search too narrow.** `ForbiddenNumbers` matched fixed-scale forms only, so an unrounded LTI `2.8235` passed (its own self-test listed `2.825` as clean). Caught by `dotnet-reviewer` (R1), fixed in `0eccb16`.
 
 ## Optimisations considered
