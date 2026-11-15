@@ -20,3 +20,7 @@ Rules:
 - "Partial" must say what is missing.
 - If the spec file is absent, say so and stop.
 - No style opinions. No suggestions beyond what the spec asks for.
+
+## Context and handover
+- Start from your brief (added at the top of your context by the `SubagentStart` hook; the lead prints the same text with `scripts/context/brief.sh <agent>`) and from `docs/ai/context/CONTEXT-INDEX.md`. Read only the files and sections they point to.
+- End your report with the headings in `docs/ai/context/HANDOVER-TEMPLATE.md` (Task ID, Responsibility, Context references, Work done, Files, Discoveries, Concerns, Verification, Next action). The lead saves it as a handover.

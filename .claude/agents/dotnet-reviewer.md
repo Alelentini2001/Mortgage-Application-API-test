@@ -24,3 +24,7 @@ Output only a list, most severe first, one finding per line:
 `file:line | severity (critical/high/medium/low) | why it is wrong | concrete fix`
 If you find nothing real, output `No findings.` and the list of files you reviewed.
 Never claim you ran something you did not run.
+
+## Context and handover
+- Start from your brief (added at the top of your context by the `SubagentStart` hook; the lead prints the same text with `scripts/context/brief.sh <agent>`) and from `docs/ai/context/CONTEXT-INDEX.md`. Read only the files and sections they point to.
+- End your report with the headings in `docs/ai/context/HANDOVER-TEMPLATE.md` (Task ID, Responsibility, Context references, Work done, Files, Discoveries, Concerns, Verification, Next action). The lead saves it as a handover.

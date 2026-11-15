@@ -33,8 +33,23 @@ IMPORTANT: Resume protocol. At the start of every session, read `docs/PROGRESS.m
 - `block-dangerous-bash.sh` (PreToolUse Bash): blocks force push, `--no-verify`, `rm -rf`, `reset --hard`, pipe-to-shell.
 - `format-on-edit.sh` (PostToolUse Edit|Write): whitespace-formats the edited `.cs` file.
 - `verify-on-stop.sh` (Stop): runs `verify.sh --fast` when source changed; guarded by `stop_hook_active`.
-- `reinject-context.sh` (SessionStart compact): prints the "Resume here" section of `docs/PROGRESS.md`.
-- Hook regression tests: `.claude/hooks/tests/test-hooks.sh` (run by `verify.sh`). Add a case for every bypass or false positive found.
+- `session-context.sh` (SessionStart startup|resume|clear|fork): prints "Resume here" (capped), the branch, the CURRENT-WORK pointer, the usage status and the blocker if any.
+- `reinject-context.sh` (SessionStart compact): shim that runs `session-context.sh` for compact; it also prints the PreCompact checkpoint.
+- `subagent-context.sh` (SubagentStart): adds `scripts/context/brief.sh <agent_type>` as `additionalContext`.
+- `pre-compact.sh` (PreCompact): writes `.claude/state/checkpoint.md`; prints "Also keep ..." instructions.
+- `usage-stop.sh` (StopFailure): writes `.claude/state/blocker.md` (error type, reset time if known, resume sentence).
+- `.claude/statusline.sh` (status line): model, context %, 5h and 7d usage; writes `.claude/state/usage.json`.
+- Hook regression tests: `.claude/hooks/tests/test-hooks.sh` (run by `verify.sh`; sources `test-context.sh` for the H1 cases). Add a case for every bypass or false positive found.
+
+## Context and usage awareness
+- Context lives in `docs/ai/context/`: start from `CONTEXT-INDEX.md`; keep `CURRENT-WORK.md` current (phase, step, files in play, next action); write a handover in `handovers/` for each delegated task; run `scripts/context/index.sh` after changing decisions, open issues or carry-overs.
+- Usage states come from the status-line snapshot `.claude/state/usage.json` (5-hour and 7-day windows; stale after 15 minutes) and from `.claude/state/blocker.md`:
+  - **normal** (< 75%): work as usual.
+  - **approaching** (≥ 75% in either window): fewer subagents and less context loading; finish the current step and update CURRENT-WORK.
+  - **exhausted** (≥ 100%, or a `rate_limit` StopFailure): stop retrying, keep progress in the repo, and make sure CURRENT-WORK and the blocker's resume sentence say exactly what to do next.
+  - **unknown** (no data, stale or unreadable): report it as unknown; never guess a number.
+- Never switch or downgrade a model to save usage without verifying the change with Alessandro; never downgrade a security or review model.
+- Not measurable from scripts: plan name, remaining allowance, per-model quotas as numbers, real billing.
 
 ## Compaction
 When compacting, always keep: the current phase and step, the list of modified files, the test commands and their last result, and open decisions awaiting Alessandro.
