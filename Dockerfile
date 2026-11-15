@@ -6,7 +6,8 @@ WORKDIR /src
 
 # Restore as its own layer, so it is cached until a project or package file changes.
 # Only the Api project is restored: the .slnx also lists the test projects, which .dockerignore excludes.
-COPY global.json Directory.Build.props Directory.Packages.props ./
+# .editorconfig is copied so the image build applies the same analyzer settings as scripts/verify.sh.
+COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
 COPY src/MortgageApplications.Core/MortgageApplications.Core.csproj src/MortgageApplications.Core/
 COPY src/MortgageApplications.Infrastructure/MortgageApplications.Infrastructure.csproj src/MortgageApplications.Infrastructure/
 COPY src/MortgageApplications.Api/MortgageApplications.Api.csproj src/MortgageApplications.Api/

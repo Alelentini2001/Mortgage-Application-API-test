@@ -62,12 +62,30 @@ jobs:
           done
           echo "GET /health returned 200."
 
+      # C2 and C8: the app runs as a non-root user that owns the data folder.
+      - name: Check the container user
+        run: |
+          uid=$(docker compose exec -T api id -u) || uid=""
+          if [ -z "$uid" ] || [ "$uid" = "0" ]; then
+            echo "::error::The api container runs as uid '$uid', expected a non-root user."
+            exit 1
+          fi
+          owner=$(docker compose exec -T api stat -c '%u' /app/data) || owner=""
+          if [ "$owner" != "$uid" ]; then
+            echo "::error::/app/data is owned by uid '$owner', expected '$uid'."
+            exit 1
+          fi
+          echo "The api container runs as uid $uid, which owns /app/data."
+
       # /health does not touch the database: this proves the startup migration ran and /app/data is writable.
+      # The body is the synthetic golden example E1 (tests/.../Http.cs), not personal data.
       - name: POST then GET an application
         run: |
           body='{"annualIncome":85000.00,"monthlyExpenses":900.00,"depositAmount":60000.00,"propertyValue":300000.00,"termYears":30}'
+          # On a transport error, keep going so the status check below prints the container logs.
           status=$(curl -sS --max-time 10 -o created.json -D headers.txt -w '%{http_code}' \
-            -H 'Content-Type: application/json' -d "$body" http://127.0.0.1:8080/api/applications)
+            -H 'Content-Type: application/json' -d "$body" http://127.0.0.1:8080/api/applications) \
+            || status="curl-exit-$?"
           if [ "$status" != "201" ]; then
             echo "::error::POST /api/applications returned $status, expected 201."
             docker compose logs --no-color
@@ -78,13 +96,16 @@ jobs:
             echo "::error::POST /api/applications returned no Location header."
             exit 1
           fi
-          status=$(curl -sS --max-time 10 -o fetched.json -w '%{http_code}' "http://127.0.0.1:8080$location")
+          status=$(curl -sS --max-time 10 -o fetched.json -w '%{http_code}' "http://127.0.0.1:8080$location") \
+            || status="curl-exit-$?"
           if [ "$status" != "200" ]; then
             echo "::error::GET $location returned $status, expected 200."
             docker compose logs --no-color
             exit 1
           fi
-          if ! diff <(jq -S . created.json) <(jq -S . fetched.json) > /dev/null; then
+          # jq -e fails on empty or non-JSON files, so two empty bodies can never match.
+          if ! jq -e -n --slurpfile a created.json --slurpfile b fetched.json \
+            '($a | length) == 1 and $a == $b and $a[0].annualIncome == 85000 and $a[0].termYears == 30' > /dev/null; then
             echo "::error::GET $location did not return the values that were created."
             exit 1
           fi
