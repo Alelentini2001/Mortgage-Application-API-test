@@ -1,6 +1,6 @@
 # Phase 05: Logging + instrumentation
 
-Status: **In progress: implemented, gates run and their findings fixed (2026-11-15); PR and Checkpoint B next** · Branch: `phase-05-observability` · PR: — · Started: 2026-11-15 · Finished: —
+Status: **Checkpoint B: PR open, waiting for Alessandro** · Branch: `phase-05-observability` · PR: [#9](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/9) · Started: 2026-11-15 · Finished: —
 
 ## Goal
 
@@ -256,6 +256,28 @@ Planning: lead agent only (no subagent yet).
 - **Purpose:** requirement traceability before the PR.
 - **Outcome:** see "Review gate", spec check.
 
+### P05-10 · agent→subagent (`general-purpose`, from the `/security-review` skill) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security review sub-task for PR #9 (Phase 5, logging and instrumentation) of a .NET 10 mortgage-application API. Read only: do not edit files and do not run Docker.
+
+  Repository: /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-05-observability, checked out). The diff to review: run `git diff main...HEAD` there (OpenTelemetry tracing, metrics and log export via OTLP when configured; a worker span and two metrics; a new log event; an opt-in compose override with the Aspire dashboard; tests). Accepted and documented, do not report: exception messages and stack traces in error logs leaving the process when OTLP is on (P5-D4), the dashboard's OTLP endpoint without an API key on the compose network (S7), image tag not digest (Phase 8), the fixed DevelopmentCurrentUser until Phase 7. Context to read: docs/progress/phase-05-observability.md ("Security gate"), docs/spec/affordability-rules.md section 6, .claude/rules/security.md, AGENTS.md.
+
+  OBJECTIVE: identify HIGH-CONFIDENCE security vulnerabilities newly added by this PR that could have real exploitation potential. Not a general code review. Do not comment on existing security concerns.
+  1. Minimise false positives: only flag issues where you are >80% confident of actual exploitability.
+  2. Skip theoretical issues, style concerns and low-impact findings.
+  3. Prioritise vulnerabilities that could lead to unauthorized access, data breaches or system compromise.
+  4. Do NOT report: denial of service; secrets or sensitive data stored on disk; rate limiting or resource exhaustion.
+
+  Categories to examine: input validation (SQL/command/XXE/template/NoSQL injection, path traversal); authentication and authorization (bypass, privilege escalation, sessions, JWT); crypto and secrets (hardcoded keys, weak crypto, key storage, randomness, certificate validation); injection and code execution (deserialization, YAML, eval, XSS); data exposure (sensitive data logging or storage, PII, endpoint data leakage, debug information exposure). Even if only exploitable from the local network, it can be HIGH.
+
+  Method: (1) research the repository's security model and existing patterns; (2) compare the new changes against them and look for new attack surface; (3) assess each modified file, trace data from inputs to sensitive operations, look for privilege boundaries crossed unsafely.
+
+  For each candidate give: file, line, severity (HIGH / MEDIUM / LOW), category slug, description, exploit scenario, fix recommendation, and a confidence from 1 to 10. Focus on HIGH and MEDIUM; MEDIUM only if obvious and concrete. If there are no candidates, say so plainly. Keep the report short.
+  ```
+- **Purpose:** the find step of the local `/security-review` on PR #9.
+- **Outcome:** no HIGH or MEDIUM candidates, so the skill's false-positive filter step had nothing to run on.
+
 ## What was built (files)
 
 Implementation run by a delegated implementer agent on 2026-11-15, test-first, on `phase-05-observability` (no worktree).
@@ -450,6 +472,10 @@ Checked and found fine by the reviewer: span lifecycle and tags per outcome (Q1�
 
 After the fixes: `./scripts/verify.sh` full → `0 Warning(s)`, `total: 442, failed: 0, skipped: 0`, `hook tests: 91 passed`, `VERIFY PASSED (full)` (lead agent, at `bcd3028`).
 
+
+**Local PR reviews** on PR #9 at `0e0a1f0`, posted as one PR comment.
+- `/code-review` (high effort, run by the lead agent in its own context): 4 low findings, none fixed here: (1) the `OTEL_RESOURCE_ATTRIBUTES` check is a loose substring match; (2) the rules-version tag comes from configuration, not the stored result (same value today); (3) the outcome tag is set twice on the span; (4) a single signal-specific endpoint key makes the other signals retry against localhost. Proposed: Phase 9 (4 also in the README).
+- `/security-review`: no findings (P05-10).
 
 **`spec-checker` (P05-09)**, static, at `f0bb7b5`. The spec's only related line is the optional enhancement "Logging or instrumentation" (R33): **met**. All Phase 5 goals and carry-overs met (logs, tracing, one span per assessment, the two metrics, conditional OTLP export, opt-in dashboard, trace ID in ProblemDetails, the allowlist tests, ADR 0002 comments, X1). Two rows partial against the layers table wording:
 - "no EF `EnableSensitiveDataLogging`": no test for it. The lead agent grepped `src/`: it appears nowhere.
