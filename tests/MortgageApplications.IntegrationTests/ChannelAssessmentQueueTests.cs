@@ -40,4 +40,18 @@ public sealed class ChannelAssessmentQueueTests
         Assert.True(_queue.Reader.TryRead(out var only));
         Assert.Equal(first, only);
     }
+
+    // Review R2: a request token that is already cancelled must not strand a saved Pending row while there is room.
+    [Fact]
+    public async Task EnqueueAsync_with_cancelled_token_and_free_capacity_queues_the_id()
+    {
+        var id = Guid.NewGuid();
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        await _queue.EnqueueAsync(id, cancelled.Token);
+
+        Assert.True(_queue.Reader.TryRead(out var read));
+        Assert.Equal(id, read);
+    }
 }

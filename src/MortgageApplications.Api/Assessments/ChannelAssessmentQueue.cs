@@ -29,6 +29,10 @@ public sealed class ChannelAssessmentQueue : IAssessmentQueue
     /// <summary>For the worker (the only reader).</summary>
     public ChannelReader<Guid> Reader => _channel.Reader;
 
+    // TryWrite first: WriteAsync returns cancelled at once for a token that is already cancelled, even when there is
+    // room, which would leave the saved row Pending until a restart. The token only bounds a wait for room.
     public ValueTask EnqueueAsync(Guid assessmentId, CancellationToken cancellationToken) =>
-        _channel.Writer.WriteAsync(assessmentId, cancellationToken);
+        _channel.Writer.TryWrite(assessmentId)
+            ? ValueTask.CompletedTask
+            : _channel.Writer.WriteAsync(assessmentId, cancellationToken);
 }
