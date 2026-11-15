@@ -403,7 +403,7 @@ Questions and the lead agent's recommended answers:
 
 ## Security gate
 
-`security-auditor` (P05-06) on `git diff main...HEAD` at `ab0e6b1`-era HEAD (15 commits). **Verdict: PASS.** Tools: Gitleaks (branch commits, working tree, full history: no leaks), Semgrep `p/csharp` + `p/secrets` (9 changed source files; `.semgrepignore` skips tests: 0 findings), `dotnet list package --vulnerable --include-transitive` (none). New transitive packages: only `OpenTelemetry`, `OpenTelemetry.Api`, `OpenTelemetry.Api.ProviderBuilderExtensions`, all 1.20.1. `dotnet nuget verify` (package signatures): **not run**, the permission system denied it.
+`security-auditor` (P05-06) on `git diff main...HEAD` at `4c7442c` (15 commits). **Verdict: PASS.** Tools: Gitleaks (branch commits, working tree, full history: no leaks), Semgrep `p/csharp` + `p/secrets` (9 changed source files; `.semgrepignore` skips tests: 0 findings), `dotnet list package --vulnerable --include-transitive` (none). New transitive packages: only `OpenTelemetry`, `OpenTelemetry.Api`, `OpenTelemetry.Api.ProviderBuilderExtensions`, all 1.20.1. `dotnet nuget verify` (package signatures): **not run**, the permission system denied it.
 
 | # | Finding | Severity | Status |
 |---|---|---|---|
