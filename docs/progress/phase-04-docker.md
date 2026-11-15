@@ -22,7 +22,7 @@ Phase 6 changes `Program.cs`, `ApplicationEndpoints.cs`, Core, Infrastructure an
 | `compose.yaml` (new) | api service + `data` volume |
 | `.dockerignore` | only if the build context needs it (it already excludes `bin/`, `obj/`, `*.db`, `tests/`, `docs/`, `.env*`, `*.pem`) |
 | `.github/workflows/ci.yml` | new `docker` job |
-| `docs/adr/0002-database-migrations-on-startup.md` (new) | ADR number 0002 is reserved for this phase; Phase 6 takes 0003 |
+| `docs/adr/0002-container-runtime-and-startup-migrations.md` (new) | ADR number 0002 is reserved for this phase; Phase 6 takes 0003 |
 | `docs/progress/phase-04-docker.md` | this file |
 
 Shared evidence files (`docs/PROGRESS.md`, `docs/ai/PROMPTS.md`, `DESIGN-JOURNAL.md`, `ORCHESTRATION.md`) are **not** edited in the worktree. Prompts are logged in this file during the phase and copied into `PROMPTS.md` on `main` after the merge, so the two branches cannot conflict there.
@@ -200,6 +200,18 @@ Logged here during the parallel run and copied to `docs/ai/PROMPTS.md` on `main`
 - **Purpose:** approve the recommended answer to all seven open decisions (Phase 6: accept S1 until Phase 8, fix the clock (R4), retry the startup sweep (R3), record the missing concurrency token in ADR 0003, accept the worker-only methods with comments, keep the Q5 catch; both phases: the agent drafts ADR 0002 and ADR 0003) and the deliberate CI break for C14; plus a question on concurrent users.
 - **Outcome:** R3 and R4 fixed on `phase-06-background`; ADR 0002 and ADR 0003 drafted; the question answered in chat.
 
+### P04-11 · agent→subagent (`spec-checker`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Spec check for Phase 4 (Docker) of a .NET 10 mortgage-application API. Read only; do not edit anything.
+
+  Read the branch files in the worktree /Users/ale_ssd/Developer/Mortgage-Application-API-test/.claude/worktrees/agent-afcd22232b922d159 (branch phase-04-docker): docs/spec/ORIGINAL_SPEC.md, docs/progress/phase-04-docker.md (goal, plan, decisions P4-D1 to P4-D4, approved checks C1-C16 and answers), docs/adr/0002-container-runtime-and-startup-migrations.md, Dockerfile, compose.yaml, .dockerignore, .github/workflows/ci.yml, .claude/rules/infra.md, .claude/rules/security.md, and the traceability notes in docs/progress/phase-01-spec.md for the requirement IDs.
+
+  Map every spec requirement and every Phase 4 goal and approved check that this phase touches (containerisation, configuration, startup migrations, CI, security constraints such as non-root, no secrets, loopback bind) to the file or test or CI step where it is met. Mark each met / partial / missing, with a one-line reason and the file path. Say which checks are LOCAL only (run by the lead agent, recorded in the phase file) and which run in CI. List anything the phase file claims that you could not find in the files. Keep it short: one table plus at most 5 notes.
+  ```
+- **Purpose:** requirement traceability before the PR.
+- **Outcome:** see "Review gate", spec check.
+
 ## What was built (files)
 
 Written by `parallel-implementer` on 2026-11-15 (P04-06). No .NET code, test project, `.dockerignore` or ADR file was changed; ADR 0002 is written later by the lead agent.
@@ -343,6 +355,12 @@ Tools: Gitleaks 8.30.1 on the branch commits (`5 commits scanned ... no leaks fo
 | R9 | `.claude/rules/infra.md` globs do not match `compose.yaml` | Low | Fixed: `compose*.yaml` and `.dockerignore` added to its `paths` |
 
 The reviewer reproduced the restore and publish of the Api project from the Docker build context on the host (macOS, SDK 10.0.404): both succeeded. It also confirmed that `$APP_UID` expands in `RUN` and `USER`, that a new named volume takes the owner of `/app/data`, and that the POST body passes the strict JSON and validation rules.
+
+**`spec-checker` (P04-11)** at `a2b2edf`, read-only, 2026-11-15. R32 (optional Docker support): **met** in code, with the local checks C1–C11 passing. R46 (build and run from a fresh clone): **partial**, as planned (README in Phase 10, live demo in Phase 11). Goal G5 (startup-migration ADR) partial until ADR 0002 is accepted. C14 partial until the CI break runs. Every other goal, decision and approved check is met. Its notes:
+- The `docker` job has not run in CI yet, so the CI-side claims rest on the script tests and the review.
+- The local numbers (44 s, 305 MB, uid 1654) and the C9 and C14 outputs are in this file only, not in a log in the repo.
+- The plan table named the ADR file `0002-database-migrations-on-startup.md`; fixed to the real name.
+- R32 and R46 still read "missing" in `docs/PROGRESS.md`, which is updated on `main` after the merge.
 
 ## AI output corrected or rejected (REAL cases only)
 
