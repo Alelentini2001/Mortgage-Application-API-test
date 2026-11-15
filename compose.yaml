@@ -12,6 +12,8 @@ services:
       # Development, so the existing Development-only startup migration creates the schema (P4-D1, ADR 0002).
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__MortgageApplications: Data Source=/app/data/mortgage-applications.db
+      # TEMPORARY (check C14): an invalid option must make the CI docker job fail. Reverted in the next commit.
+      Affordability__AssessmentRate: "0.987"
     volumes:
       - data:/app/data
 
