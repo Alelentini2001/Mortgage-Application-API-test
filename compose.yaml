@@ -1,0 +1,19 @@
+# Local development and demo only. Production configuration comes from environment variables.
+services:
+  api:
+    build: .
+    # An init process runs as PID 1. Without it, dotnet is PID 1 and ignores its own abort signal after an
+    # unhandled startup exception, so the container hangs at full CPU instead of exiting (found by check C14).
+    init: true
+    ports:
+      # Loopback only: there is no authentication until Phase 7.
+      - "127.0.0.1:8080:8080"
+    environment:
+      # Development, so the existing Development-only startup migration creates the schema (P4-D1, ADR 0002).
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__MortgageApplications: Data Source=/app/data/mortgage-applications.db
+    volumes:
+      - data:/app/data
+
+volumes:
+  data:

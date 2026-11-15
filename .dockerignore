@@ -10,7 +10,8 @@
 .claude/
 docs/
 tests/
-*.md
-.env
-.env.*
-*.pem
+**/*.md
+**/.env
+**/.env.*
+**/*.pem
+**/secrets/
