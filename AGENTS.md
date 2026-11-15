@@ -24,6 +24,9 @@ Tests run on Microsoft.Testing.Platform (set in `global.json`). xUnit v3 filters
 - `src/MortgageApplications.Api`: HTTP (Minimal APIs), auth, hosting, background worker. Request/response DTOs live here and are never entities.
 - `tests/MortgageApplications.UnitTests` (Core) and `tests/MortgageApplications.IntegrationTests` (`WebApplicationFactory`).
 
+## Agents and models
+Who does what, with which model and why: `docs/ai/context/AGENT-REGISTRY.md`. Subagents do not see the lead's conversation; the lead's prompt carries the task, the files to read and the limits.
+
 ## Coding standards (only where they differ from .NET defaults)
 - Money and percentages are `decimal`. Never `double`. Round only at the end: 2 dp, `MidpointRounding.AwayFromZero`.
 - Minimal APIs with `MapGroup` + `TypedResults`. Public request/response records.

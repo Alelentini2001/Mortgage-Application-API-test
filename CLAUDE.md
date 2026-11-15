@@ -36,5 +36,11 @@ IMPORTANT: Resume protocol. At the start of every session, read `docs/PROGRESS.m
 - `reinject-context.sh` (SessionStart compact): prints the "Resume here" section of `docs/PROGRESS.md`.
 - Hook regression tests: `.claude/hooks/tests/test-hooks.sh` (run by `verify.sh`). Add a case for every bypass or false positive found.
 
+## Usage awareness and model choice
+- Subscription usage is shown in `/usage` (and in a status line only if one is set up to print `rate_limits`); `/context` shows the context window. No script in this repo reads usage. When a limit is hit, the message names the limit and its reset time (docs: Costs page; seen in this project as "You've hit your 5-hour limit · resets 11pm").
+- Plan to the usage left: delegate only where a fresh context adds value (independent review, test design, security), resume an agent with `SendMessage` instead of starting a new one (as in H1, prompt H-07), and brief subagents with paths, not pasted files.
+- If a usage limit stops work: do not retry; make sure `docs/PROGRESS.md` "Resume here" and the phase file say exactly what was done and the next action, so the next session continues from the repo.
+- Model choice follows `docs/ai/context/AGENT-REGISTRY.md`. Never downgrade a security, review or money-maths task to save usage, and never claim a model or allowance is available without checking.
+
 ## Compaction
 When compacting, always keep: the current phase and step, the list of modified files, the test commands and their last result, and open decisions awaiting Alessandro.
