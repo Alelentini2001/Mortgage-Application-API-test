@@ -133,5 +133,8 @@ expect 0 format-on-edit.sh "$(jq -nc --arg f "$probe" '{tool_input:{file_path:$f
 if grep -q '^    public static int A(int a, int b) => a + b;$' "$probe"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL [format-on-edit.sh] file not formatted"; fi
 rm -f "$probe"
 
+# --- harness H1: context, handovers, checkpoints, usage awareness (fixtures in temp dirs) ---
+source "$hooks/tests/test-context.sh"
+
 echo "hook tests: $pass passed, $fail failed"
 [[ "$fail" -eq 0 ]]
