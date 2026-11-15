@@ -113,8 +113,10 @@ public sealed class AssessmentWorkerTests
 
         // The third row is saved before the enqueue, so once it exists the POST has reached the full queue.
         await Http.EventuallyAsync(async () => await CountAssessmentsAsync(host.Services) == 3, () => "third assessment saved");
+        // Review R9: the only slot is taken (by the second ID), so the third POST can only be waiting in WriteAsync.
+        var queue = host.Services.GetRequiredService<ChannelAssessmentQueue>();
+        await Http.EventuallyAsync(() => Task.FromResult(queue.Reader.Count == 1), () => "one ID waiting in the queue");
         Assert.False(third.IsCompleted);
-        Assert.Equal(1, host.Services.GetRequiredService<ChannelAssessmentQueue>().Reader.Count);
         gate.Open();
         var thirdResponse = await third.WaitAsync(_wait, TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
@@ -189,6 +191,70 @@ public sealed class AssessmentWorkerTests
         Assert.Equal(AssessmentStatus.Pending, assessment.Status);
         Assert.Null(assessment.FailedAt);
         AssertNoWorkerWarningsOrErrors(factory);
+    }
+
+    // Review R5: stopping the host after Complete ran in memory but before the save leaves the row Pending, with no
+    // result time and no failure time, and logs no error.
+    [Fact(Timeout = _timeoutMs)]
+    public async Task Shutdown_before_the_save_leaves_the_assessment_pending()
+    {
+        await using var factory = new ApiFactory();
+        var gate = new WorkerGate();
+        var host = factory.WithWebHostBuilder(
+            builder => builder.ConfigureTestServices(services => services.HoldWorkerAt(gate, WorkerGatePoint.BeforeSave)),
+            runWorker: true);
+        var client = host.CreateClient();
+        await WaitForStartupRequeueAsync(factory);
+        var applicationId = await client.CreateApplicationAsync();
+        var assessmentId = Guid.Parse(await (await client.PostAssessmentAsync(applicationId)).IdAsync());
+        await gate.Entered.WaitAsync(_wait, TestContext.Current.CancellationToken);
+
+        await host.DisposeAsync().AsTask().WaitAsync(_wait, TestContext.Current.CancellationToken);
+
+        await using var reader = factory.WithWebHostBuilder(_ => { });
+        using var scope = reader.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MortgageApplicationsDbContext>();
+        var assessment = await db.Assessments.AsNoTracking()
+            .SingleAsync(a => a.Id == assessmentId, TestContext.Current.CancellationToken);
+        Assert.Equal(AssessmentStatus.Pending, assessment.Status);
+        Assert.Null(assessment.AssessedAt);
+        Assert.Null(assessment.FailedAt);
+        Assert.Null(assessment.Result);
+        Assert.DoesNotContain(factory.Logs.Entries, e => e.Level >= LogLevel.Error);
+    }
+
+    // Review R1: a save that throws reaches the worker's per-item catch. The row stays Pending, the error log has the
+    // assessment ID and no amounts or owner ID, and the worker goes on to complete the next item in the same host.
+    [Fact]
+    public async Task Failed_save_is_logged_leaves_the_row_pending_and_the_worker_continues()
+    {
+        const string sentinelBody =
+            """{"annualIncome":85123.45,"monthlyExpenses":912.34,"depositAmount":61234.56,"propertyValue":301234.56,"termYears":30}""";
+        await using var factory = new ApiFactory();
+        await using var host = factory.WithWebHostBuilder(
+            builder => builder.ConfigureTestServices(services => services.FailFirstSave(new FailFirstSaveState())),
+            runWorker: true);
+        var client = host.CreateClient();
+        await WaitForStartupRequeueAsync(factory);
+        var posted = await client.PostAssessmentAsync(await client.CreateApplicationAsync(sentinelBody));
+        var failedId = await posted.IdAsync();
+
+        await Http.EventuallyAsync(
+            () => Task.FromResult(factory.Logs.Entries.Any(e => e.EventName == "ProcessingError")),
+            () => "the worker's processing error log");
+
+        Assert.Equal("Pending", Http.Status(await (await client.GetPathAsync(posted.Headers.Location!.OriginalString)).BodyAsync()));
+        var next = await client.PostAssessmentAsync(await client.CreateApplicationAsync());
+        Assert.Equal("Completed", Http.Status(await client.PollUntilFinishedAsync(next.Headers.Location!.OriginalString)));
+        var entries = factory.Logs.Entries;
+        var error = Assert.Single(entries, e => e.EventName == "ProcessingError");
+        Assert.Equal(LogLevel.Error, error.Level);
+        Assert.Contains(failedId, error.Message, StringComparison.OrdinalIgnoreCase);
+        var owner = host.Services.GetRequiredService<ICurrentUser>().OwnerId;
+        foreach (var sentinel in new[] { "85123", "912.34", "61234", "301234", "240000", owner })
+        {
+            Assert.DoesNotContain(entries, e => e.Text.Contains(sentinel, StringComparison.Ordinal));
+        }
     }
 
     // I-13 + I-14: an item whose stored inputs break today's rules becomes Failed (failedAt set, no result) and the
