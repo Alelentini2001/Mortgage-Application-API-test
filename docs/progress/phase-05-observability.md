@@ -1,6 +1,6 @@
 # Phase 05: Logging + instrumentation
 
-Status: **Checkpoint B: PR open, waiting for Alessandro** · Branch: `phase-05-observability` · PR: [#9](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/9) · Started: 2026-11-15 · Finished: —
+Status: **Merged** (squash `352c6c8`) · Branch: `phase-05-observability` · PR: [#9](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/9) · Started: 2026-11-15 · Finished: 2026-11-15
 
 ## Goal
 
@@ -291,7 +291,7 @@ Planning: lead agent only (no subagent yet).
 
   > Approved, merge here
 - **Purpose:** Checkpoint B approval of PR #9. After "proceed", the lead agent asked: "Do you approve PR #9, with my two recommendations: name the extra HTTP span keys in rules section 6, and move the four low code-review findings to Phase 9?", and whether to merge here or in the Phase 5 session. "Approved, merge here" answers both.
-- **Outcome:** rules section 6 amended in this PR; the four PR `/code-review` findings carried to Phase 9; PR #9 squash-merged by the lead agent after green CI.
+- **Outcome:** rules section 6 amended in this PR; the four PR `/code-review` findings carried to Phase 9; PR #9 squash-merged by the lead agent as `352c6c8` after both CI jobs passed on `6644435`.
 
 ## What was built (files)
 

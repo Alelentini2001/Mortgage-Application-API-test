@@ -1,15 +1,14 @@
 # Progress
 
 ## Resume here
-- **Phase:** 06 (background assessments) **merged** via [#8](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/8) (squash `4141af1`); 04 (Docker) merged via [#7](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/7) (`ede3605`). Both approved by Alessandro. ADR 0002 and ADR 0003 Accepted. **Phase 05 (logging + instrumentation) is being planned** on `phase-05-observability`: phase file `docs/progress/phase-05-observability.md`.
+- **Phase:** 05 (logging + instrumentation) **merged** via [#9](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/9) (squash `352c6c8`), approved by Alessandro ("Approved, merge here"). Phases 04 and 06 merged earlier (#7, #8). **Next: harness phase H1** (context and usage awareness for the agent harness), plan and tests approved, branch `harness-01-context`.
 - **Working rule from Alessandro (P06-12):** phases run one at a time from now on, no parallel worktrees.
-- **Built so far:** four endpoints under `/api/applications` (create 201, get, assess 202 + background worker, get assessment 200 with Pending/Completed/Failed), validation at the boundary, owner-scoped EF Core SQLite, ProblemDetails, Docker image + compose + CI smoke test (health, non-root, POST/GET, 202 flow); 269 unit + 115 integration tests.
-- **Next action:** Phase 5 Checkpoint A (plan and decisions, then Alessandro's approval).
+- **Built so far:** four endpoints under `/api/applications` (create 201, get, assess 202 + background worker, get assessment 200 with Pending/Completed/Failed), validation at the boundary, owner-scoped EF Core SQLite, ProblemDetails, Docker image + compose + CI smoke test (health, non-root, POST/GET, 202 flow); OpenTelemetry tracing, metrics and logs with an allowlist test, opt-in Aspire dashboard; 274 unit + 168 integration tests.
+- **Next action:** H1 implementation, test-first, on `harness-01-context` (phase file `docs/progress/harness-01-context.md`). Then Phase 7.
 - **Carry into later phases:**
-  - Phase 5: `[LoggerMessage]` with allowlisted fields only + log-capture test (S1 part b); real 500s are logged by the framework today and must be covered. OpenTelemetry tracing and metrics, trace ID in ProblemDetails, Aspire dashboard in compose (P4-D2). Also: "ADR in Phase 4" comments in `Program.cs` and `DatabaseMigration.cs` become "ADR 0002"; test X1 (no startup migration outside Development).
   - Phase 7: replace `DevelopmentCurrentUser`, add `RequireAuthorization` (reviewer F6); secure default policy and a fail-closed dev token endpoint. Do not widen the compose port bind before this (ADR 0002).
   - Phase 8: rate limiter and request timeout on `POST …/assessments` (Phase 6 security S1, accepted until then); NuGet lock files and package-source mapping (security L3); NuGet signature verification on macOS; base-image digest pinning and a Dependabot `docker` entry (P4-D4).
-  - Phase 9: `/code-review` 1, 5 and 7 from Phase 3; PR #8 `/code-review` 1 (row that always fails stays Pending), 2 (stream the sweep), 3 (processing load tracking), 5 (split the I-13/I-14 test); Phase 6 R7, R8, RR5 (test assumptions); concurrency token before any second worker (R6, ADR 0003).
+  - Phase 9: PR #9 `/code-review` 1–4 (service-name detection, rules version from the stored result, double outcome tag, signal-specific OTLP keys); `/code-review` 1, 5 and 7 from Phase 3; PR #8 `/code-review` 1 (row that always fails stays Pending), 2 (stream the sweep), 3 (processing load tracking), 5 (split the I-13/I-14 test); Phase 6 R7, R8, RR5 (test assumptions); concurrency token before any second worker (R6, ADR 0003).
   - Phase 10: README, including `docker compose down -v` as the reset for a `data` volume with the wrong owner and `docker run --init` outside compose (ADR 0002).
 - **Open decisions / blockers for Alessandro:**
   - Phase 3: accept `DevelopmentCurrentUser` until Phase 7 (recommended: yes); `.claude/rules/backend.md` says reads "project to DTOs" but P3-D1 returns entities through the Core port: reword the rule or accept the exception (`/code-review` 3); optional ADR for the persistence choice (`/adr` is user-invoked).
@@ -18,7 +17,7 @@
   - `security-auditor` S10 (Phase 1): keep or redact local paths in the verbatim prompt logs before the repo goes public.
   - `spec-checker` questions (status wording, constraint rows R44/R50, final tag, optional scope R30–R33): see `docs/progress/phase-01-spec.md`, "Open issues".
   - Later: branch protection on `main` (require the CI checks).
-- **Last verify:** `./scripts/verify.sh` full → PASSED (384 tests, 91 hook cases) on `phase-06-background`; CI "Build, test, format" and "Docker image build and smoke test" passed on PR #8 at `552d410`, 2026-11-15.
+- **Last verify:** `./scripts/verify.sh` full → PASSED (442 tests, 91 hook cases) on `phase-05-observability`; CI "Build, test, format" and "Docker image build and smoke test" passed on PR #9 at `6644435`, 2026-11-15.
 
 ## Phases
 
@@ -29,8 +28,9 @@
 | 02 | Core domain + calculator (TDD) | Merged | `phase-02-core` | [#5](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/5) | 215 unit + 1 integration placeholder, 216/216 | 2026-11-14 |
 | 03 | API + persistence + validation (MVP) | Merged | `phase-03-api` | [#6](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/6) | 258 unit + 89 integration, 347/347 | 2026-11-14 |
 | 04 | Docker | Merged | `phase-04-docker` | [#7](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/7) | 258 unit + 89 integration, 347/347; CI `docker` job (build, health, user, POST/GET) | 2026-11-15 |
-| 05 | Logging + instrumentation | In progress (planning) | `phase-05-observability` | — | — | 2026-11-15 |
+| 05 | Logging + instrumentation | Merged | `phase-05-observability` | [#9](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/9) | 274 unit + 168 integration, 442/442 | 2026-11-15 |
 | 06 | Background assessments | Merged | `phase-06-background` | [#8](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/8) | 269 unit + 115 integration, 384/384; CI `docker` job also checks the 202 flow | 2026-11-15 |
+| H1 | Harness: context and usage awareness | In progress (plan and tests approved) | `harness-01-context` | — | — | 2026-11-15 |
 | 07 | Authentication + authorisation | Not started | — | — | — | — |
 | 08 | Security hardening | Not started | — | — | — | — |
 | 09 | Optimisation + quality | Not started | — | — | — | — |
@@ -42,7 +42,7 @@
 Snapshot at the end of Phase 3 (2026-11-14), produced by the `spec-checker` subagent (prompt P03-09) at `a446c64` from `docs/spec/ORIGINAL_SPEC.md`. Re-run at the end of every phase.
 
 **Status key.** "Met" needs code or a test. Design written down but not built is "partial".
-**Totals now:** 28 met · 10 partial · 17 missing after Phase 6 (R30 met, R13 now 202 + polling; `spec-checker` P06-08). After Phase 4: 27 / 10 / 18. End of Phase 3: 26 / 9 / 20.
+**Totals now:** 29 met · 10 partial · 16 missing after Phase 5 (R33 met; `spec-checker` P05-09). After Phase 6: 28 / 10 / 17 after Phase 6 (R30 met, R13 now 202 + polling; `spec-checker` P06-08). After Phase 4: 27 / 10 / 18. End of Phase 3: 26 / 9 / 20.
 
 Paths: "Endpoints" = `src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs`; test classes are in `tests/MortgageApplications.IntegrationTests/` unless marked unit.
 
@@ -80,7 +80,7 @@ Paths: "Endpoints" = `src/MortgageApplications.Api/Applications/ApplicationEndpo
 | R30 | Optional: background processing | Optional | met | `AssessmentWorker`, `ChannelAssessmentQueue`, `IAssessmentQueue`; `AssessmentWorkerTests`; ADR 0003 |
 | R31 | Optional: authentication | Optional | missing | Phase 7 (`DevelopmentCurrentUser` only, a fixed owner) |
 | R32 | Optional: Docker support | Optional | met | `Dockerfile`, `compose.yaml`; CI job "Docker image build and smoke test"; local checks C1–C14 in `docs/progress/phase-04-docker.md` |
-| R33 | Optional: logging or instrumentation | Optional | missing | Phase 5 |
+| R33 | Optional: logging or instrumentation | Optional | met | `[LoggerMessage]` logs, OpenTelemetry tracing and metrics (`AssessmentTelemetry`, `Program.cs`), opt-in dashboard; `TelemetryAllowlistTests`, `AssessmentSpanTests`, `AssessmentMetricTests`, `OtlpExportTests` |
 | R34 | README: setup instructions | Docs | missing | Phase 10 |
 | R35 | README: how to run the app | Docs | missing | Phase 10 |
 | R36 | README: how to run tests | Docs | missing | Phase 10 |

@@ -83,3 +83,11 @@ Chronological record of ideas, options, rejected ideas, who decided, and what ch
 - **Rebase cost.** Merging Phase 4 first and rebasing Phase 6 changed every commit hash the phase file cited. The file now has an old-to-new table; the logged prompts stay verbatim.
 - **Working rule after this phase (P06-12).** Alessandro asked to go phase by phase from now on: no more parallel worktrees.
 
+## 2026-11-15 · Phase 5: logging, tracing and metrics
+
+- **Telemetry stack (P5-D1 to P5-D5, Alessandro chose all recommendations).** The OpenTelemetry SDK (3 packages at 1.20.1, the newest two weeks old) with OTLP export switched on only by an endpoint setting, so tests, CI and a plain run never connect. The Aspire dashboard is an opt-in compose override; the default run and CI did not change. The worker's span is a separate trace linked to the POST by the assessment ID, so the queue port stayed a plain ID.
+- **The test that matters most is a negative one.** Every log, span and metric tag is scanned for every form of the E1 and E2 numbers (raw, rounded, grouped, comma-decimal, unrounded ratios). The reviewer found the first version missed longer-precision leaks such as an unrounded LTI; the fix made separator forms match as prefixes and added the unrounded values, and the old helper failed 7 of 18 new self-tests.
+- **Tests that could not fail, again.** The root-span test passed without the line it guarded; the instrument set and the span event tags were not checked. Each was fixed and proven by a temporary mutation.
+- **A Linux-only CI failure.** The export tests relied on the flush at host shutdown; on the CI runner the hosts shut down in milliseconds and sent nothing. Not reproduced locally or in a Linux container; fixed by exporting every 100 ms and waiting for the data before shutdown (cause inferred, not proven).
+- **Manual evidence.** The dashboard check (O30) confirmed traces, logs and metrics arrive with only the allowlisted tags. Rules section 6 now names the HTTP span keys the framework adds; `user_agent.original` is removed.
+

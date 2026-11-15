@@ -801,3 +801,195 @@ Copied from `docs/progress/phase-06-background.md` after the merge. The human pr
   > Yes and proceed... but we should do phase by phase...
 - **Purpose:** Checkpoint B approval of Phase 6. The agent had asked three things in one message: merge PR #8, mark ADR 0002 and ADR 0003 Accepted, and move the five PR `/code-review` findings to Phase 9. "Yes" is read as yes to all three. "Phase by phase" is read as: no more parallel phases; one phase at a time from now on.
 - **Outcome:** PR #8 squash-merged as `4141af1` after both CI jobs passed on `552d410`; ADR 0002 and 0003 marked Accepted; the five findings carried to Phase 9 (4, `Retry-After`, skipped for now); Phase 5 started on its own.
+
+## Phase 05: Logging + instrumentation
+
+Copied from `docs/progress/phase-05-observability.md` after the merge. The CI fix on PR #9 was made in a separate session started from the lead session; its own prompts are in that session, and its result is recorded in the phase file.
+
+### P05-01 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Yes and proceed... but we should do phase by phase...
+- **Purpose:** after the Phase 6 merge (P06-12), go on to the next phase, one phase at a time.
+- **Outcome:** Phase 5 explored and planned in this file; Checkpoint A.
+
+### P05-02 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Yes continue
+- **Purpose:** Checkpoint A approval. The agent had asked: "Do you approve the plan with A on all five, including adding the 3 OpenTelemetry packages?"
+- **Outcome:** decisions recorded (all A), packages approved; branch created; `test-designer` run (P05-03).
+
+### P05-03 · agent→subagent (`test-designer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Phase 5 (logging + instrumentation) of a .NET 10 mortgage-application API (Minimal APIs, EF Core SQLite, a background assessment worker). Propose test cases for the approved plan; do not write code.
+
+  Read first: docs/progress/phase-05-observability.md (goal, plan, approved decisions P5-D1 to P5-D5), docs/spec/affordability-rules.md (section 6 logging allowlist, section 8 golden examples E1 and E2), docs/layers/PRODUCTION-LAYERS.md (Observability row), .claude/rules/tests.md, tests/CLAUDE.md, .claude/rules/security.md, AGENTS.md, and the current code and tests: src/MortgageApplications.Api/Program.cs, src/MortgageApplications.Api/Assessments/AssessmentWorker.cs, src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs, src/MortgageApplications.Api/Errors/ProblemExceptionHandler.cs, src/MortgageApplications.Api/appsettings.json, src/MortgageApplications.Infrastructure/DatabaseMigration.cs, tests/MortgageApplications.IntegrationTests/ (ApiFactory, CapturingLoggerProvider, AssessmentWorkerTests, ErrorHandlingTests, StartupTests, Http). Existing tests already cover the six worker log messages without amounts (I-14) and a non-empty traceId in every ProblemDetails (I40): don't repeat them, but say which ones should be extended.
+
+  What will be built (not written yet):
+  - AssessmentTelemetry in the Api project: ActivitySource and Meter both named "MortgageApplications"; counter mortgage.assessments.processed and histogram mortgage.assessment.duration (seconds), tags assessment.outcome (Completed or Failed), assessment.decision (Approved or Declined, only when Completed), assessment.rules_version.
+  - AssessmentWorker starts span "assessment.process" per item with tags assessment.id, application.id, then outcome, decision, rules_version; status Error on a processing error with the exception type only, no message.
+  - Program.cs: AddOpenTelemetry with service name, ASP.NET Core tracing and metrics, our source and meter, the Microsoft.AspNetCore.Hosting and Microsoft.AspNetCore.Server.Kestrel meters, and the OpenTelemetry log provider; the OTLP exporter only when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+  - A new [LoggerMessage] when an assessment is queued (assessment ID and application ID only). The framework's 500 error log stays (P5-D4). Microsoft.EntityFrameworkCore.Database.Command at Warning in appsettings.json (P5-D5).
+  - compose.observability.yaml adds the Aspire dashboard (UI on 127.0.0.1:18888, OTLP only on the compose network) and sets OTEL_EXPORTER_OTLP_ENDPOINT on api; plain compose and CI unchanged.
+  - Carry-overs: "ADR in Phase 4" comments become "ADR 0002"; test X1: outside Development the app does not run migrations at startup (note ApiFactory migrates its own database before any host starts, so X1 needs a database that the factory did not migrate).
+  - Tests must not add packages: listen with ActivityListener and MeterListener (built into .NET).
+
+  Cover at least: the allowlist test the layer table asks for (none of an assessment's input or output numbers, raw or formatted, in captured log text including exception text, span tag values, or metric tag values) for an Approved (E1) and a Declined (E2) case, and say exactly which number forms to check (raw decimal, 2 dp, thousands separators, invariant and current culture); span and metric tag KEYS limited to an allowlist; exactly one assessment.process span per processed item with the expected tags and the right status for Completed, Failed and a processing error; the counter and the histogram per outcome and decision; the new queued log; a real 500 is logged by the framework with no input values and its ProblemDetails traceId matches the request's trace ID; the OTLP exporter is not registered when the endpoint is not set (and how to prove that without a network); EF command logs no longer at Information; X1; the compose override (what can be checked in CI or locally without the dashboard UI). Say which cases are unit tests and which are integration tests, how to keep listener tests isolated when xUnit runs test classes in parallel (ActivityListener and MeterListener are process-wide), and how to avoid timing flakiness.
+
+  Use the agent's output format. Mark each case must or nice, keep the list tight (no redundant cases), and list any ambiguities in the plan you need Alessandro to settle.
+  ```
+- **Purpose:** propose Phase 5 test cases before any test is written.
+- **Outcome:** 31 cases (O1–O31) and 13 questions (Q1–Q13). See "Tests", "Proposal".
+
+### P05-04 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Yes proceed
+- **Purpose:** approval of the recommended test selection (all must cases plus O7, O8, O26, O28; O29 and O31 as verify steps; O4 and O19 skipped) and of the recommended answers to Q1–Q13.
+- **Outcome:** implementation delegated, test-first (P05-05).
+
+### P05-05 · agent→subagent (`general-purpose`, implementer) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Implement Phase 5 (logging + instrumentation) of this .NET 10 mortgage-application API, exactly as approved, test-first.
+
+  Where: the main checkout /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-05-observability (already checked out; phases now run one at a time, so there is no worktree). Do not switch or create branches. Never push. Never force anything, never --no-verify.
+
+  Scope and source of truth: docs/progress/phase-05-observability.md. Read "Goal", "Plan (approved at Checkpoint A)", "Decisions" (P5-D1 to P5-D5, all option A), "Docs verified" and "Tests > Proposal" (the approved selection and the approved answers to Q1-Q13) first. Also read AGENTS.md, CLAUDE.md, .claude/rules/backend.md, .claude/rules/tests.md, .claude/rules/security.md, .claude/rules/infra.md, tests/CLAUDE.md, src/MortgageApplications.Core/CLAUDE.md, docs/spec/affordability-rules.md sections 6 and 8.
+
+  What to build (summary; the phase file is binding where it is more precise):
+  1. Packages, approved: in Directory.Packages.props add OpenTelemetry.Extensions.Hosting 1.20.1, OpenTelemetry.Instrumentation.AspNetCore 1.20.1, OpenTelemetry.Exporter.OpenTelemetryProtocol 1.20.1; reference them from src/MortgageApplications.Api only. No other package, and no package in the test projects.
+  2. src/MortgageApplications.Api/Observability/AssessmentTelemetry.cs: an ActivitySource named "MortgageApplications" and a Meter created through IMeterFactory with the same name; counter mortgage.assessments.processed (long) and histogram mortgage.assessment.duration (double, unit "s"). Tags: assessment.outcome, assessment.decision (only when Completed), assessment.rules_version.
+  3. AssessmentWorker: span "assessment.process" (kind Internal) per item with assessment.id and application.id (application.id only when known), then assessment.outcome = Completed | Failed | NotFound | Skipped, assessment.decision when Completed, assessment.rules_version (configured value) for Completed and Failed. Status: Unset for Completed, Failed, NotFound, Skipped; Error for a processing error (an exception reaching the worker's per-item catch) with the exception TYPE name only as description, no message, no exception event, no outcome tag. Counter and histogram only for Completed and Failed. Duration measured with the injected TimeProvider (GetTimestamp / GetElapsedTime). The span is a root span (P5-D3 A: separate traces). The worker needs application.id and the rules version: get them without changing what Core exposes more than needed (for example extend AssessmentProcessingOutcome into a small result record returned by ProcessAssessmentAsync, or read them from the work item); keep Core free of telemetry, logging and ASP.NET Core references.
+  4. ApplicationEndpoints: after a successful queue, tag the current request activity (the ASP.NET Core server span) with assessment.id, and log a new [LoggerMessage] event "AssessmentQueued" (Information) with AssessmentId and ApplicationId only. Nothing for 404s.
+  5. Program.cs: AddOpenTelemetry() with ConfigureResource(AddService("mortgage-applications") unless OTEL_SERVICE_NAME is set), WithTracing (AddAspNetCoreInstrumentation, AddSource("MortgageApplications")), WithMetrics (AddAspNetCoreInstrumentation, AddMeter("MortgageApplications"), AddMeter("Microsoft.AspNetCore.Hosting"), AddMeter("Microsoft.AspNetCore.Server.Kestrel")), WithLogging or builder.Logging.AddOpenTelemetry. Add the OTLP exporter ONLY when builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] is set (read from IConfiguration, never Environment). Register AssessmentTelemetry as a singleton.
+  6. appsettings.json: "Microsoft.EntityFrameworkCore.Database.Command": "Warning" under Logging:LogLevel.
+  7. compose.observability.yaml (new): service aspire-dashboard, image mcr.microsoft.com/aspire/dashboard with a pinned version tag (not latest; pick a stable 13.x tag and record in the phase file that its publish date is to be checked by the lead agent), ports only "127.0.0.1:18888:18888", no host mapping for 18889/18890, no ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS; and on api: OTEL_EXPORTER_OTLP_ENDPOINT: http://aspire-dashboard:18889 plus depends_on aspire-dashboard. compose.yaml must not change.
+  8. Carry-overs: the comments "ADR in Phase 4" in src/MortgageApplications.Api/Program.cs and src/MortgageApplications.Infrastructure/DatabaseMigration.cs become "ADR 0002".
+  9. Check, before relying on it, how OpenTelemetry.Instrumentation.AspNetCore 1.20.x handles url.query (redaction) from its README in the NuGet package you restore (~/.nuget/packages/opentelemetry.instrumentation.aspnetcore/1.20.1/README.md if present); record what you found and where.
+
+  Tests (integration tests in tests/MortgageApplications.IntegrationTests; follow the approved cases O1-O3, O5-O18, O20-O28 and the nice Q12 query-string test, with the IDs in a comment above each test):
+  - Extend CapturingLoggerProvider to keep structured state (key/value pairs), scope values and Activity.Current's trace ID at log time, without breaking existing tests.
+  - A small TelemetryCapture helper (ActivityListener + MeterListener, IDisposable) that copies data at ActivityStopped / measurement time into concurrent collections. Put every class that uses it in one [Collection] with DisableParallelization = true. Filter spans by the test's own assessment IDs, and metrics by the host's IMeterFactory scope.
+  - A forbidden-number helper producing every form listed in the phase file (raw, trimmed, F2, N2/N0, hand-built NumberFormatInfo comma-decimal, dot-grouping, U+00A0 and U+202F space grouping), with GUIDs and the RulesVersion stripped before the boundary-regex search, 5+ digit integers only for bare integers, plus the Summary fragments. Include a self-test of the helper.
+  - Every wait is bounded (Http.EventuallyAsync), never Task.Delay. Set config per host with AddInMemoryCollection, never Environment.SetEnvironmentVariable.
+  - O24/O25/O26: a loopback HttpListener or TcpListener on a free port; set OTEL_EXPORTER_OTLP_ENDPOINT to it (and OTEL_EXPORTER_OTLP_PROTOCOL http/protobuf if that makes the listener simpler; record what you did); dispose the host to flush.
+  - O27 (X1): Production host and a Development control on a fresh named shared-cache in-memory SQLite database the factory did not migrate, as described in the phase file.
+  - O28: a file-text test of compose.observability.yaml and compose.yaml.
+
+  Order of work: tests first. Write the tests against minimal stubs so they compile, run them and keep the red output (save it to /private/tmp/claude-501/-Users-ale-ssd-Developer-Mortgage-Application-API-test/38287261-0d8e-41a1-a4c6-05aca4d87104/scratchpad/p5-red.txt), then implement until green. Small conventional commits (AGENTS.md "Commits and PRs"), each ending with the line: Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>. Then run ./scripts/verify.sh (full) and the integration tests 3 times in a row, and keep the outputs.
+
+  Phase file: fill in only "What was built (files)", "Tests" (add a "Results" subsection under the Proposal: red counts and why, green counts, verify output trimmed, the 3 runs) and "Open issues" (deviations, anything not done, anything you could not check). Do not edit other sections, docs/PROGRESS.md or docs/ai/*.
+
+  Honesty rule: never claim a test failed or passed without having run it; if something was not done, write that it was not done and why. Stop and report if the same step fails 3 times. Keep tool use tight (you have a turn limit): batch edits, avoid re-reading files you just wrote.
+
+  Report at the end: commits, files, red/green evidence, verify output, the 3 runs, the url.query finding, the dashboard tag chosen, and every deviation from the plan.
+  ```
+- **Purpose:** implement the approved plan test-first. The `parallel-implementer` agent is reserved for parallel phases, so a general-purpose agent got the same kind of brief.
+- **Outcome:** commits `019cffa` to `b791a5d`; red 4 unit + 21 integration failures for the expected reasons, then green; 431 tests; 3 clean integration runs. Deviations listed in "Open issues".
+- **Follow-up message from the lead agent (verbatim), sent while it ran:**
+  > Dashboard image tag for compose.observability.yaml: use mcr.microsoft.com/aspire/dashboard:13.6.2. The lead agent checked the MCR catalog on 2026-11-15: 13.6.2 was published 2026-10-29, the newest tag at least two weeks old (13.6.4 is 2026-11-10, 13.6.5 is 2026-11-11). Record that in the phase file instead of "to be checked". Everything else in your instructions is unchanged.
+
+### P05-06 · agent→subagent (`security-auditor`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security gate for Phase 5 (logging + instrumentation) of a .NET 10 mortgage-application API. Read only: do not edit files or switch branches.
+
+  Repository: /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-05-observability (checked out). Review the branch diff: git diff main...HEAD. Read first: .claude/rules/security.md, AGENTS.md, docs/spec/affordability-rules.md section 6 (logging allowlist), docs/progress/phase-05-observability.md (plan, decisions P5-D1 to P5-D5, the approved answers Q1-Q13, "Open issues", and the O30 manual dashboard check).
+
+  Do:
+  1. Gitleaks on the branch commits (--log-opts="main..HEAD") and the working tree; Semgrep (p/csharp, p/secrets) on the changed files; dotnet list package --vulnerable --include-transitive (three OpenTelemetry packages are new). Say which tools ran; do not install anything.
+  2. OWASP Top 10:2025 review of the diff with focus on: personal data or amounts reaching any log, span attribute, span status description or metric tag (inputs, outputs, Summary, Checks, owner ID, exception messages); framework telemetry (ASP.NET Core server spans: url.query handling, headers, route values); the OpenTelemetry log provider exporting structured state and scopes; the OTLP exporter being enabled only by OTEL_EXPORTER_OTLP_ENDPOINT and what an attacker who controls configuration could do with it (not a finding if config is trusted, but say so); compose.observability.yaml (loopback-only UI, unpublished OTLP ports, login token, no anonymous mode, the dashboard's unauthenticated OTLP endpoint on the compose network, the pinned image tag); supply chain of the three new packages and their transitive packages.
+  3. Check that the tests would catch a regression: do the allowlist tests scan every telemetry path that leaves the process (logs incl. structured state and exceptions, spans incl. status, metric tags, the OTLP bytes)? Name any path they miss.
+
+  Output: a findings table (tool/check, finding with file:line, severity, real or false positive, reason, fix) and a one-word verdict (PASS or FAIL). Keep it short.
+  ```
+- **Purpose:** security gate.
+- **Outcome:** PASS; Low and Info findings only. See "Security gate".
+
+### P05-07 · agent→subagent (`dotnet-reviewer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Fresh-context review of Phase 5 (logging + instrumentation) of a .NET 10 mortgage-application API. Read only: do not edit files or switch branches.
+
+  Repository: /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-05-observability (checked out). Review the branch diff: git diff main...HEAD. Read first: AGENTS.md, .claude/rules/backend.md, .claude/rules/tests.md, tests/CLAUDE.md, src/MortgageApplications.Core/CLAUDE.md, docs/progress/phase-05-observability.md (goal, plan, decisions, "Docs verified", the approved test selection and answers Q1-Q13, "Results", "Open issues").
+
+  Check at least:
+  - AssessmentWorker / AssessmentTelemetry: span lifecycle per item (root span via Activity.Current = null in an async method; started before the scope, disposed after logging), tags and status per outcome (Completed, Failed, NotFound, Skipped, processing error, shutdown OCE), counter and histogram only for Completed and Failed, duration from TimeProvider, histogram buckets in seconds, IMeterFactory use, ActivitySource lifetime and disposal.
+  - Core change: AssessmentProcessingResult replacing the enum return; Core stays free of telemetry, logging and ASP.NET Core; the existing unit tests still prove what they proved.
+  - ApplicationEndpoints: tagging the server span through IHttpActivityFeature, the AssessmentQueued [LoggerMessage] (logger created per request from ILoggerFactory: fine or wasteful?), nothing on 404.
+  - Program.cs: OpenTelemetry registration, the conditional OTLP exporter read from builder.Configuration before Build (the implementer found WebApplicationFactory's ConfigureAppConfiguration is not visible there and switched the tests to UseSetting: is the production behaviour still right for environment variables, appsettings and command line?), OTEL_SERVICE_NAME handling, WithLogging and the existing console logging.
+  - Tests: whether each approved case (O1-O3, O5-O18, O20-O28, Q12) would fail if its behaviour broke; listener isolation (one non-parallel collection, IMeterFactory scope filter); bounded waits; the ForbiddenNumbers helper (forms, boundary regex, stripping GUIDs and hex IDs: could the stripping hide a real leak?); O24's fixed port 4318 and its skip path; flakiness risks.
+  - Anything in the diff that contradicts the plan or the decisions.
+
+  Output: findings, most severe first, each as file:line | severity | problem | fix. Then a list of what you checked and found fine. Say plainly whether you built or ran tests.
+  ```
+- **Purpose:** fresh-context review gate.
+- **Outcome:** one medium and eight low findings. See "Review gate".
+
+### P05-08 · agent→subagent (implementer, resumed) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Phase 5 gate findings: fix the items below on phase-05-observability, test-first where behaviour changes (show the new or strengthened test failing first, or prove it with a temporary mutation that you revert, and record which). Then run ./scripts/verify.sh (full) and the integration tests 3 times. Same rules as before: no new package, no push, small conventional commits with the Co-Authored-By line, keep tool use tight.
+
+  From the review gate (dotnet-reviewer):
+  1. (medium) ForbiddenNumbers misses longer-precision leaks. Forms containing a decimal separator must match as prefixes (drop the trailing (?![0-9]) for them). Add, per output value, a 1 dp form and a 2 dp truncated form, and add the unrounded E1/E2 values as extra forbidden values: LTV, DTI and LTI to at least 4 dp, the LTV and DTI as fractions (for example 0.8, 0.3302), and the unrounded monthly payment to 4 dp. Compute them with System.Decimal from the rules formulas (docs/spec/affordability-rules.md), not by hand, and say in a comment how. Move "2.825" from CleanTexts to Leaks in the self-test. Re-check that nothing legitimate (IDs, rules version, timestamps, durations) now matches; if a duration or timestamp could collide, strip it the same way IDs are stripped and say so.
+  2. O24 depends on the fixed default port 4318 and skips when it is taken. The reviewer suggested pointing the signal-specific endpoint keys at a free port, but item 3 makes those keys enable export, so that design no longer works. Keep O24 on the default port unless you find a way, without a new package and without the fixed port, for O24 to fail if the exporter were registered unconditionally. Either way, make a skip visible (an explicit xUnit skip with the reason "port 4318 in use"), never a silent pass, and explain the design in the test comment.
+  3. Program.cs: also turn the OTLP exporter on when any of OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_ENDPOINT or OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is set. Add a test (O25b) that setting only the traces key sends trace data to the fake collector.
+  4. user_agent.original on ASP.NET Core server spans is client-controlled and not in the rules section 6 allowlist: remove it in AddAspNetCoreInstrumentation (EnrichWithHttpRequest setting the tag to null, or the documented option if the package README has one). Then add the skipped O4 as an explicit framework span tag-key allowlist: the server span may carry only the HTTP semantic-convention keys it carries today minus user_agent.original (list them exactly in the test), plus assessment.id. Record in the phase file that rules section 6 does not yet name these HTTP keys; Alessandro decides at Checkpoint B whether to amend the rules wording.
+  5. O14 cannot fail if Activity.Current = null is removed. Start the worker's host while a test-only ActivitySource activity is current (with a listener that samples it), so ExecuteAsync captures it as a would-be parent; keep the assertion that the worker span has no parent. Prove it fails with the line removed (temporary mutation, reverted).
+  6. O17: assert the histogram's bucket advice (InstrumentAdvice boundaries in seconds) from the published instrument, if the advice is readable through a public API on .NET 10; if it is not public, say so and skip this item.
+  7. Program.cs: AddService("mortgage-applications") also overrides a service.name from OTEL_RESOURCE_ATTRIBUTES. Skip AddService when OTEL_RESOURCE_ATTRIBUTES contains "service.name=" as well, and comment it. No new test needed beyond what is cheap.
+
+  From the security gate (security-auditor):
+  8. TelemetryCapture copies only span event names: include span event tags and link tags in the scanned span text.
+  9. Metric instrument set: assert that the MortgageApplications meter publishes exactly the two allowed instruments (names, types, units), from InstrumentPublished, so a new instrument recording an amount cannot slip through.
+  10. O6: also scan the 500 request's server span (tags and status description) for the sentinels and the owner ID, filtered by the traced trace ID.
+
+  Phase file (docs/progress/phase-05-observability.md): fix the contradictions the reviewer found (status line still says "implementation next"; "Open issues" still says O30 and the Learn checks were not done: the lead agent did both, see the O30 section and "Docs verified"). Record the shutdown-cancellation span behaviour as a known, intended gap: on shutdown the span ends Unset with assessment.id only (no outcome), consistent with "shutdown is never a failure"; no test. Add a "Results after the gates" paragraph under Tests > Results with red/mutation evidence, verify output and the 3 runs. Do not fill the Security gate or Review gate sections (the lead agent writes those). Do not edit docs/PROGRESS.md or docs/ai/*.
+
+  Report: commits, what failed first or which mutation proved each strengthened test, the exact framework key list for O4, verify output, the 3 runs, and anything you could not do.
+  ```
+- **Purpose:** fix the gate findings that need no decision.
+- **Outcome:** commits `0eccb16`, `f25c203`, `bcd3028`; 442 tests; 3 clean integration runs (168 / 168).
+
+### P05-09 · agent→subagent (`spec-checker`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Spec check for Phase 5 (logging + instrumentation) of a .NET 10 mortgage-application API. Read only; do not edit anything.
+
+  Repository: /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-05-observability (checked out). Read: docs/spec/ORIGINAL_SPEC.md, docs/spec/affordability-rules.md section 6, docs/layers/PRODUCTION-LAYERS.md (the Observability row), docs/progress/phase-05-observability.md (goal, plan, decisions, approved tests and answers, gates, open issues), the requirement table in docs/PROGRESS.md, and the code and tests the phase file names.
+
+  Map every spec requirement this phase touches (the spec's logging, instrumentation or observability wording if any, the README "design decisions" expectations it feeds, and the security constraints on personal data), every Phase 5 goal (allowlisted [LoggerMessage] logs, OpenTelemetry tracing with one span per assessment, the two metrics, OTLP export only when configured, the opt-in dashboard, trace ID in ProblemDetails, the allowlist test over logs, spans and metric tags, the carry-overs: ADR 0002 comments and test X1) and the Observability row's "evidence" column to the file and test that meet it. Mark each met / partial / missing with a one-line reason and the file or test name. List any requirement-table rows in docs/PROGRESS.md whose status should change after this phase, and anything the phase file claims that you could not find. Keep it short: one table plus at most 5 notes.
+  ```
+- **Purpose:** requirement traceability before the PR.
+- **Outcome:** see "Review gate", spec check.
+
+### P05-10 · agent→subagent (`general-purpose`, from the `/security-review` skill) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Security review sub-task for PR #9 (Phase 5, logging and instrumentation) of a .NET 10 mortgage-application API. Read only: do not edit files and do not run Docker.
+
+  Repository: /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-05-observability, checked out). The diff to review: run `git diff main...HEAD` there (OpenTelemetry tracing, metrics and log export via OTLP when configured; a worker span and two metrics; a new log event; an opt-in compose override with the Aspire dashboard; tests). Accepted and documented, do not report: exception messages and stack traces in error logs leaving the process when OTLP is on (P5-D4), the dashboard's OTLP endpoint without an API key on the compose network (S7), image tag not digest (Phase 8), the fixed DevelopmentCurrentUser until Phase 7. Context to read: docs/progress/phase-05-observability.md ("Security gate"), docs/spec/affordability-rules.md section 6, .claude/rules/security.md, AGENTS.md.
+
+  OBJECTIVE: identify HIGH-CONFIDENCE security vulnerabilities newly added by this PR that could have real exploitation potential. Not a general code review. Do not comment on existing security concerns.
+  1. Minimise false positives: only flag issues where you are >80% confident of actual exploitability.
+  2. Skip theoretical issues, style concerns and low-impact findings.
+  3. Prioritise vulnerabilities that could lead to unauthorized access, data breaches or system compromise.
+  4. Do NOT report: denial of service; secrets or sensitive data stored on disk; rate limiting or resource exhaustion.
+
+  Categories to examine: input validation (SQL/command/XXE/template/NoSQL injection, path traversal); authentication and authorization (bypass, privilege escalation, sessions, JWT); crypto and secrets (hardcoded keys, weak crypto, key storage, randomness, certificate validation); injection and code execution (deserialization, YAML, eval, XSS); data exposure (sensitive data logging or storage, PII, endpoint data leakage, debug information exposure). Even if only exploitable from the local network, it can be HIGH.
+
+  Method: (1) research the repository's security model and existing patterns; (2) compare the new changes against them and look for new attack surface; (3) assess each modified file, trace data from inputs to sensitive operations, look for privilege boundaries crossed unsafely.
+
+  For each candidate give: file, line, severity (HIGH / MEDIUM / LOW), category slug, description, exploit scenario, fix recommendation, and a confidence from 1 to 10. Focus on HIGH and MEDIUM; MEDIUM only if obvious and concrete. If there are no candidates, say so plainly. Keep the report short.
+  ```
+- **Purpose:** the find step of the local `/security-review` on PR #9.
+- **Outcome:** no HIGH or MEDIUM candidates, so the skill's false-positive filter step had nothing to run on.
+
+### P05-11 · human→agent · 2026-11-15
+- **Prompts (verbatim), in order:**
+  > proceed
+
+  > Approved, merge here
+- **Purpose:** Checkpoint B approval of PR #9. After "proceed", the lead agent asked: "Do you approve PR #9, with my two recommendations: name the extra HTTP span keys in rules section 6, and move the four low code-review findings to Phase 9?", and whether to merge here or in the Phase 5 session. "Approved, merge here" answers both.
+- **Outcome:** rules section 6 amended in this PR; the four PR `/code-review` findings carried to Phase 9; PR #9 squash-merged by the lead agent as `352c6c8` after both CI jobs passed on `6644435`.
