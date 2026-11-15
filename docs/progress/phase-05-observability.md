@@ -225,7 +225,7 @@ Questions and the lead agent's recommended answers:
 
 **Red** (commit `019cffa`, tests against a Core stub that returned the outcome with null ID and decision; output kept in the session scratchpad, `p5-red.txt` and `p5-red-full.txt`):
 - Unit: 274 total, **4 failed**, 270 passed. The 4 are the new Completed (E1, E2), Failed and Skipped result cases (stub returned no application ID or decision). The new NotFound case passed: null and null is the right answer for it.
-- Integration: 157 total, **21 failed**, 136 passed. Failed for the expected reasons: 15 timed out after 10 s waiting for an `assessment.process` span, a counter or histogram measurement, or a server span tagged `assessment.id`; 3 found no `AssessmentQueued` entry (O20, O21 control, O22 control); O23 found EF command entries at Information; O25 and O26 received no OTLP request; O28 (override) found no `compose.observability.yaml`.
+- Integration: 157 total, **21 failed**, 136 passed. Failed for the expected reasons: 14 timed out after 10 s waiting for an `assessment.process` span, a counter or histogram measurement, or a server span tagged `assessment.id`; 3 found no `AssessmentQueued` entry (O20, O21 control, O22 control); O23 found EF command entries at Information; O25 and O26 received no OTLP request; O28 (override) found no `compose.observability.yaml`.
 - Of the 42 new integration cases, 21 passed while red, because they guard existing or not-yet-broken behaviour: the 12 `ForbiddenNumbersTests` cases, O6, O7 (2), O8 (trace ID and 500 handling exist since Phase 3), O24 (no exporter existed yet), Q12 (no query value reached a span), O27 (2, Development-only migration exists since Phase 3) and the O28 default-file case.
 
 **Green** (after the implementation commits):
