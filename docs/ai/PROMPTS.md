@@ -1257,4 +1257,127 @@ Copied from `docs/progress/harness-01-context.md` after the merge. H-00 (Alessan
 - **Prompt (verbatim):**
   > Proceed with option a for both of them and continue
 - **Purpose:** Checkpoint B approval on PR #11 (Option A for anonymous unknown paths returning `401`, Option A for adding `FailureType` to rules §6 and `TelemetryAllowlistTests._logKeys`, ADR 0004 Accepted, merge PR #11 and continue to Phase 8).
-- **Outcome:** `FailureType` added to `docs/spec/affordability-rules.md` §6 and `TelemetryAllowlistTests._logKeys`, ADR 0004 marked `Accepted`, PR #11 squash-merged.
+- **Outcome:** `FailureType` added to `docs/spec/affordability-rules.md` §6 and `TelemetryAllowlistTests._logKeys`, ADR 0004 marked `Accepted`, PR #11 squash-merged (`e1c841d`).
+
+---
+
+## Phase 08: Security hardening
+
+### P08-01 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > Proceed with option a for both of them and continue
+- **Purpose:** approve Phase 7 Checkpoint B, merge PR #11, and start Phase 8 planning.
+- **Outcome:** PR #11 merged (`e1c841d`); Phase 8 plan written (`docs/progress/phase-08-security.md`).
+
+### P08-02 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > Approved
+- **Purpose:** Checkpoint A approval of the Phase 8 plan and decisions `P8-D1` to `P8-D6` (all Option A).
+- **Outcome:** decisions recorded; `test-designer` invoked (`P08-03`).
+
+### P08-03 · agent→subagent (`test-designer` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Phase 8 (security hardening) of a .NET 10 mortgage-application API in /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-08-security). Propose test cases for the approved plan; do not write code.
+
+  Read first:
+  - `docs/progress/phase-08-security.md` (goal, plan, approved decisions P8-D1 to P8-D6, all Option A)
+  - `docs/layers/PRODUCTION-LAYERS.md` ("Security", "Rate limiting", "Scaling")
+  - `.claude/rules/security.md`, `.claude/rules/tests.md`, `tests/CLAUDE.md`
+  - `src/MortgageApplications.Api/Program.cs`, `src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs`, `src/MortgageApplications.Api/Assessments/*`, `src/MortgageApplications.Api/Identity/DevTokenEndpoint.cs`, `src/MortgageApplications.Api/appsettings.json`
+  - `tests/MortgageApplications.IntegrationTests/` (`ApiFactory.cs`, `AssessmentWorkerTests.cs`, `StartupTests.cs`, `ComposeFileTests.cs`, `LocalRunFileTests.cs`)
+  - `.claude/hooks/block-dangerous-bash.sh`, `.claude/hooks/tests/test-hooks.sh`
+  - `Dockerfile`, `compose.observability.yaml`, `scripts/verify.sh`, `.github/workflows/ci.yml`
+
+  What will be built (P8-D1 to P8-D6, all Option A):
+  1. Rate limiting (P8-D1): Built-in AddRateLimiter fixed-window policy on POST /api/applications, POST /api/applications/{id}/assessments, and POST /dev/token, partitioned by authenticated owner sub (and a separate "dev-token" partition for /dev/token), QueueLimit = 0, returning 429 Too Many Requests (ProblemDetails: status, title, traceId) + Retry-After header (seconds), creating or queueing nothing on 429. GET endpoints and /health are not rate-limited by this write policy. Options RateLimiting:PermitLimit ([Range(1, 10_000)], default 60) and RateLimiting:WindowSeconds ([Range(1, 3600)], default 60), validated at startup. Unauthenticated requests to /api/* still get 401 before consuming a rate-limit permit.
+  2. Bounded enqueue timeout (P8-D2): Configurable Assessments:EnqueueTimeoutSeconds ([Range(1, 300)], default 10 s, validated at startup) around IAssessmentQueue.EnqueueAsync when POST /api/applications/{id}/assessments waits on a full queue (QueueCapacity = 1, worker held). When the enqueue times out, the endpoint returns 503 Service Unavailable (ProblemDetails, no internal exception details leaked), while the saved Pending assessment row remains in SQLite so the worker/startup recovery completes it once released. A client disconnect (RequestAborted) still cancels without returning 503.
+  3. Security headers, HSTS, and AllowedHosts (P8-D3): Every response includes X-Content-Type-Options: nosniff, X-Frame-Options: DENY, and Referrer-Policy: no-referrer; /api/* and /dev/token responses also include Cache-Control: no-store. Outside Development, UseHsts() is enabled (sending Strict-Transport-Security over HTTPS requests). AllowedHosts in appsettings.json is "localhost;127.0.0.1", so an untrusted Host header (e.g. Host: evil.example) returns 400 Bad Request, while localhost and 127.0.0.1 succeed.
+  4. NuGet lock files & source mapping (P8-D4): nuget.config with <clear />, nuget.org (https://api.nuget.org/v3/index.json), and <packageSourceMapping> (* -> nuget.org); <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile> in Directory.Build.props; 5 packages.lock.json files committed; dotnet restore --locked-mode in scripts/verify.sh, Dockerfile, and .github/workflows/ci.yml.
+  5. Container digest pinning & Dependabot (P8-D5): Multi-arch @sha256:... digests on mcr.microsoft.com/dotnet/sdk:10.0 and mcr.microsoft.com/dotnet/aspnet:10.0 in Dockerfile and mcr.microsoft.com/aspire/dashboard:13.6.2 in compose.observability.yaml; .github/dependabot.yml covering nuget, docker, and github-actions (weekly).
+  6. Bash hook self-protection (P8-D6): block-dangerous-bash.sh blocks shell writes (redirects >/>>, tee, sed -i, cp/mv/ln, and inline python/sh -c writes) targeting .claude/hooks/** or .claude/settings*.json with exit code 2, tested in .claude/hooks/tests/test-hooks.sh.
+
+  Use your output format (ID | given | when | then | why it matters), mark each case must or nice, keep the list tight and high-value, and list any ambiguities for Alessandro to settle.
+  ```
+- **Purpose:** propose Phase 8 test cases before writing any tests.
+- **Outcome:** 25 test cases (`S8-01` to `S8-25`) and 3 questions (`A1`–`A3`); full text in `docs/progress/phase-08/test-proposal.md`.
+
+### P08-04 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > Approved
+- **Purpose:** approval of the Phase 8 test cases (`S8-01`–`S8-25`) and recommended answers `A1`–`A3`.
+- **Outcome:** failing tests written first (`317d493`), then implementation (`1b64d2c`, `2065277`, `80f5159`).
+
+### P08-05 · agent→subagent (`security-auditor` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Security gate for Phase 8 (security hardening) of a .NET 10 mortgage-application API in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-08-security (HEAD 80f5159). Read only: do not edit files or switch branches.
+
+  Read first: .claude/rules/security.md, AGENTS.md, docs/progress/phase-08-security.md (goal, plan, decisions P8-D1 to P8-D6, approved test proposal S8-01 to S8-25 and answers A1-A3), docs/layers/PRODUCTION-LAYERS.md ("Security", "Rate limiting", "Scaling").
+
+  Do:
+  1. Run `gitleaks git --no-banner --redact -v` and `gitleaks dir --no-banner --redact .`
+  2. Run `semgrep scan --config p/csharp --config p/secrets --error --quiet` (and with `--baseline-commit main`).
+  3. Run `dotnet list MortgageApplications.slnx package --vulnerable --include-transitive`.
+  4. Review the diff (`git diff main...HEAD`) against OWASP Top 10:2025 and the Phase 8 security requirements:
+     - `RateLimitingSetup` (`src/MortgageApplications.Api/Security/RateLimitingSetup.cs`) and `RateLimitingOptions`: fixed-window limiter on `POST /api/applications`, `POST /api/applications/{id}/assessments`, and `POST /dev/token`, partitioned per authenticated `sub` (and `"dev-token"`), `QueueLimit = 0`, 429 `ProblemDetails` + `Retry-After`; `UseAuthentication()` and `UseAuthorization()` run before `UseRateLimiter()` so unauthenticated traffic gets 401 and cannot exhaust a subject's permits; any partition eviction or memory growth considerations.
+     - `ChannelAssessmentQueue` (`src/MortgageApplications.Api/Assessments/ChannelAssessmentQueue.cs`) and `ApplicationEndpoints.AssessAsync`: `Assessments:EnqueueTimeoutSeconds` (1..300, default 10 s), returns 503 `ProblemDetails` on queue saturation without leaking internal exception messages or PII while preserving the `Pending` row in SQLite for startup recovery.
+     - `SecurityHeadersMiddleware` (`src/MortgageApplications.Api/Security/SecurityHeadersMiddleware.cs`), `UseHsts()` outside `Development`, and `AllowedHosts = "localhost;127.0.0.1"`.
+     - `nuget.config` (`<clear />`, HTTPS `nuget.org`, `<packageSourceMapping>` `*`), `<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>`, 5 `packages.lock.json` files, `--locked-mode` in `scripts/verify.sh`, `Dockerfile`, and `.github/workflows/ci.yml`.
+     - Multi-arch `@sha256:...` digests in `Dockerfile` and `compose.observability.yaml`, and `.github/dependabot.yml`.
+     - `.claude/hooks/block-dangerous-bash.sh` blocking shell writes and inline interpreter access to `.claude/hooks/**` and `.claude/settings*.json` (and whether any obvious bypass remains).
+
+  Output:
+  - Exact commands run and trimmed outputs.
+  - A findings table: `tool/check | finding (file:line) | severity | real or false positive | reason | fix`.
+  - A one-line verdict: `PASS` or `FAIL`.
+  ```
+- **Purpose:** security gate on `phase-08-security` at `80f5159`.
+- **Outcome:** **PASS**. 0 leaks (158 commits + working tree), 0 Semgrep findings, 0 vulnerable packages; 2 low findings (`S1` `/dev/token` partition key with Bearer header / `"dev-token"` subject prefix, `S2` `block-dangerous-bash.sh` `.claude/hooks` without trailing slash and `mv`/`rm`/`chmod`), both fixed test-first in `7282960` and `2a74405`.
+
+### P08-06 · agent→subagent (`dotnet-reviewer` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Fresh-context diff review of Phase 8 (security hardening) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-08-security (HEAD 80f5159). Read only: do not edit files, do not build or run tests.
+
+  Get the diff with `git diff main...HEAD`. Read the touched files in full (`src/MortgageApplications.Api/Program.cs`, `src/MortgageApplications.Api/Security/*`, `src/MortgageApplications.Api/Assessments/*`, `src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs`, `src/MortgageApplications.Api/Identity/DevTokenEndpoint.cs`, `src/MortgageApplications.Api/appsettings.json`, `Directory.Build.props`, `nuget.config`, `Dockerfile`, `compose.observability.yaml`, `scripts/verify.sh`, `.github/workflows/ci.yml`, `.github/dependabot.yml`, `.claude/hooks/block-dangerous-bash.sh`, `.claude/hooks/tests/test-hooks.sh`, `tests/MortgageApplications.IntegrationTests/*`), plus `AGENTS.md`, `.claude/rules/backend.md`, `.claude/rules/security.md`, `.claude/rules/tests.md`, `tests/CLAUDE.md`, and `docs/progress/phase-08-security.md`.
+
+  Check in priority order:
+  1. Security & correctness: `RateLimitingSetup` (partitioning, `OnRejected` `Retry-After` calculation, middleware order with `UseStatusCodePages` / `UseAuthentication` / `UseAuthorization`), `ChannelAssessmentQueue.EnqueueSlowAsync` (`CancellationTokenSource` disposal, race between `timeout.Token` and `cancellationToken`, `TimeoutException` handling in `ApplicationEndpoints.AssessAsync`), `SecurityHeadersMiddleware`, `UseHsts()`, `AllowedHosts`, `block-dangerous-bash.sh` regexes, `Dockerfile` layer caching and `--locked-mode`.
+  2. Framework usage: DI lifetimes, options validation (`ValidateDataAnnotations().ValidateOnStart()`), OpenAPI metadata (`ProducesProblem` for 429 and 503).
+  3. Test gaps: whether every approved case (`S8-01`–`S8-25`) in `docs/progress/phase-08/test-proposal.md` has a test in `RateLimitingTests`, `SecurityHardeningTests`, `StartupTests`, `AssessmentWorkerTests`, `ComposeFileTests`, or `test-hooks.sh` that would fail if the behaviour broke.
+  4. Over-engineering or dead code.
+
+  Output only a list, most severe first, one finding per line:
+  `file:line | severity (critical/high/medium/low) | why it is wrong | concrete fix`
+  If you find nothing real, output `No findings.` and the list of files you reviewed. State plainly that you did not build or run tests.
+  ```
+- **Purpose:** fresh-context review of `phase-08-security` at `80f5159`.
+- **Outcome:** 2 medium (`R1`, `R2`, matching `security-auditor` `S1`/`S2`) and 3 low (`R3`–`R5`) findings, all fixed test-first in `7282960` and `2a74405`.
+
+### P08-07 · agent→subagent (`spec-checker` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Requirement traceability check at the end of Phase 8 (security hardening) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-08-security (HEAD 80f5159). Read only: do not edit files.
+
+  Read:
+  - `docs/spec/ORIGINAL_SPEC.md` and `docs/spec/affordability-rules.md`
+  - `docs/layers/PRODUCTION-LAYERS.md` ("Security", "Rate limiting", "Scaling")
+  - `docs/PROGRESS.md` (the R1-R55 traceability table)
+  - `docs/progress/phase-08-security.md` and `docs/progress/phase-08/test-proposal.md`
+  - The Phase 8 code, build files, hooks, and tests changed in `git diff main...HEAD`
+
+  Do:
+  1. Map every Phase 8 goal, decision (`P8-D1` to `P8-D6`), and approved test case (`S8-01` to `S8-25`) to the file:line and test name that meet it.
+  2. Check which rows of `docs/layers/PRODUCTION-LAYERS.md` ("Security", "Rate limiting", "Scaling") need wording updates to reflect that Phase 8 is now built rather than planned for Phase 8.
+  3. Check whether any R1–R55 row in `docs/PROGRESS.md` changes status or evidence after Phase 8 (e.g. R23 validations, R27 test count 576/576 + 105 hook cases, R30 background processing 503 timeout).
+  4. Output a Markdown table for the Phase 8 goals and at most 5 short notes on any open items or doc updates needed.
+  ```
+- **Purpose:** requirement traceability at the end of Phase 8.
+- **Outcome:** all 6 decisions (`P8-D1`–`P8-D6`) and all 25 test cases (`S8-01`–`S8-25`) are **met**.
+
+### P08-08 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > Approved
+- **Purpose:** Checkpoint B approval on PR #12.
+- **Outcome:** PR #12 squash-merged into `main`.

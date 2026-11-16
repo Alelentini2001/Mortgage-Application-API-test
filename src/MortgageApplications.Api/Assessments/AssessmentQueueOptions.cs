@@ -14,4 +14,8 @@ public sealed class AssessmentQueueOptions
     /// <summary>How long the worker waits before it retries a failed startup re-enqueue (R3).</summary>
     [Range(1, 3_600)]
     public int RequeueRetryDelaySeconds { get; set; } = 30;
+
+    /// <summary>How long a POST waits on a full queue before returning 503 Service Unavailable (P8-D2 A).</summary>
+    [Range(1, 300)]
+    public int EnqueueTimeoutSeconds { get; set; } = 10;
 }

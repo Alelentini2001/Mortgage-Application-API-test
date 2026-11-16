@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http.HttpResults;
+using MortgageApplications.Api.Security;
 
 namespace MortgageApplications.Api.Identity;
 
@@ -14,9 +15,11 @@ internal static class DevTokenEndpoint
     {
         endpoints.MapPost("/dev/token", Issue)
             .AllowAnonymous()
+            .RequireRateLimiting(RateLimitingSetup.WritePolicyName)
             .WithTags("Development")
             .WithSummary("Development only: issue a token for a subject")
-            .ProducesValidationProblem();
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
         return endpoints;
     }
 

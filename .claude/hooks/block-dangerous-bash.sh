@@ -32,8 +32,9 @@ WRAPPERS = {"sudo", "command", "builtin", "exec", "nohup", "time", "nice", "time
 WRAPPER_ARG_FLAGS = {"-n", "-I", "-L", "-P", "-d", "-E", "-s", "-u", "-g", "-C", "-k", "-o", "-e", "-i"}
 DOWNLOADERS = r"(curl|wget)"
 INTERPRETERS = r"((ba|z|da|k)?sh|python[0-9.]*|node|perl|ruby)"
-# Shared with protect-files.sh: one list of protected paths.
-PROTECTED = re.compile(os.environ["PROTECTED_REGEX"])
+# Shared with protect-files.sh: one list of protected paths, plus .claude/hooks/** and .claude/settings*.json
+# for shell writes (P8-D6 A, H1 review R4; Edit/Write still use the ask rule in .claude/settings.json).
+PROTECTED = re.compile(os.environ["PROTECTED_REGEX"] + r"|(^|/)\.claude/(hooks(/|$)|settings[^/]*\.json$)")
 
 def check_whole(text):
     if re.search(DOWNLOADERS + r"\b.*\|\s*(sudo\s+)?(env\s+)?" + INTERPRETERS + r"\b", text):
@@ -175,11 +176,17 @@ def check_writes(words, prog, args):
         targets += [a for a in args if not a.startswith("-")]
     if prog == "sed" and any(a.startswith("-i") or a == "--in-place" for a in args):
         targets += [a for a in args[1:] if not a.startswith("-")]
-    if prog in ("cp", "mv", "ln") and args:
+    if prog in ("cp", "ln") and args:
         targets.append(args[-1])
+    if prog in ("mv", "rm", "unlink", "chmod", "truncate", "install"):
+        targets += [a for a in args if not a.startswith("-")]
     for t in targets:
         if PROTECTED.search(t):
             block(f"writing to a protected path via the shell is not allowed ({t})")
+    if re.fullmatch(r"python[0-9.]*|node|perl|ruby", prog):
+        joined = " ".join(args)
+        if re.search(r"(^|[\s\"\x27/])\.claude/(hooks(\b|/|$)|settings[^/\s\"\x27]*\.json)", joined):
+            block("accessing .claude/hooks/ or .claude/settings*.json via an inline interpreter is not allowed")
 
 def check(text, depth=0):
     if depth > 3:

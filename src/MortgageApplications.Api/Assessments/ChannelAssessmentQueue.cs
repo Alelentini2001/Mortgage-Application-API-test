@@ -15,10 +15,12 @@ namespace MortgageApplications.Api.Assessments;
 public sealed class ChannelAssessmentQueue : IAssessmentQueue
 {
     private readonly Channel<Guid> _channel;
+    private readonly TimeSpan _enqueueTimeout;
 
     public ChannelAssessmentQueue(IOptions<AssessmentQueueOptions> options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        _enqueueTimeout = TimeSpan.FromSeconds(options.Value.EnqueueTimeoutSeconds);
         _channel = Channel.CreateBounded<Guid>(new BoundedChannelOptions(options.Value.QueueCapacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
@@ -30,9 +32,24 @@ public sealed class ChannelAssessmentQueue : IAssessmentQueue
     public ChannelReader<Guid> Reader => _channel.Reader;
 
     // TryWrite first: WriteAsync returns cancelled at once for a token that is already cancelled, even when there is
-    // room, which would leave the saved row Pending until a restart. The token only bounds a wait for room.
+    // room, which would leave the saved row Pending until a restart. The token and the enqueue timeout only bound a
+    // wait for room (P8-D2 A).
     public ValueTask EnqueueAsync(Guid assessmentId, CancellationToken cancellationToken) =>
         _channel.Writer.TryWrite(assessmentId)
             ? ValueTask.CompletedTask
-            : _channel.Writer.WriteAsync(assessmentId, cancellationToken);
+            : EnqueueSlowAsync(assessmentId, cancellationToken);
+
+    private async ValueTask EnqueueSlowAsync(Guid assessmentId, CancellationToken cancellationToken)
+    {
+        using var timeout = new CancellationTokenSource(_enqueueTimeout);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+        try
+        {
+            await _channel.Writer.WriteAsync(assessmentId, linked.Token);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException("Timed out waiting for room in the assessment queue.");
+        }
+    }
 }

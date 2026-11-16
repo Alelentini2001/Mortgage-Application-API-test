@@ -18,7 +18,7 @@ step() { printf '\n==> %s\n' "$1"; }
 fail() { printf '\nVERIFY FAILED (%s): %s\n' "$MODE" "$1" >&2; exit 1; }
 
 step "restore"
-dotnet restore "$SOLUTION" --nologo -v quiet || fail "restore"
+dotnet restore "$SOLUTION" --locked-mode --nologo -v quiet || fail "restore"
 
 step "build ($CONFIG, warnings as errors)"
 dotnet build "$SOLUTION" -c "$CONFIG" --no-restore --nologo -v quiet || fail "build"

@@ -127,14 +127,16 @@ public sealed class AssessmentWorkerTests
         }
     }
 
-    // I-10: a client that gives up while its POST waits for room leaves a saved Pending row that is never queued;
+    // I-10 (S8-23): a client that gives up while its POST waits for room leaves a saved Pending row that is never queued;
     // a restarted host completes it (startup re-enqueue).
     [Fact(Timeout = _timeoutMs)]
     public async Task Cancelled_waiting_post_leaves_pending_row_that_a_restart_completes()
     {
         await using var factory = new ApiFactory();
         var gate = new WorkerGate();
-        var (host, client) = await StartWithCapacityOneAsync(factory, gate);
+        var enqueueWaiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var (host, client) = await StartWithCapacityOneAsync(
+            factory, gate, services => services.SignalWhenEnqueueWaits(enqueueWaiting));
         var applicationId = await client.CreateApplicationAsync();
         var first = await client.PostAssessmentAsync(applicationId);
         await gate.Entered.WaitAsync(_wait, TestContext.Current.CancellationToken);
@@ -144,7 +146,7 @@ public sealed class AssessmentWorkerTests
             new Uri($"/api/applications/{applicationId}/assessments", UriKind.Relative),
             new StringContent("", Encoding.UTF8, "application/json"),
             giveUp.Token);
-        await Http.EventuallyAsync(async () => await CountAssessmentsAsync(host.Services) == 3, () => "third assessment saved");
+        await enqueueWaiting.Task.WaitAsync(_wait, TestContext.Current.CancellationToken);
 
         await giveUp.CancelAsync();
 
@@ -160,6 +162,60 @@ public sealed class AssessmentWorkerTests
         var marker = await client.PostAssessmentAsync(applicationId);
         await client.PollUntilFinishedAsync(marker.Headers.Location!.OriginalString);
         Assert.Equal("Pending", Http.Status(await (await client.GetPathAsync(thirdLocation)).BodyAsync()));
+        AssertNoWorkerWarningsOrErrors(factory);
+        await host.DisposeAsync();
+
+        await using var restarted = factory.WithWebHostBuilder(_ => { }, runWorker: true);
+
+        Assert.Equal("Completed", Http.Status(await restarted.CreateClient().PollUntilFinishedAsync(thirdLocation)));
+    }
+
+    // S8-22 (P8-D2): when the queue stays full past Assessments:EnqueueTimeoutSeconds, POST /api/applications/{id}/assessments
+    // returns 503 ProblemDetails (no internal exception details or sentinel numbers leaked), leaves the saved Pending
+    // row in SQLite, and a restarted host completes it.
+    [Fact(Timeout = _timeoutMs)]
+    public async Task Full_queue_past_enqueue_timeout_returns_503_leaves_pending_row_and_a_restart_completes_it()
+    {
+        await using var factory = new ApiFactory();
+        var gate = new WorkerGate();
+        var host = factory.WithWebHostBuilder(
+            builder => builder
+                .ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Assessments:QueueCapacity"] = "1",
+                    ["Assessments:EnqueueTimeoutSeconds"] = "1",
+                }))
+                .ConfigureTestServices(services => services.HoldWorkerAt(gate)),
+            runWorker: true);
+        var client = host.CreateClient();
+        await WaitForStartupRequeueAsync(factory);
+        var applicationId = await client.CreateApplicationAsync(Telemetry.SentinelBody);
+        var first = await client.PostAssessmentAsync(applicationId);
+        await gate.Entered.WaitAsync(_wait, TestContext.Current.CancellationToken);
+        var second = await client.PostAssessmentAsync(applicationId);
+
+        var third = await client.PostAssessmentAsync(applicationId);
+
+        await third.AssertProblemAsync(HttpStatusCode.ServiceUnavailable);
+        Assert.True(third.Headers.CacheControl?.NoStore);
+        var body = await third.BodyAsync();
+        foreach (var forbidden in new[] { "OperationCanceledException", "TimeoutException", "85123", "912.34", "61234", "301234", "240000", ApiFactory.DefaultOwner })
+        {
+            Assert.DoesNotContain(forbidden, body, StringComparison.Ordinal);
+            Assert.DoesNotContain(factory.Logs.Entries, e => e.Text.Contains(forbidden, StringComparison.Ordinal));
+        }
+
+        var thirdId = (await AssessmentIdsAsync(host.Services))
+            .Except([Guid.Parse(await first.IdAsync()), Guid.Parse(await second.IdAsync())])
+            .Single();
+        var thirdLocation = $"/api/applications/{applicationId}/assessments/{thirdId}";
+        gate.Open();
+        await client.PollUntilFinishedAsync(first.Headers.Location!.OriginalString);
+        await client.PollUntilFinishedAsync(second.Headers.Location!.OriginalString);
+        var marker = await client.PostAssessmentAsync(applicationId);
+        await client.PollUntilFinishedAsync(marker.Headers.Location!.OriginalString);
+        Assert.Equal("Pending", Http.Status(await (await client.GetPathAsync(thirdLocation)).BodyAsync()));
+        AssertNoWorkerWarningsOrErrors(factory);
         await host.DisposeAsync();
 
         await using var restarted = factory.WithWebHostBuilder(_ => { }, runWorker: true);

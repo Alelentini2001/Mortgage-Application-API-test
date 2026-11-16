@@ -6,6 +6,7 @@ using MortgageApplications.Api.Configuration;
 using MortgageApplications.Api.Errors;
 using MortgageApplications.Api.Identity;
 using MortgageApplications.Api.Observability;
+using MortgageApplications.Api.Security;
 using MortgageApplications.Core.Affordability;
 using MortgageApplications.Core.Applications;
 using MortgageApplications.Infrastructure;
@@ -81,6 +82,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 // Authentication (Phase 7, ADR 0004): JWT bearer, ES256 only; the owner is the token's sub (ClaimsCurrentUser), and
 // the fallback policy requires an authenticated caller on every endpoint not marked AllowAnonymous.
 builder.Services.AddJwtAuthentication();
+builder.Services.AddWriteRateLimiting();
 builder.Services.AddScoped<MortgageApplicationService>();
 builder.Services.AddInfrastructure(
     builder.Configuration.GetConnectionString("MortgageApplications")
@@ -107,6 +109,12 @@ builder.Services.AddOpenApi(options =>
 
 var app = builder.Build();
 
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
+app.UseSecurityHeaders();
 // .NET 10 suppresses logs and metrics for exceptions a handler reports as handled. Keep them for real failures;
 // only client errors (malformed body, wrong content type) are suppressed.
 app.UseExceptionHandler(new ExceptionHandlerOptions
@@ -114,9 +122,12 @@ app.UseExceptionHandler(new ExceptionHandlerOptions
     SuppressDiagnosticsCallback = context => context.Exception is BadHttpRequestException,
 });
 app.UseStatusCodePages();
-// After the status-code pages, so a 401 from the challenge gets the same ProblemDetails body as other errors.
+// After the status-code pages, so a 401 from the challenge and a 429 from the rate limiter get the same
+// ProblemDetails body as other errors. Authentication and authorization run before rate limiting so anonymous callers
+// get 401 and cannot consume a subject's permits.
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 if (app.Environment.IsDevelopment())
 {

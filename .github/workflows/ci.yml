@@ -26,6 +26,7 @@ jobs:
         with:
           global-json-file: global.json
 
+      # Runs dotnet restore --locked-mode, build (warnings as errors), all tests, hook tests and format check.
       - name: Verify
         run: ./scripts/verify.sh
 
