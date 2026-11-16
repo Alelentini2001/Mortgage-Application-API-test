@@ -4,9 +4,8 @@
 # http://127.0.0.1:18888. Login stays on: open the login?t=... link printed in the dashboard container's log.
 services:
   aspire-dashboard:
-    # Pinned tag, not latest: 13.6.2 was published 2026-10-29, the newest tag at least two weeks old on 2026-11-15
-    # (checked in the MCR catalog). Digest pinning is Phase 8.
-    image: mcr.microsoft.com/aspire/dashboard:13.6.2
+    # Pinned tag and multi-arch digest (Phase 8, P8-D5 A): 13.6.2 was published 2026-10-29.
+    image: mcr.microsoft.com/aspire/dashboard:13.6.2@sha256:e4220c55fa3c3e40ad2d733ef07973392299b420e9bde6924e8f6a1e71ff01a8
     ports:
       # The UI on loopback only. The OTLP ports (18889 gRPC, 18890 HTTP) are not published to the host: only the
       # api container reaches them, on the compose network.
