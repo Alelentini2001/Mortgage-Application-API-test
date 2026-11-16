@@ -1,6 +1,6 @@
 # Phase 07: Authentication + authorisation
 
-Status: **Ready for Checkpoint B (PR review)** · Branch: `phase-07-auth` · PR: [#11](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/11) · Started: 2026-11-15 · Finished: —
+Status: **Merged** · Branch: `phase-07-auth` · PR: [#11](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/11) · Started: 2026-11-15 · Finished: 2026-11-16
 
 ## Goal
 
@@ -192,6 +192,12 @@ Checked before planning, 2026-11-15:
 - **Purpose:** requirement traceability at the end of Phase 7.
 - **Outcome:** R31 is **met** (all four Optional Enhancements R30–R33 are now met); overall totals move to **30 met · 10 partial · 15 missing**. See "Review gate".
 
+### P07-12 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > Proceed with option a for both of them and continue
+- **Purpose:** Checkpoint B approval on PR #11 (Option A for anonymous unknown paths returning `401`, Option A for adding `FailureType` to rules §6 and `TelemetryAllowlistTests._logKeys`, ADR 0004 Accepted, merge PR #11 and continue to Phase 8).
+- **Outcome:** `FailureType` added to `docs/spec/affordability-rules.md` §6 and `TelemetryAllowlistTests._logKeys`, ADR 0004 marked `Accepted`, PR #11 squash-merged.
+
 ## What was built (files)
 
 Implementation delegated to a subagent (P07-05). Commits: `9b259ee` (package), `151fa7f` (failing tests), `b28b2c1` (implementation), `0b996c4` (three test expectations corrected), `1d0944f` (compose and CI).
@@ -342,11 +348,10 @@ The ten gate findings were fixed test-first on the branch (commits `828573e` tes
 ## Open issues
 
 - This session still has the agent definitions loaded before the H1 cut (H1 review R3). Restart Claude Code before the `test-designer` step.
-- **For Alessandro: anonymous unknown paths are 401, not 404.** The fallback policy also applies when no endpoint matches, so without a token `/no-such-path`, `/dev/token` outside Development (or without the flag) and `/openapi/v1.json` in Production are 401; with a valid token they are 404. AU64, AU65 and AU101 assert "same status as an unknown path" plus the authenticated 404. Accepting this seems right (it reveals no routes); the alternative is a custom middleware.
-- Resolved by the gates: dev key with a configured key. Startup now fails when `DevAuth:Enabled` is on and `Jwt:SigningPublicKey` is set (G2), so the dev key is the only trusted key in dev mode.
-- `error="invalid_token"` comes from an `OnChallenge` event: with `IncludeErrorDetails = false` the handler itself sends a bare `Bearer` (A5 wanted the error code without a description).
-- Resolved by the gates: a `sub` array, number or object is a 401 (G5 tests).
-- New log field: the `TokenRejected` event carries `FailureType` (an exception type name, or `InvalidSubject`). It is not personal data, but rules section 6 (logging allowlist) and test O22's `_logKeys` do not name it yet; O22 does not see it because it sends no rejected token. Needs Alessandro's decision on adding it to the allowlist.
+- **Resolved at Checkpoint B (P07-12, Option A):** anonymous unknown paths returning `401` under the fallback policy is accepted (reveals no routes; documented in ADR 0004).
+- **Resolved at Checkpoint B (P07-12, Option A):** `FailureType` (from `TokenRejected`) added to `docs/spec/affordability-rules.md` section 6 and `TelemetryAllowlistTests._logKeys`, and O22 now also triggers a `TokenRejected` event.
+- **CI (`AU111`):** both GitHub Actions jobs (`Build, test, format` and `Docker image build and smoke test`) passed on PR #11, with `0` occurrences of `eyJ` in the workflow logs (`::add-mask::` verified).
+- **ADR 0004:** marked `Accepted` at Checkpoint B (P07-12).
 - Settings under `Authentication:Schemes:Bearer:SigningKeys` (or other `TokenValidationParameters` bound by the framework) are replaced by the app's own parameters; only `Authority` and `MetadataAddress` are covered by a test (G3).
 - Default token: `ApiFactory` sets it in `ConfigureClient` (the client's default Authorization header), not in a `DelegatingHandler`. `CreateDefaultClient` is not virtual, so a handler cannot be added to every client; `ConfigureClient` runs for every client, after any handlers a test passes, and a request's own Authorization header wins.
 - If anyone lowers `Microsoft.AspNetCore.Authentication` below `Warning`, token issuer (and other IdentityModel non-PII values) reach the logs again (AU92 control).

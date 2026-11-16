@@ -1,8 +1,8 @@
 # 0004. Authentication and authorisation
 
-- **Status:** Proposed (draft written by the agent; Alessandro accepts or changes it at Phase 7 Checkpoint B)
+- **Status:** Accepted (Phase 7 Checkpoint B, 2026-11-16)
 - **Date:** 2026-11-16
-- **Decided by:** Alessandro (on the agent's recommendation): P7-D1 to P7-D4 and P7-D9 at Phase 7 Checkpoint A ("Approved, all A"), and the test answers A1–A14 ("Approved").
+- **Decided by:** Alessandro (on the agent's recommendation): P7-D1 to P7-D4 and P7-D9 at Phase 7 Checkpoint A ("Approved, all A"), the test answers A1–A14 ("Approved"), and Checkpoint B ("Proceed with option a for both of them and continue").
 
 ## Context
 

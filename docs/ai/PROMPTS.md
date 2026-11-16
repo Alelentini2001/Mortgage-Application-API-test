@@ -1252,3 +1252,9 @@ Copied from `docs/progress/harness-01-context.md` after the merge. H-00 (Alessan
   ```
 - **Purpose:** requirement traceability at the end of Phase 7.
 - **Outcome:** R31 is **met** (all four Optional Enhancements R30–R33 are now met); overall totals move to **30 met · 10 partial · 15 missing**.
+
+### P07-12 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > Proceed with option a for both of them and continue
+- **Purpose:** Checkpoint B approval on PR #11 (Option A for anonymous unknown paths returning `401`, Option A for adding `FailureType` to rules §6 and `TelemetryAllowlistTests._logKeys`, ADR 0004 Accepted, merge PR #11 and continue to Phase 8).
+- **Outcome:** `FailureType` added to `docs/spec/affordability-rules.md` §6 and `TelemetryAllowlistTests._logKeys`, ADR 0004 marked `Accepted`, PR #11 squash-merged.
