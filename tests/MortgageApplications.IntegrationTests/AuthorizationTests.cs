@@ -22,7 +22,7 @@ public sealed partial class AuthorizationTests(ApiFactory factory) : IClassFixtu
 {
     private static readonly string[] _applicationEndpoints =
     [
-        "POST /api/applications",
+        "POST /api/applications/", // the group prefix plus the empty "" pattern
         "GET /api/applications/{id:guid}",
         "POST /api/applications/{id:guid}/assessments",
         "GET /api/applications/{id:guid}/assessments/{assessmentId:guid}",
@@ -51,7 +51,9 @@ public sealed partial class AuthorizationTests(ApiFactory factory) : IClassFixtu
             .Select(e => e.Name).Order(StringComparer.Ordinal).ToArray();
         var protectedOnes = endpoints.Where(e => e.Endpoint.Metadata.GetMetadata<IAllowAnonymous>() is null).ToList();
 
-        Assert.Equal(allowlist.Order(StringComparer.Ordinal).ToArray(), anonymous);
+        Assert.True(
+            allowlist.Order(StringComparer.Ordinal).SequenceEqual(anonymous),
+            $"Anonymous endpoints: {string.Join(", ", anonymous)}");
         Assert.Subset(protectedOnes.Select(e => e.Name).ToHashSet(), _applicationEndpoints.ToHashSet());
         foreach (var (name, endpoint) in protectedOnes)
         {
@@ -72,9 +74,17 @@ public sealed partial class AuthorizationTests(ApiFactory factory) : IClassFixtu
         { true, [.. DevelopmentAllowlist, "POST /dev/token"] },
     };
 
-    // A3: /health, plus the OpenAPI document and Scalar, which are mapped in Development only.
+    // A3: /health, plus the OpenAPI document and Scalar (its page and its three static assets), which are mapped in
+    // Development only.
     private static string[] DevelopmentAllowlist =>
-        ["GET /health", "GET /openapi/{documentName}.json", "GET /scalar/{documentName?}"];
+    [
+        "GET /health",
+        "GET /openapi/{documentName}.json",
+        "GET /scalar/favicon.svg",
+        "GET /scalar/scalar.aspnetcore.js",
+        "GET /scalar/scalar.js",
+        "GET /scalar/{documentName?}",
+    ];
 
     // AU42: each application endpoint, called without a token, is a 401 even for an existing application, and
     // creates and queues nothing (the host runs without the worker, so the queue count shows what was enqueued).

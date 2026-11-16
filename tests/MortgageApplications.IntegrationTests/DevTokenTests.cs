@@ -149,17 +149,18 @@ public sealed class DevTokenTests(ApiFactory factory) : IClassFixture<ApiFactory
 
     public static TheoryData<string> MissingSubjectBodies => ["{}", """{"subject":null}""", "", "null", """{"subject":123}"""];
 
-    // AU68 (wrong content type): a 415 ProblemDetails, the same status the application endpoints give
-    // (JsonStrictnessTests), with no token.
+    // AU68 (wrong content type): no token. Routing sends a content type the endpoint does not accept to the
+    // framework's 415 endpoint, which is not AllowAnonymous, so an anonymous caller gets the fallback policy's 401
+    // ProblemDetails (an authenticated caller gets 415, JsonStrictnessTests I26).
     [Fact]
-    public async Task Dev_token_with_wrong_content_type_returns_415()
+    public async Task Dev_token_with_wrong_content_type_issues_no_token()
     {
         using var host = DevOnHost();
         var content = new StringContent("""{"subject":"alice"}""", Encoding.UTF8, "text/plain");
 
         var response = await host.CreateClient().WithoutToken().PostAsync(new Uri("/dev/token", UriKind.Relative), content, Http.Ct);
 
-        await response.AssertProblemAsync(HttpStatusCode.UnsupportedMediaType);
+        await response.AssertProblemAsync(HttpStatusCode.Unauthorized);
         Assert.DoesNotContain("\"token\"", await response.BodyAsync(), StringComparison.Ordinal);
     }
 

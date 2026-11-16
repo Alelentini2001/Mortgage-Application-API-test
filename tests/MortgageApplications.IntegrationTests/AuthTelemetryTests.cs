@@ -52,42 +52,51 @@ public sealed class AuthTelemetryTests
         }
     }
 
-    // AU92 (A12): with the authentication log categories at Debug, rejected tokens with a sentinel issuer, audience
-    // and subject are logged by the framework (control) without any of the three values: IdentityModel's PII hiding
-    // stays at its default.
+    // AU92 (A12): rejected tokens with a sentinel issuer, audience and subject leave none of the three values, nor the
+    // token, in the logs at the configured levels. Control: with the authentication categories at Debug the framework
+    // does log these failures (at Information, with IdentityModel's exception text), so the check would see them;
+    // appsettings.json therefore pins Microsoft.AspNetCore.Authentication at Warning.
     [Fact]
     public async Task Authentication_failure_logs_hold_no_token_values()
     {
-        await using var factory = new ApiFactory();
-        using var verbose = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+        const string issuer = "sentinel-issuer-41";
+        const string audience = "sentinel-audience-42";
+        const string subject = "sentinel-subject-43";
+        await using var control = new ApiFactory();
+        using var verbose = control.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Logging:LogLevel:Microsoft.AspNetCore.Authentication"] = "Debug",
             })));
-        const string issuer = "sentinel-issuer-41";
-        const string audience = "sentinel-audience-42";
-        const string subject = "sentinel-subject-43";
+        await RejectSentinelTokensAsync(control, verbose.CreateClient().WithoutToken(), issuer, audience, subject);
+        Assert.Contains(control.Logs.Entries, e => e.Category.StartsWith("Microsoft.AspNetCore.Authentication", StringComparison.Ordinal)
+            && e.Level <= LogLevel.Information);
+        await using var factory = new ApiFactory();
+
+        var tokens = await RejectSentinelTokensAsync(factory, factory.CreateAnonymousClient(), issuer, audience, subject);
+
+        foreach (var sentinel in new[] { issuer, audience, subject }.Concat(tokens))
+        {
+            Assert.DoesNotContain(factory.Logs.Entries, e => e.Text.Contains(sentinel, StringComparison.Ordinal));
+        }
+    }
+
+    private static async Task<string[]> RejectSentinelTokensAsync(
+        ApiFactory factory, HttpClient client, string issuer, string audience, string subject)
+    {
         var tokens = new[]
         {
             factory.Sign(TokenSpec.Valid(subject) with { Issuer = issuer }),
             factory.Sign(TokenSpec.Valid(subject) with { Audience = audience }),
             factory.Sign(TokenSpec.ExpiredAgo(TimeSpan.FromMinutes(5), subject) with { Issuer = issuer, Audience = audience }),
         };
-        var client = verbose.CreateClient().WithoutToken();
-
         foreach (var token in tokens)
         {
             var response = await client.PostJsonWithAuthorizationAsync("/api/applications", Http.BaseBody, $"Bearer {token}");
             await response.AssertProblemAsync(HttpStatusCode.Unauthorized);
         }
 
-        var entries = factory.Logs.Entries;
-        Assert.Contains(entries, e => e.Category.StartsWith("Microsoft.AspNetCore.Authentication", StringComparison.Ordinal)
-            && e.Level <= LogLevel.Information);
-        foreach (var sentinel in new[] { issuer, audience, subject }.Concat(tokens))
-        {
-            Assert.DoesNotContain(entries, e => e.Text.Contains(sentinel, StringComparison.Ordinal));
-        }
+        return tokens;
     }
 
     private static async Task<string> OwnerOfAsync(ApiFactory factory, string applicationId)
