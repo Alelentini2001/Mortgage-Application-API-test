@@ -85,8 +85,8 @@ public sealed class MortgageApplicationService(
 
         await repository.UpdateAssessmentAsync(assessment, cancellationToken);
         return result is null
-            ? new AssessmentProcessingResult(AssessmentProcessingOutcome.Failed, assessment.ApplicationId, null)
-            : new AssessmentProcessingResult(AssessmentProcessingOutcome.Completed, assessment.ApplicationId, result.Decision);
+            ? new AssessmentProcessingResult(AssessmentProcessingOutcome.Failed, assessment.ApplicationId, null, null)
+            : new AssessmentProcessingResult(AssessmentProcessingOutcome.Completed, assessment.ApplicationId, result.Decision, result.RulesVersion);
     }
 
     /// <summary>For the worker's startup re-enqueue: every Pending assessment, oldest first. Not owner-scoped.</summary>

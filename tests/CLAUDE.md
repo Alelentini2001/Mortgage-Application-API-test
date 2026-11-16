@@ -2,7 +2,7 @@
 - xUnit v3 on Microsoft.Testing.Platform. Filter with `--filter-class` / `--filter-method`.
 - Test names: `Method_scenario_expected_result` (underscores allowed in tests only).
 - `[InlineData]` cannot hold `decimal`: use `TheoryData<...>` with `[MemberData]`.
-- Arrange / Act / Assert, one behaviour per test. No logic in tests beyond setup.
+- Arrange / Act / Assert, one behaviour per test. No logic in tests beyond setup (except the approved property-based invariants in `AffordabilityCalculatorPropertyTests`, `P9-D4`).
 - Unit tests cover Core only. Integration tests use `WebApplicationFactory<Program>` and an isolated SQLite database per test class.
 - Test-first: write the failing test, show it failing, then implement.
 - Never weaken or delete a failing test to make the build pass; fix the code or ask Alessandro.
