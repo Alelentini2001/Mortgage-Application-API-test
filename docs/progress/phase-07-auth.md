@@ -113,6 +113,23 @@ Planning: lead agent only.
 
 ## What was built (files)
 
+Implementation delegated to a subagent (P07-05). Commits: `9b259ee` (package), `151fa7f` (failing tests), `b28b2c1` (implementation), `0b996c4` (three test expectations corrected), `1d0944f` (compose and CI).
+
+- `Directory.Packages.props`, `src/MortgageApplications.Api/MortgageApplications.Api.csproj`: `Microsoft.AspNetCore.Authentication.JwtBearer` 10.0.15, Api project only (P7-D9 A).
+- `src/MortgageApplications.Api/Identity/`:
+  - `AuthenticationSetup.cs`: options, `AddAuthentication().AddJwtBearer()`, validation parameters (issuer, audience, lifetime, signature, `ValidAlgorithms` = ES256, `RequireSignedTokens`, `RequireExpirationTime`, `ClockSkew` 30 s, `MapInboundClaims = false`, `IncludeErrorDetails = false`), `OnTokenValidated` (rejects a missing, repeated, blank or > 128-character `sub`), `OnChallenge` (sets `error="invalid_token"` on a rejected token, no description), fallback policy `RequireAuthenticatedUser`.
+  - `JwtOptions.cs`, `DevAuthOptions.cs`, `JwtOptionsValidator.cs` (both validators; `ValidateOnStart`, messages name the setting only), `SigningPublicKey.cs` (accepts only a `PUBLIC KEY` PEM on P-256).
+  - `TokenKeys.cs`: validation keys (configured key and, when the dev endpoint is on, an in-memory P-256 pair); each key has its own uncached `CryptoProviderFactory` (see Tests > Results, "Bug found going green").
+  - `DevTokenEndpoint.cs` (`POST /dev/token`, `DevTokenRequest` with `[Required]` + `^[a-z0-9-]{1,64}\z`, `DevTokenResponse`), `DevTokenIssuer.cs` (ES256, `sub`, `iss`, `aud`, `iat`, `nbf`, `exp`, `jti`; whole seconds so `expiresAt` equals `exp`).
+  - `ClaimsCurrentUser.cs`, `SubjectClaim.cs`; `ICurrentUser.cs` comment updated; `DevelopmentCurrentUser.cs` deleted.
+  - `BearerSecurityTransformer.cs`: document transformer (http bearer JWT scheme) and operation transformer (requirement on every operation without `IAllowAnonymous`), from [Customize OpenAPI documents](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/openapi/customize-openapi?view=aspnetcore-10.0) (checked 2026-11-16: `BearerSecuritySchemeTransformer`, "Conditionally applying security requirements", `Document` on the operation transformer context in .NET 10).
+- `src/MortgageApplications.Api/Program.cs`: `AddJwtAuthentication()`, transformers, `UseAuthentication`/`UseAuthorization` after `UseStatusCodePages` (so 401s get the ProblemDetails body), `AllowAnonymous` on `/health` and, in Development, OpenAPI and Scalar; `/dev/token` mapped only in Development with `DevAuth:Enabled`.
+- `src/MortgageApplications.Api/appsettings.json`: `Jwt` (issuer, audience, 15 min), `DevAuth:Enabled=false`, and `Microsoft.AspNetCore.Authentication` at `Warning` (A12, see AU92).
+- `docs/layers/PRODUCTION-LAYERS.md`: "Auth & permissions" row now describes what was built (the old text said "until Phase 7" and HS256).
+- `compose.yaml`: `DevAuth__Enabled: "true"`; port comment rewritten (A13); bind unchanged, `127.0.0.1:8080:8080`.
+- `.github/workflows/ci.yml` (docker job): new step "Anonymous POST /api/applications returns 401" (checks `WWW-Authenticate: Bearer`); new step "Get a dev token" (`::add-mask::`, token written to a header file and sent with `curl -H @auth-header.txt`, never printed); the POST, GET, 202 and polling calls send it.
+- Tests (`tests/MortgageApplications.IntegrationTests/`): `TestTokens.cs` (new), `AuthenticationTests.cs`, `AuthorizationTests.cs`, `DevTokenTests.cs`, `AuthTelemetryTests.cs` (new); `ApiFactory.cs`, `StartupTests.cs`, `ComposeFileTests.cs`, `NotFoundAndOwnerTests.cs`, `CreateApplicationTests.cs`, `AssessmentWorkerTests.cs`, `ObservabilityLogTests.cs`, `TelemetryAllowlistTests.cs` changed (list below).
+
 ## Tests
 
 ### Proposal (`test-designer`, P07-03; approved by Alessandro, P07-04)
@@ -137,6 +154,51 @@ Full proposal, verbatim: [`phase-07/test-proposal.md`](phase-07/test-proposal.md
 - **A13** ADR 0004 states that the compose demo lets anyone on the machine mint a token for any subject, which is acceptable only because the port is bound to `127.0.0.1`.
 - **A14** Production-host tests configure `Jwt:SigningPublicKey` with a test public key.
 
+### Results
+
+**Red** (commit `151fa7f`: package and tests only, `DevelopmentCurrentUser` still in place; `dotnet test --project tests/MortgageApplications.IntegrationTests -c Release --no-build`): 242 total, **67 failed**, 175 passed. Saved locally (scratchpad `p7-red.txt`, not in the repo).
+- 64 of the 74 new test cases failed, as expected: no token is checked, no `/dev/token`, no `Jwt`/`DevAuth` validation, no bearer scheme, compose unchanged.
+- 10 new cases passed before any auth code, because they describe behaviour that already held without auth (they guard against regressions, not new behaviour): AU02, AU03, AU06, AU16 (any token is ignored), AU64 Staging and Production and AU65 (`/dev/token` does not exist yet), AU101 x3 (Development-only paths are 404 like any unknown path).
+- 3 existing tests failed, as expected: I35, I-5 and O21 now use a token for another subject instead of an `ICurrentUser` override, and the app still ignored tokens, so the "other owner" was the same owner.
+
+**Going green.** First run after the implementation: 16 failures, then 3, then 2, then 0. What changed on the way:
+- **Bug found going green (implementation).** Valid tokens were rejected with 401 on some hosts when tests ran together, never alone. Cause: IdentityModel's default `CryptoProviderFactory` is static and caches signature providers by key thumbprint; several hosts of one factory import the same public key, and a disposed host's `TokenKeys` disposed the `ECDsa` the cache still used. Fix: each key gets its own `CryptoProviderFactory` with `CacheSignatureProviders = false` (`TokenKeys.cs`).
+- **Three test expectations corrected** (commit `0b996c4`; each now pins verified framework behaviour, none was relaxed to hide an app bug):
+  - AU40: the allowlist was written before the framework's real endpoints were known. Scalar also maps `GET /scalar/favicon.svg`, `/scalar/scalar.js` and `/scalar/scalar.aspnetcore.js` (Development only, A3), and the create route's raw pattern is `POST /api/applications/` (group prefix plus `""`).
+  - AU68 (wrong content type): an anonymous `text/plain` POST to `/dev/token` is a 401, not 400/415. Routing sends a content type the endpoint does not accept to the framework's 415 endpoint, which is not `AllowAnonymous`, so the fallback policy answers first. No token is issued. An authenticated caller still gets 415 (JsonStrictnessTests I26).
+  - AU92 (A12): with `Microsoft.AspNetCore.Authentication` at Debug, JwtBearer's Information log "Failed to validate the token." carried IdentityModel's exception text with the token's issuer in clear (`IDX10205: Issuer validation failed. Issuer: 'sentinel-issuer-41'`), even with PII hiding at its default. As A12 says, `Microsoft.AspNetCore.Authentication` is now pinned at `Warning` in `appsettings.json`, and the test checks the configured levels, with the Debug host as a control that the framework does log these failures.
+- A compose test (AU110) stayed red until `compose.yaml` changed (commit `1d0944f`).
+
+**Green.** `./scripts/verify.sh` (full), after commit `1d0944f`:
+```
+==> restore
+==> build (Release, warnings as errors)
+    0 Warning(s)
+    0 Error(s)
+==> all tests
+  total: 516
+  failed: 0
+  succeeded: 516
+  skipped: 0
+==> hook regression tests
+hook tests: 91 passed, 0 failed
+==> format check
+VERIFY PASSED (full)
+```
+Integration tests 3 more times (`dotnet test --project tests/MortgageApplications.IntegrationTests -c Release --no-build`): run 1: 242 total, 0 failed, 14.7 s; run 2: 242, 0 failed, 14.9 s; run 3: 242, 0 failed, 16.0 s.
+
+**Local docker run** of the CI docker job (run blocks extracted from `ci.yml` with ruby, each run with `bash -e`, `COMPOSE_PROJECT_NAME=p7-local`, then `docker compose down -v --rmi local`): all 7 steps passed: build and start; `/health` 200; container uid 1654 owns `/app/data`; anonymous POST 401 with `WWW-Authenticate: Bearer`; `POST /dev/token` returned a token; POST 201 then GET returned the same application; POST assessment 202 and it completed as Approved. Cleanup removed the container, image, network and volume. Locally the `::add-mask::` line prints the token (only the GitHub runner consumes it), so the saved local log has it redacted; masking on GitHub is checked only by a real CI run (AU111, not done here).
+
+**Existing tests changed, and why** (meaning kept in each case):
+- `ApiFactory`: owns an ECDSA P-256 key, sets `Jwt:SigningPublicKey` with `UseSetting`, and every client (also from `WithWebHostBuilder` hosts and `CreateDefaultClient(handlers)`) sends a token for `ApiFactory.DefaultOwner`; `CreateAnonymousClient()`, `TokenFor(subject)`, `Sign(spec)` added.
+- `NotFoundAndOwnerTests` I35 (= AU50) and I-5 (= AU51): the other owner is a token for `other-owner` on a host without the worker (as before), not an `ICurrentUser` override. I37: owner is `ApiFactory.DefaultOwner`.
+- `ObservabilityLogTests` O21: the foreign POST uses a token for `other-owner` on the default host instead of a second host with an `ICurrentUser` override. O6: owner is `ApiFactory.DefaultOwner`.
+- `CreateApplicationTests` (I3 + I37), `AssessmentWorkerTests` (the failed-save and failing-item tests), `TelemetryAllowlistTests` O5: owner is `ApiFactory.DefaultOwner`. Reason for all owner lookups: `ICurrentUser` is now scoped to a request and cannot be resolved from the root provider.
+- `StartupTests` I43: the `Jwt` settings are put back with the connection string, so the failure still comes only from the missing Affordability section (review F4).
+- `ComposeFileTests`: AU110 added; existing O28 tests unchanged.
+
+**Cases implemented** (ID in a comment above each): AU01–AU04, AU06, AU10, AU11, AU13–AU16, AU18, AU20, AU21, AU23, AU24 (DER and PEM secrets), AU26–AU29, AU31 and AU32 (checked on every bad-token case), AU40, AU42, AU50, AU51, AU52, AU54, AU60, AU61, AU64 (Staging, Production), AU65 (plus a test for A10), AU66–AU69, AU71, AU80 (Production; Staging = AU81), AU82, AU83, AU85 (including an invalid PEM), AU87, AU90, AU92, AU100, AU101, AU110. AU111 is the CI run itself (not done here).
+
 ## Security gate
 
 ## Review gate
@@ -148,6 +210,15 @@ Full proposal, verbatim: [`phase-07/test-proposal.md`](phase-07/test-proposal.md
 ## Open issues
 
 - This session still has the agent definitions loaded before the H1 cut (H1 review R3). Restart Claude Code before the `test-designer` step.
+- **For Alessandro: anonymous unknown paths are 401, not 404.** The fallback policy also applies when no endpoint matches, so without a token `/no-such-path`, `/dev/token` outside Development (or without the flag) and `/openapi/v1.json` in Production are 401; with a valid token they are 404. AU64, AU65 and AU101 assert "same status as an unknown path" plus the authenticated 404. Accepting this seems right (it reveals no routes); the alternative is a custom middleware.
+- **For Alessandro: dev key with a configured key.** When `DevAuth:Enabled` is true in Development, the in-memory key pair is generated even if `Jwt:SigningPublicKey` is set, and both keys are trusted. The plan said "no key configured"; without this the endpoint would issue tokens the API rejects. Not covered by a test.
+- `error="invalid_token"` comes from an `OnChallenge` event: with `IncludeErrorDetails = false` the handler itself sends a bare `Bearer` (A5 wanted the error code without a description).
+- A token with more than one `sub` claim is rejected; not covered by a test.
+- Default token: `ApiFactory` sets it in `ConfigureClient` (the client's default Authorization header), not in a `DelegatingHandler`. `CreateDefaultClient` is not virtual, so a handler cannot be added to every client; `ConfigureClient` runs for every client, after any handlers a test passes, and a request's own Authorization header wins.
+- If anyone lowers `Microsoft.AspNetCore.Authentication` below `Warning`, token issuer (and other IdentityModel non-PII values) reach the logs again (AU92 control).
+- The `ci.yml` change took three edits, not one (the remaining `curl -H @auth-header.txt` additions were missed in the first edit).
+- Commit `b28b2c1` alone does not pass every test: the corrected expectations are in `0b996c4` and AU110 passes only after `1d0944f`. The branch tip passes.
+- Not done here (lead's later steps): ADR 0004, README, security gate, review gate, spec check, a real CI run (AU111, including that `::add-mask::` hides the token on GitHub).
 
 ## Time spent (approx.)
 
