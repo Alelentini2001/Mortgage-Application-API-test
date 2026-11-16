@@ -118,6 +118,12 @@ Chronological record of ideas, options, rejected ideas, who decided, and what ch
 - **Database query plans, WAL and caching (`P9-D2`).** `DatabaseQueryPlanTests` uses a `DbCommandInterceptor` (`R1`) to capture the real SQL commands executed by `EfMortgageApplicationRepository` and runs `EXPLAIN QUERY PLAN`, proving every lookup uses an index/PK `SEARCH` (`IX_MortgageApplications_OwnerId`, `IX_AffordabilityAssessments_ApplicationId`) with `0` `SCAN` lines. `dotnet-reviewer` (`R3`) caught that EF Core only sets `PRAGMA journal_mode=WAL` when creating a brand-new SQLite file, leaving an existing `DELETE`-mode file unchanged; fixed in `DatabaseMigration.MigrateDatabaseAsync` (`0db33e8`). Because every `GET` is a sub-millisecond primary-key lookup on per-owner data (`Cache-Control: no-store`), output caching is not needed.
 - **Rule wording alignment (`P9-D4`).** Updated `.claude/rules/backend.md` and `tests/CLAUDE.md` to match the approved `P3-D1` (API-boundary DTO mapping) and `P9-D4` (`AffordabilityCalculatorPropertyTests` exception), clearing both open items in `docs/PROGRESS.md`.
 
+## 2026-11-16 · Phase 10: documentation (`README.md`)
+
+- **Single self-contained `README.md` (`P10-D1 A`, `P10-D2 A`).** Wrote `README.md` covering setup, local/Docker/Aspire runs, `docker compose down -v` and `docker run --init` operational notes, `curl` walkthrough + `requests.http`, test commands, the affordability model and assumptions (`R19`, `R20`), Design & Reflection (`1`–`4`, `R37`–`R42`), and the cross-IDE / cross-model portability note.
+- **Why fresh-context review matters on documentation too.** Even on a docs-only phase, running `dotnet-reviewer` and `spec-checker` against the codebase caught three real drift bugs in the first draft (`f6b8fc9`): `GET /health` was described as probing SQLite (`200 OK, 503`) whereas `Program.cs` maps `() => TypedResults.Ok("Healthy")` (DB readiness is a production next step in `PRODUCTION-LAYERS.md`), the custom metric names were written as `mortgage_applications.assessments` instead of `mortgage.assessments.processed` (`AssessmentTelemetry.cs`), and `MortgageApplicationsDbContext` was spelled in the singular. All were fixed before opening the PR.
+
+
 
 
 

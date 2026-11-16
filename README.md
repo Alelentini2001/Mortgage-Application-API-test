@@ -29,8 +29,8 @@ MortgageApplications.slnx
 | `GET /api/applications/{id:guid}` | Bearer (`sub`) | `200 OK`, `401`, `404` | Retrieve an application owned by the caller (another user's ID returns `404`) |
 | `POST /api/applications/{id:guid}/assessments` | Bearer (`sub`) | `202 Accepted` (`Location`), `401`, `404`, `429`, `503` | Persist a `Pending` assessment and enqueue it for background calculation |
 | `GET /api/applications/{id:guid}/assessments/{assessmentId:guid}` | Bearer (`sub`) | `200 OK`, `401`, `404` | Poll assessment state (`Pending`, `Completed` with `result`, or `Failed` with `failedAt`) |
-| `GET /health` | Anonymous | `200 OK`, `503` | Readiness/liveness check (includes SQLite connectivity check) |
-| `POST /dev/token` | Anonymous (`Development` + `DevAuth:Enabled=true` only) | `200 OK`, `400`, `429` (`404` outside `Development`) | Issue a 15-minute ES256 JWT signed by an ephemeral in-memory key pair for local runs and demos |
+| `GET /health` | Anonymous | `200 OK` | Liveness check returning `"Healthy"` (does not touch SQLite; a DB readiness check is a production next step) |
+| `POST /dev/token` | Anonymous (`Development` + `DevAuth:Enabled=true` only) | `200 OK`, `400`, `429` (`401` anonymous / `404` authenticated when not registered) | Issue a 15-minute ES256 JWT signed by an ephemeral in-memory key pair for local runs and demos |
 
 In `Development` only, the OpenAPI 3.1 document is served at `/openapi/v1.json` and the interactive **Scalar** API reference UI at `/scalar`.
 
@@ -40,7 +40,7 @@ In `Development` only, the OpenAPI 3.1 document is served at `/openapi/v1.json` 
 
 - **.NET 10 SDK** (`10.0.100` or newer; pinned in [`global.json`](global.json) with `rollForward: latestFeature`).
 - **Docker & Docker Compose** (optional; required only for containerised runs and the opt-in Aspire observability dashboard).
-- **Optional security CLI tools** for the full local verification script (`./scripts/verify.sh`): [`gitleaks`](https://github.com/gitleaks/gitleaks) and [`semgrep`](https://semgrep.dev/).
+- **Optional security CLI tools** for the `.githooks/pre-commit` hook (`git config core.hooksPath .githooks`) and phase security gates: [`gitleaks`](https://github.com/gitleaks/gitleaks) and [`semgrep`](https://semgrep.dev/).
 
 Clone the repository and restore locked dependencies:
 
@@ -85,7 +85,7 @@ docker compose -f compose.yaml -f compose.observability.yaml up --build
 ```
 
 - Starts the API alongside `mcr.microsoft.com/aspire/dashboard:13.6.2` and sets `OTEL_EXPORTER_OTLP_ENDPOINT=http://aspire-dashboard:18889`.
-- Open the `http://localhost:18888/login?t=...` URL printed in the `aspire-dashboard` container logs to inspect structured logs, distributed traces (including the custom `assessment.process` span), and metrics (`mortgage_applications.assessments` counter and `mortgage_applications.assessment.duration` histogram).
+- Open the `http://localhost:18888/login?t=...` URL printed in the `aspire-dashboard` container logs to inspect structured logs, distributed traces (including the custom `assessment.process` span), and metrics (`mortgage.assessments.processed` counter and `mortgage.assessment.duration` histogram).
 
 ### Quick-Start API Walkthrough (`curl`)
 
@@ -111,18 +111,22 @@ APP_ID=$(curl -s -X POST "$BASE_URL/api/applications" \
     "termYears": 30
   }' | jq -r '.id')
 
-# 3. Request an affordability assessment (202 Accepted, status = Pending)
+# 3. Retrieve the created application (200 OK)
+curl -s "$BASE_URL/api/applications/$APP_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+
+# 4. Request an affordability assessment (202 Accepted, status = Pending)
 ASSESSMENT_ID=$(curl -s -X POST "$BASE_URL/api/applications/$APP_ID/assessments" \
   -H "Authorization: Bearer $TOKEN" | jq -r '.id')
 
-# 4. Poll the assessment (200 OK with status = Completed and result.decision = Approved)
+# 5. Poll the assessment (200 OK with status = Completed and result.decision = Approved)
 curl -s "$BASE_URL/api/applications/$APP_ID/assessments/$ASSESSMENT_ID" \
   -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 ### Production Authentication Configuration
 
-Outside `Development`, `POST /dev/token` is not registered (and startup fails if `DevAuth:Enabled=true` is set or if `Jwt:SigningPublicKey` is missing). Supply the issuer's ECDSA P-256 (`ES256`) public key in PEM format via environment variables (`Jwt__SigningPublicKey`, `Jwt__Issuer`, `Jwt__Audience`). See [ADR 0004](docs/adr/0004-authentication-and-authorisation.md) for how an external identity provider such as Microsoft Entra ID plugs in.
+Outside `Development`, `POST /dev/token` is not registered (and startup fails if `DevAuth:Enabled=true` is set outside `Development`, if `DevAuth:Enabled=true` is combined with `Jwt:SigningPublicKey` in any environment, or if `Jwt:SigningPublicKey` is missing outside `Development`). Supply the issuer's ECDSA P-256 (`ES256`) public key in PEM format via environment variables (`Jwt__SigningPublicKey`, `Jwt__Issuer`, `Jwt__Audience`). See [ADR 0004](docs/adr/0004-authentication-and-authorisation.md) for how an external identity provider such as Microsoft Entra ID plugs in.
 
 ---
 
@@ -132,7 +136,7 @@ Tests run on **Microsoft.Testing.Platform** (configured in [`global.json`](globa
 
 ```bash
 # Full verification gate: locked restore, build (warnings as errors),
-# all unit + integration tests, dotnet format check, hook tests, gitleaks, semgrep, NuGet audit
+# all unit + integration tests, hook regression tests, and dotnet format --verify-no-changes
 ./scripts/verify.sh
 
 # Fast gate: build + unit tests only (~3 seconds)
@@ -212,7 +216,7 @@ Every assessment evaluates and reports all three checks in order (`LTV`, `DTI`, 
 2. **Save-before-enqueue asynchronous assessment pipeline with bounded backpressure and startup recovery ([ADR 0003](docs/adr/0003-background-assessment-queue.md)):**
    - `POST /api/applications/{id}/assessments` saves the `AffordabilityAssessment` row in `Pending` status **before** writing the assessment ID to the bounded `System.Threading.Channels` queue (`IAssessmentQueue`) and returning `202 Accepted`.
    - If the queue is full (`Assessments:QueueCapacity`, default `100`), `ChannelAssessmentQueue` waits up to `Assessments:EnqueueTimeoutSeconds` (default `10 s`) before returning `503 Service Unavailable`; even then, or if the process crashes mid-flight, the `Pending` row is already durable in SQLite and `AssessmentWorker`'s startup sweep re-enqueues it on restart (never silently dropping work).
-   - `EfMortgageApplicationRepository.FindForProcessingAsync` projects only the 5 scalar application inputs (`AsNoTracking`) and updates only the modified columns on the tracked `AffordabilityAssessment` entity.
+   - `EfMortgageApplicationRepository.FindForProcessingAsync` projects only the 5 scalar application inputs without materialising or tracking `MortgageApplication`, while keeping `AffordabilityAssessment` tracked so `UpdateAssessmentAsync` writes only the modified columns.
 3. **Fail-closed ES256 authentication, owner-scoped persistence, and test-enforced zero-PII telemetry ([ADR 0004](docs/adr/0004-authentication-and-authorisation.md)):**
    - A global `RequireAuthenticatedUser` fallback policy protects all endpoints by default, validating ES256 JWT signatures, issuer, audience, and expiry. Every application and assessment query is scoped by `Id = @id AND OwnerId = @owner` where `OwnerId` comes exclusively from `ICurrentUser` (`sub` claim); cross-user access returns the same `404` as an unknown ID so existence is never leaked.
    - Because financial figures are personal data, logs, OpenTelemetry span attributes, and metric tags follow a strict allowlist (application ID, assessment ID, decision, `RulesVersion`, HTTP status codes, and timings). [`TelemetryAllowlistTests`](tests/MortgageApplications.IntegrationTests/TelemetryAllowlistTests.cs) and [`OtlpExportTests`](tests/MortgageApplications.IntegrationTests/OtlpExportTests.cs) assert that no raw or formatted input/output numbers ever appear in logs, spans, or OTLP protobuf exports.
@@ -222,13 +226,13 @@ Every assessment evaluates and reports all three checks in order (`LTV`, `DTI`, 
 **First bottleneck under significantly higher load:** SQLite's single-writer lock and the in-process `Channel<Guid>` assessment queue (`ChannelAssessmentQueue` + `AssessmentWorker`), both of which bind write throughput and background processing to a single container instance.
 
 **First change to make and why:**
-1. **Swap SQLite for Azure SQL (or PostgreSQL) and swap `IAssessmentQueue` for a durable broker (Azure Service Bus):** `MortgageApplicationDbContext` and `IAssessmentQueue` were designed as clean boundaries (`Infrastructure` and a `Core` port), so neither `MortgageApplications.Core` nor the HTTP endpoints change.
+1. **Swap SQLite for Azure SQL (or PostgreSQL) and swap `IAssessmentQueue` for a durable broker (Azure Service Bus):** `MortgageApplicationsDbContext` and `IAssessmentQueue` were designed as clean boundaries (`Infrastructure` and a `Core` port), so neither `MortgageApplications.Core` nor the HTTP endpoints change.
 2. **Add multi-worker concurrency guards (`RowVersion` + `AttemptCount`):** with multiple stateless API and worker replicas competing on a shared queue (`Azure Container Apps`), add an optimistic concurrency token (`RowVersion`) on `AffordabilityAssessment` so `Status = Pending → Completed/Failed` is atomic across competing consumers, plus an `AttemptCount` column / dead-letter policy so a poison message cannot loop indefinitely ([ADR 0003](docs/adr/0003-background-assessment-queue.md), [`PRODUCTION-LAYERS.md`](docs/layers/PRODUCTION-LAYERS.md) "Scaling").
 
 ### 3. Trade-offs (Kept Simple or Left Out)
 
 - **Single-applicant, fixed-rate underwriting model:** one applicant, one fixed $6\%$ stress rate, no credit bureau check, no product catalogue, and an income-based `MaxBorrowing` that deliberately ignores property LTV so the property check (`LTV`) and borrower capacity (`MaxBorrowing`) remain distinct signals ([ADR 0001](docs/adr/0001-affordability-assessment-model.md)).
-- **SQLite + in-process `Channel<Guid>` instead of external infrastructure:** keeps local `dotnet run`, `docker compose up --build`, and CI completely self-contained with zero cloud dependencies or paid services (`PRODUCTION-LAYERS.md` "Cost").
+- **SQLite + in-process `Channel<Guid>` instead of external infrastructure:** keeps local `dotnet run`, `docker compose up --build`, and CI completely self-contained with zero cloud dependencies or paid services; in production on `Azure Container Apps` (which scales to zero at low traffic), cost grows mainly with the `Azure SQL` serverless and `Azure Service Bus` tiers ([`PRODUCTION-LAYERS.md`](docs/layers/PRODUCTION-LAYERS.md) "Cost").
 - **Startup-only recovery sweep and no `Idempotency-Key` header:** each `POST /api/applications/{id}/assessments` creates a new assessment snapshot, and transient DB failures during worker processing wait for the next startup sweep rather than running a periodic background polling timer.
 - **Development token issuer (`POST /dev/token`) instead of a live OIDC tenant:** lets interviewers run the full authenticated flow locally with zero external account setup while keeping the production `Jwt:SigningPublicKey` validation path tested and fail-closed ([ADR 0004](docs/adr/0004-authentication-and-authorisation.md)).
 

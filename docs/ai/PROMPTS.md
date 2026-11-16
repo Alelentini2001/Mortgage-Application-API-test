@@ -1513,3 +1513,79 @@ Copied from `docs/progress/harness-01-context.md` after the merge. H-00 (Alessan
   ```
 - **Purpose:** Approve Phase 09 Checkpoint B (#19) and proceed to Phase 10 (`README.md`) Checkpoint A plan.
 - **Outcome:** PR #19 squash-merged (`ff53123`); `phase-10-docs` branch and Phase 10 plan created; stopped at Checkpoint A for approval.
+
+### P10-02 · human→agent (Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Approved with all options A
+  ```
+- **Purpose:** Checkpoint A approval for Phase 10 (`P10-D1` and `P10-D2` Option A).
+- **Outcome:** Wrote `README.md` (`f6b8fc9`), ran `./scripts/verify.sh`, and ran the three Phase 10 gate subagents (`P10-03`–`P10-05`).
+
+### P10-03 · agent→subagent (`security-auditor` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Security audit of Phase 10 (Documentation / README.md) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-10-docs. Read only: do not edit files.
+
+  Read:
+  - `README.md`
+  - `docs/progress/phase-10-docs.md`
+  - `docs/spec/affordability-rules.md`
+  - `docs/adr/0002-container-runtime-and-startup-migrations.md` and `docs/adr/0004-authentication-and-authorisation.md`
+
+  Run:
+  1. `gitleaks git --no-banner --redact -v` and `gitleaks dir --no-banner --redact .`
+  2. `semgrep scan --config p/csharp --config p/secrets --error --quiet`
+  3. `dotnet list MortgageApplications.slnx package --vulnerable --include-transitive`
+
+  Also verify:
+  - No real secrets, tokens, or private keys appear in `README.md` or `docs/progress/phase-10-docs.md`.
+  - The security warnings around `POST /dev/token`, `127.0.0.1:8080:8080` loopback binding, and production `Jwt:SigningPublicKey` are accurately documented in `README.md`.
+
+  Output a concise security gate verdict (PASS/FAIL) and any findings.
+  ```
+- **Purpose:** Security gate for Phase 10.
+- **Outcome:** **PASS** (0 leaks in 183 commits + working tree, 0 Semgrep findings, 0 vulnerable packages; 2 informational accuracy notes fixed).
+
+### P10-04 · agent→subagent (`dotnet-reviewer` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Fresh-context diff review of Phase 10 (Documentation / README.md) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-10-docs. Read only: do not edit files, do not build or run tests.
+
+  Get the diff with `git diff main...HEAD`. Read `README.md` in full, and cross-check every route, status code, port, command, file path, configuration key, formula, and ADR claim against:
+  - `src/MortgageApplications.Api/Program.cs`
+  - `src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs`
+  - `src/MortgageApplications.Api/Identity/DevTokenEndpoint.cs`
+  - `src/MortgageApplications.Api/Properties/launchSettings.json`
+  - `src/MortgageApplications.Api/appsettings.json`
+  - `src/MortgageApplications.Api/requests.http`
+  - `compose.yaml` and `compose.observability.yaml`
+  - `docs/spec/ORIGINAL_SPEC.md` and `docs/spec/affordability-rules.md`
+  - `docs/adr/0001-affordability-assessment-model.md`, `0002-container-runtime-and-startup-migrations.md`, `0003-background-assessment-queue.md`, `0004-authentication-and-authorisation.md`
+
+  Output only a list, most severe first, one finding per line:
+  `file:line | severity (critical/high/medium/low) | why it is wrong | concrete fix`
+  If you find nothing real, output `No findings.` and the list of files you reviewed. State plainly that you did not build or run tests.
+  ```
+- **Purpose:** Fresh-context review of `README.md` against the codebase.
+- **Outcome:** 8 findings (`R1`–`R8`), all fixed in `README.md` and `docs/progress/phase-10-docs.md`.
+
+### P10-05 · agent→subagent (`spec-checker` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Requirement traceability check at the end of Phase 10 (Documentation / README.md) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-10-docs. Read only: do not edit files.
+
+  Read:
+  - `README.md`
+  - `docs/spec/ORIGINAL_SPEC.md` and `docs/spec/affordability-rules.md`
+  - `docs/layers/PRODUCTION-LAYERS.md`
+  - `docs/PROGRESS.md` (the R1-R55 traceability table and "Carry into later phases")
+  - `docs/progress/phase-10-docs.md`
+
+  Do:
+  1. Map every Phase 10 spec requirement (`R19`, `R20`, `R34`, `R35`, `R36`, `R37`, `R38`, `R39`, `R40`, `R41`, `R42`, `R44`) and every carried item (`docker compose down -v`, `docker run --init`, `Jwt:SigningPublicKey` / Entra ID, multi-instance worker `RowVersion` + `AttemptCount`, production cost, cross-IDE/cross-model portability) to the exact line range in `README.md`.
+  2. State how the R1–R55 traceability table in `docs/PROGRESS.md` changes after Phase 10 (which rows move from `missing` or `partial` to `met`, and the new overall summary counts of `met / partial / missing`).
+  3. Output a Markdown table for the Phase 10 items and at most 5 short notes.
+  ```
+- **Purpose:** Requirement traceability at the end of Phase 10.
+- **Outcome:** 12 requirements (`R19`, `R20`, `R34`–`R42`, `R44`) moved to **met**, bringing overall totals to **43 met · 4 partial · 8 missing**; all 5 factual notes resolved in `README.md`.
