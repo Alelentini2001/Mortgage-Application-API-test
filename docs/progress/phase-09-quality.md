@@ -1,6 +1,6 @@
 # Phase 09: Optimisation + quality
 
-Status: **In progress: awaiting test proposal approval** · Branch: `phase-09-quality` · PR: — · Started: 2026-11-16 · Finished: —
+Status: **In progress: plan and tests approved (2026-11-16), implementation next** · Branch: `phase-09-quality` · PR: — · Started: 2026-11-16 · Finished: —
 
 ## Goal
 
@@ -106,6 +106,12 @@ Planning and orchestration in Google Antigravity IDE (Gemini 4 Argon), continuin
   ```
 - **Purpose:** propose Phase 9 test cases before writing any tests.
 - **Outcome:** 9 test cases (`P9-T1` to `P9-T9`); full text in [`phase-09/test-proposal.md`](phase-09/test-proposal.md).
+
+### P09-04 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > Approved
+- **Purpose:** approval of the Phase 9 test cases (`P9-T1`–`P9-T9`).
+- **Outcome:** failing tests written first (`P9-T1`–`P9-T9`), then implementation.
 
 ## What was built (files)
 
