@@ -362,6 +362,27 @@ public sealed class MortgageApplicationServiceTests
 
     public static TheoryData<string, Decision> DecisionCases => new() { { "E1", Decision.Approved }, { "E2", Decision.Declined } };
 
+    // P9-T1 (gate R2): ProcessAssessmentAsync returns the calculator's stored RulesVersion (not a hardcoded "1.0").
+    [Fact]
+    public async Task ProcessAssessmentAsync_completed_reports_custom_rules_version_from_result()
+    {
+        var customOptions = new AffordabilityOptions
+        {
+            RulesVersion = "2.1",
+            AssessmentRate = 0.06m,
+            MaxLoanToValuePercent = 90m,
+            MaxDebtToIncomePercent = 45m,
+            MaxLoanToIncomeMultiple = 4.5m,
+        };
+        var service = new MortgageApplicationService(_repository, new AffordabilityCalculator(customOptions), _queue, _clock);
+        var application = await service.CreateAsync(_ownerA, TestData.E1, Ct);
+        var assessment = (await service.AssessAsync(_ownerA, application.Id, Ct))!;
+
+        var outcome = await service.ProcessAssessmentAsync(assessment.Id, Ct);
+
+        Assert.Equal("2.1", outcome.RulesVersion);
+    }
+
     // Phase 5: a Failed result reports the application ID and no decision.
     [Fact]
     public async Task ProcessAssessmentAsync_failed_reports_application_id_without_decision()

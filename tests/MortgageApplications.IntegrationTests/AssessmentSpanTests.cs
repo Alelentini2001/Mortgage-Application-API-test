@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using MortgageApplications.Core.Affordability;
 
 namespace MortgageApplications.IntegrationTests;
 
@@ -27,9 +30,43 @@ public sealed class AssessmentSpanTests
         Assert.Equal(ActivityStatusCode.Unset, span.Status);
         Assert.Equal(applicationId, span.Tag("application.id"));
         Assert.Equal("Completed", span.Tag("assessment.outcome"));
+        Assert.Single(span.Tags, t => t.Key == "assessment.outcome");
         Assert.Equal("Approved", span.Tag("assessment.decision"));
         Assert.Equal("1.0", span.Tag("assessment.rules_version"));
         Assert.Empty(span.Events);
+    }
+
+    // P9-T1 & P9-T7 (gate R2): when the calculator's stored RulesVersion ("2.1") differs from
+    // IOptions<AffordabilityOptions>.Value.RulesVersion ("1.0"), a Completed assessment tags its span and metrics with
+    // the stored "2.1" version, while a Failed assessment (which has no stored result) falls back to "1.0".
+    [Fact]
+    public async Task Completed_span_uses_stored_rules_version_while_failed_falls_back_to_options()
+    {
+        await using var factory = new ApiFactory();
+        await using var host = factory.WithWebHostBuilder(
+            builder => builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<AffordabilityCalculator>();
+                services.AddSingleton(new AffordabilityCalculator(new AffordabilityOptions
+                {
+                    RulesVersion = "2.1",
+                    AssessmentRate = 0.06m,
+                    MaxLoanToValuePercent = 90m,
+                    MaxDebtToIncomePercent = 45m,
+                    MaxLoanToIncomeMultiple = 4.5m,
+                }));
+            }),
+            runWorker: true);
+        var client = host.CreateClient();
+        using var capture = new TelemetryCapture(host.Services);
+
+        var (_, completedId, _) = await Telemetry.AssessAsync(client, Http.BaseBody);
+        var completedSpan = await capture.WaitForProcessSpanAsync(completedId);
+        var (_, failedId) = await Telemetry.AssessFailedAsync(host.Services, client, Http.BaseBody);
+        var failedSpan = await capture.WaitForProcessSpanAsync(failedId);
+
+        Assert.Equal("2.1", completedSpan.Tag("assessment.rules_version"));
+        Assert.Equal("1.0", failedSpan.Tag("assessment.rules_version"));
     }
 
     // O11: a Declined result is Completed, not an error.

@@ -1,4 +1,5 @@
 using System.Data.Common;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,58 +21,79 @@ public sealed class DatabaseQueryPlanTests(ApiFactory factory) : IClassFixture<A
 {
     private static readonly AffordabilityInputs _e1 = new(85_000m, 900m, 60_000m, 300_000m, 30);
 
-    // P9-T3: FindAsync, FindAssessmentAsync and FindForProcessingAsync all use index/PK SEARCH plans and never SCAN.
+    // P9-T3 (gate R1): captures the actual SQL commands executed by EfMortgageApplicationRepository (FindAsync,
+    // FindAssessmentAsync, FindForProcessingAsync) plus the OwnerId and ApplicationId foreign-key index lookups, and
+    // proves every plan uses index/PK SEARCH and never a full-table SCAN.
     [Fact]
     public async Task Repository_lookup_queries_use_index_search_and_never_full_table_scan()
     {
-        await using var scope = factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<MortgageApplicationsDbContext>();
-        var repository = scope.ServiceProvider.GetRequiredService<IMortgageApplicationRepository>();
+        await using var seedScope = factory.Services.CreateAsyncScope();
+        var seedRepo = seedScope.ServiceProvider.GetRequiredService<IMortgageApplicationRepository>();
         var now = DateTimeOffset.UtcNow;
         var application = MortgageApplication.Create("plan-owner", _e1, now);
         var assessment = AffordabilityAssessment.CreatePending(application.Id, now);
-        await repository.AddAsync(application, Http.Ct);
-        await repository.AddAssessmentAsync(assessment, Http.Ct);
+        await seedRepo.AddAsync(application, Http.Ct);
+        await seedRepo.AddAssessmentAsync(assessment, Http.Ct);
 
-        var findApplicationQuery = db.Applications
-            .AsNoTracking()
-            .Where(a => a.Id == application.Id && a.OwnerId == "plan-owner");
-        var findAssessmentQuery = db.Assessments
-            .AsNoTracking()
-            .Where(s => s.Id == assessment.Id
-                && s.ApplicationId == application.Id
-                && db.Applications.Any(a => a.Id == application.Id && a.OwnerId == "plan-owner"));
-        var findForProcessingQuery = db.Assessments
-            .Where(s => s.Id == assessment.Id)
-            .Join(db.Applications, s => s.ApplicationId, a => a.Id, (s, a) => new { s.Id, a.AnnualIncome });
-        var findByOwnerQuery = db.Applications
-            .AsNoTracking()
-            .Where(a => a.OwnerId == "plan-owner");
-
-        foreach (var query in new IQueryable[] { findApplicationQuery, findAssessmentQuery, findForProcessingQuery, findByOwnerQuery })
+        var interceptor = new RecordingCommandInterceptor();
+        await using var host = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
-            var details = await ExplainQueryPlanAsync(db, query);
+            var descriptor = services.Single(d => d.ServiceType == typeof(DbContextOptions<MortgageApplicationsDbContext>));
+            services.Remove(descriptor);
+            services.AddDbContext<MortgageApplicationsDbContext>((sp, options) =>
+            {
+                using var baseScope = factory.Services.CreateScope();
+                var connString = baseScope.ServiceProvider.GetRequiredService<MortgageApplicationsDbContext>()
+                    .Database.GetConnectionString();
+                options.UseSqlite(connString).AddInterceptors(interceptor);
+            });
+        }));
+
+        await using var scope = host.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<MortgageApplicationsDbContext>();
+        var repository = scope.ServiceProvider.GetRequiredService<IMortgageApplicationRepository>();
+        interceptor.Commands.Clear();
+
+        Assert.NotNull(await repository.FindAsync(application.Id, "plan-owner", Http.Ct));
+        Assert.NotNull(await repository.FindAssessmentAsync(application.Id, assessment.Id, "plan-owner", Http.Ct));
+        Assert.NotNull(await repository.FindForProcessingAsync(assessment.Id, Http.Ct));
+        _ = await db.Applications.AsNoTracking().Where(a => a.OwnerId == "plan-owner").ToListAsync(Http.Ct);
+        _ = await db.Assessments.AsNoTracking().Where(s => s.ApplicationId == application.Id).ToListAsync(Http.Ct);
+
+        Assert.Equal(5, interceptor.Commands.Count);
+        var allPlans = new List<string>();
+        foreach (var captured in interceptor.Commands)
+        {
+            var details = await ExplainCapturedCommandAsync(db, captured);
             Assert.NotEmpty(details);
             Assert.All(details, detail =>
             {
                 Assert.Contains("SEARCH", detail, StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("SCAN", detail, StringComparison.OrdinalIgnoreCase);
             });
+            allPlans.AddRange(details);
         }
 
-        Assert.Contains(
-            await ExplainQueryPlanAsync(db, findByOwnerQuery),
-            d => d.Contains("IX_MortgageApplications_OwnerId", StringComparison.Ordinal));
+        Assert.Contains(allPlans, d => d.Contains("IX_MortgageApplications_OwnerId", StringComparison.Ordinal));
+        Assert.Contains(allPlans, d => d.Contains("IX_AffordabilityAssessments_ApplicationId", StringComparison.Ordinal));
     }
 
-    // P9-T4: MigrateDatabaseAsync sets PRAGMA journal_mode=WAL on a file-backed SQLite database while keeping in-memory
-    // databases at "memory".
+    // P9-T4 (gate R3): MigrateDatabaseAsync explicitly sets PRAGMA journal_mode=WAL on a file-backed SQLite database
+    // (even when the file already exists in DELETE journal mode) while keeping in-memory databases at "memory".
     [Fact]
     public async Task MigrateDatabaseAsync_enables_wal_mode_on_file_database()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"mortgage-wal-{Guid.NewGuid():N}.db");
         try
         {
+            await using (var pre = new SqliteConnection($"Data Source={tempFile}"))
+            {
+                await pre.OpenAsync(Http.Ct);
+                await using var cmd = pre.CreateCommand();
+                cmd.CommandText = "PRAGMA journal_mode=DELETE; CREATE TABLE __probe (id INT);";
+                await cmd.ExecuteNonQueryAsync(Http.Ct);
+            }
+
             var services = new ServiceCollection()
                 .AddInfrastructure($"Data Source={tempFile}")
                 .BuildServiceProvider();
@@ -97,11 +119,19 @@ public sealed class DatabaseQueryPlanTests(ApiFactory factory) : IClassFixture<A
         Assert.Equal("memory", await QueryScalarStringAsync(inMemoryDb, "PRAGMA journal_mode;"), ignoreCase: true);
     }
 
-    private static async Task<List<string>> ExplainQueryPlanAsync(MortgageApplicationsDbContext db, IQueryable query)
+    private static async Task<List<string>> ExplainCapturedCommandAsync(
+        MortgageApplicationsDbContext db, CapturedCommand captured)
     {
-        await db.Database.OpenConnectionAsync(Http.Ct);
-        await using var command = query.CreateDbCommand();
-        command.CommandText = $"EXPLAIN QUERY PLAN {command.CommandText}";
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.CommandText = $"EXPLAIN QUERY PLAN {captured.CommandText}";
+        foreach (var (name, value) in captured.Parameters)
+        {
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = name;
+            parameter.Value = value ?? DBNull.Value;
+            command.Parameters.Add(parameter);
+        }
+
         var details = new List<string>();
         await using var reader = await command.ExecuteReaderAsync(Http.Ct);
         while (await reader.ReadAsync(Http.Ct))
@@ -118,5 +148,40 @@ public sealed class DatabaseQueryPlanTests(ApiFactory factory) : IClassFixture<A
         await using var command = db.Database.GetDbConnection().CreateCommand();
         command.CommandText = sql;
         return (string)(await command.ExecuteScalarAsync(Http.Ct))!;
+    }
+
+    private sealed record CapturedCommand(string CommandText, IReadOnlyList<(string Name, object? Value)> Parameters);
+
+    private sealed class RecordingCommandInterceptor : DbCommandInterceptor
+    {
+        public List<CapturedCommand> Commands { get; } = [];
+
+        public override InterceptionResult<DbDataReader> ReaderExecuting(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
+        {
+            Capture(command);
+            return base.ReaderExecuting(command, eventData, result);
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Capture(command);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        private void Capture(DbCommand command)
+        {
+            if (command.CommandText.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                var parameters = command.Parameters.Cast<DbParameter>()
+                    .Select(p => (p.ParameterName, p.Value))
+                    .ToList();
+                Commands.Add(new CapturedCommand(command.CommandText, parameters));
+            }
+        }
     }
 }
