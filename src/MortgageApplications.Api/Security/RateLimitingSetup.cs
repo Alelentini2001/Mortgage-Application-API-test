@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using MortgageApplications.Api.Identity;
 
@@ -40,7 +41,9 @@ internal static class RateLimitingSetup
             {
                 var rateOptions = httpContext.RequestServices
                     .GetRequiredService<IOptions<RateLimitingOptions>>().Value;
-                var partitionKey = httpContext.User.FindFirst(SubjectClaim.Type)?.Value ?? "dev-token";
+                var isAnonymousEndpoint = httpContext.GetEndpoint()?.Metadata.GetMetadata<IAllowAnonymous>() is not null;
+                var sub = isAnonymousEndpoint ? null : httpContext.User.FindFirst(SubjectClaim.Type)?.Value;
+                var partitionKey = sub is not null ? $"sub:{sub}" : "dev-token";
                 return RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey,
                     _ => new FixedWindowRateLimiterOptions

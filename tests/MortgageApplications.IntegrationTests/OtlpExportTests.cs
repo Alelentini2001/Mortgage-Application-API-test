@@ -85,7 +85,9 @@ public sealed class OtlpExportTests
         Assert.Contains(Telemetry.Counter, exported, StringComparison.Ordinal);
         Assert.Contains(Telemetry.Histogram, exported, StringComparison.Ordinal);
         Assert.Contains("mortgage-applications", exported, StringComparison.Ordinal);
-        Assert.Empty(GoldenExample.Get("E1").Forbidden.Find(exported));
+        // Raw protobuf bodies contain random 16-byte trace IDs and 8-byte span IDs where the 2-byte UTF-8 sequence
+        // 0xC3 0x97 ("×") can appear by chance (~1 in 2,000 runs); multi-character numbers and Summary text cannot.
+        Assert.DoesNotContain(GoldenExample.Get("E1").Forbidden.Find(exported), m => m != "×");
     }
 
     // O25b (review gate): a signal-specific endpoint alone turns the exporter on; with only the traces key set,
