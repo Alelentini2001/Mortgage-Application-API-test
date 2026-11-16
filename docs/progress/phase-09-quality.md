@@ -1,6 +1,6 @@
 # Phase 09: Optimisation + quality
 
-Status: **Ready for Checkpoint B (PR review)** · Branch: `phase-09-quality` · PR: [#13](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/13) · Started: 2026-11-16 · Finished: —
+Status: **Merged** · Branch: `phase-09-quality` · PR: [#19](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/19) · Started: 2026-11-16 · Finished: 2026-11-16
 
 ## Goal
 
@@ -177,6 +177,14 @@ Planning and orchestration in Google Antigravity IDE (Gemini 4 Argon), continuin
   ```
 - **Purpose:** requirement traceability at the end of Phase 9.
 - **Outcome:** **R25 (`Clean and readable code`)** moves from `missing` to **met**, bringing overall totals to **31 met · 10 partial · 14 missing**; all `P9-D1`–`P9-D4` and `P9-T1`–`P9-T9` met after `0f4fcb1` and `0db33e8`.
+
+### P09-08 · human→agent (Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Approved
+  ```
+- **Purpose:** Checkpoint B approval for PR #19 (`phase-09-quality`).
+- **Outcome:** PR #19 approved and squash-merged into `main`.
 
 ## What was built (files)
 
