@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
@@ -130,6 +131,49 @@ public sealed class StartupTests
         { "Jwt:TokenLifetimeMinutes", "61" },
         { "Jwt:SigningPublicKey", "not-a-pem-key" },
     };
+
+    // G2 (gate item 2, fail closed): the dev token endpoint and a configured signing key cannot be on together, so
+    // the dev key is always the only trusted key when DevAuth is on. The message names both settings, not the key.
+    [Fact]
+    public void Startup_with_dev_auth_and_a_signing_key_fails()
+    {
+        using var factory = new ApiFactory();
+        using var host = factory.WithWebHostBuilder(builder => builder.UseSetting("DevAuth:Enabled", "true"));
+
+        var ex = Assert.ThrowsAny<Exception>(() => host.CreateClient());
+
+        var message = FindOptionsFailure(ex).Message;
+        Assert.Contains("DevAuth:Enabled", message, StringComparison.Ordinal);
+        Assert.Contains("Jwt:SigningPublicKey", message, StringComparison.Ordinal);
+        Assert.DoesNotContain(factory.PublicKeyPem.Split('\n')[1], message, StringComparison.Ordinal);
+    }
+
+    // G6 (gate item 6): a signing key of the wrong kind stops the app at startup, and the key text is not in the
+    // message: a P-384 or an RSA public key, or any private key.
+    [Theory]
+    [MemberData(nameof(WrongKindsOfKey))]
+    public void Startup_with_wrong_kind_of_signing_key_fails(string kind)
+    {
+        var pem = kind switch
+        {
+            "P-384 public key" => ECDsa.Create(ECCurve.NamedCurves.nistP384).ExportSubjectPublicKeyInfoPem(),
+            "RSA public key" => RSA.Create(2048).ExportSubjectPublicKeyInfoPem(),
+            "P-256 private key (PKCS#8)" => ECDsa.Create(ECCurve.NamedCurves.nistP256).ExportPkcs8PrivateKeyPem(),
+            "P-256 private key (SEC 1)" => ECDsa.Create(ECCurve.NamedCurves.nistP256).ExportECPrivateKeyPem(),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown key kind."),
+        };
+        using var factory = new ApiFactory();
+        using var host = factory.WithWebHostBuilder(builder => builder.UseSetting("Jwt:SigningPublicKey", pem));
+
+        var ex = Assert.ThrowsAny<Exception>(() => host.CreateClient());
+
+        var message = FindOptionsFailure(ex).Message;
+        Assert.Contains("Jwt:SigningPublicKey", message, StringComparison.Ordinal);
+        Assert.DoesNotContain(pem.Split('\n')[1], message, StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string> WrongKindsOfKey =>
+        ["P-384 public key", "RSA public key", "P-256 private key (PKCS#8)", "P-256 private key (SEC 1)"];
 
     // AU87: no Jwt section at all does not start with defaults. Only that section is missing: the connection string
     // and the Affordability section are put back.

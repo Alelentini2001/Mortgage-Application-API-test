@@ -71,6 +71,8 @@ public sealed class AuthTelemetryTests
         await RejectSentinelTokensAsync(control, verbose.CreateClient().WithoutToken(), issuer, audience, subject);
         Assert.Contains(control.Logs.Entries, e => e.Category.StartsWith("Microsoft.AspNetCore.Authentication", StringComparison.Ordinal)
             && e.Level <= LogLevel.Information);
+        // Gate item 9: the control really leaks the issuer, so the assertion below can fail.
+        Assert.Contains(control.Logs.Entries, e => e.Text.Contains(issuer, StringComparison.Ordinal));
         await using var factory = new ApiFactory();
 
         var tokens = await RejectSentinelTokensAsync(factory, factory.CreateAnonymousClient(), issuer, audience, subject);
@@ -78,6 +80,34 @@ public sealed class AuthTelemetryTests
         foreach (var sentinel in new[] { issuer, audience, subject }.Concat(tokens))
         {
             Assert.DoesNotContain(factory.Logs.Entries, e => e.Text.Contains(sentinel, StringComparison.Ordinal));
+        }
+    }
+
+    // G10 (gate item 10): with the framework's rejection logs hidden at Warning, the app writes its own
+    // TokenRejected event (Information) for a rejected token, holding only the failure's exception type name: no
+    // message, token, issuer or subject.
+    [Fact]
+    public async Task Rejected_token_writes_a_token_rejected_event_with_the_failure_type_only()
+    {
+        await using var factory = new ApiFactory();
+        const string issuer = "sentinel-issuer-51";
+        const string subject = "sentinel-subject-52";
+        var token = TestTokens.TamperSignature(factory.Sign(TokenSpec.Valid(subject) with { Issuer = issuer }));
+
+        var response = await factory.CreateAnonymousClient()
+            .PostJsonWithAuthorizationAsync("/api/applications", Http.BaseBody, $"Bearer {token}");
+
+        await response.AssertProblemAsync(HttpStatusCode.Unauthorized);
+        var entry = Assert.Single(factory.Logs.Entries, e => e.EventName == "TokenRejected");
+        Assert.Equal(LogLevel.Information, entry.Level);
+        Assert.StartsWith("MortgageApplications.", entry.Category, StringComparison.Ordinal);
+        Assert.Null(entry.Exception);
+        var (key, failureType) = Assert.Single(entry.State, kv => kv.Key != "{OriginalFormat}");
+        Assert.Equal("FailureType", key);
+        Assert.Matches("^[A-Za-z]+Exception$", failureType);
+        foreach (var sentinel in token.Split('.').Append(token).Append(issuer).Append(subject))
+        {
+            Assert.DoesNotContain(sentinel, entry.Text, StringComparison.Ordinal);
         }
     }
 

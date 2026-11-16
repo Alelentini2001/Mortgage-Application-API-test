@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -35,11 +36,14 @@ public sealed partial class AuthorizationTests(ApiFactory factory) : IClassFixtu
     [MemberData(nameof(AllowlistCases))]
     public async Task Every_endpoint_outside_the_allowlist_requires_a_token(bool devAuth, string[] allowlist)
     {
+        var hits = new EndpointRecorder();
         using var host = factory.WithWebHostBuilder(builder =>
         {
+            builder.ConfigureServices(services => services.AddSingleton<IStartupFilter>(hits));
             if (devAuth)
             {
-                builder.UseSetting("DevAuth:Enabled", "true");
+                // G2: DevAuth and a configured key cannot be on together.
+                builder.UseSetting("DevAuth:Enabled", "true").UseSetting("Jwt:SigningPublicKey", "");
             }
         });
         var client = host.CreateClient().WithoutToken();
@@ -64,6 +68,10 @@ public sealed partial class AuthorizationTests(ApiFactory factory) : IClassFixtu
                 Content = new StringContent(Http.BaseBody, Encoding.UTF8, "application/json"),
             };
             var response = await client.SendAsync(request, Http.Ct);
+            // Gate item 7: the request must have reached this endpoint, or a path that matches nothing would also be
+            // a 401 (the fallback policy) and the check would prove nothing.
+            Assert.True(hits.TryTakeLast(out var hit), $"{name}: no request was recorded.");
+            Assert.Equal(endpoint.DisplayName, hit);
             Assert.True(response.StatusCode == HttpStatusCode.Unauthorized, $"{name} returned {(int)response.StatusCode} to an anonymous call.");
         }
     }
@@ -147,6 +155,24 @@ public sealed partial class AuthorizationTests(ApiFactory factory) : IClassFixtu
         Assert.Equal(ApiFactory.DefaultOwner, await OwnerOfAsync(applicationId));
         var bob = factory.CreateClient().WithToken(factory.TokenFor("bob"));
         await (await bob.GetPathAsync($"/api/applications/{applicationId}?ownerId=bob")).AssertProblemAsync(HttpStatusCode.NotFound);
+    }
+
+    /// <summary>Records the endpoint each request matched (its display name), read after the pipeline has run.</summary>
+    private sealed class EndpointRecorder : IStartupFilter
+    {
+        private readonly System.Collections.Concurrent.ConcurrentStack<string?> _hits = new();
+
+        public bool TryTakeLast(out string? hit) => _hits.TryPop(out hit);
+
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use(async (context, nextMiddleware) =>
+            {
+                await nextMiddleware(context);
+                _hits.Push(context.GetEndpoint()?.DisplayName);
+            });
+            next(app);
+        };
     }
 
     private static IEnumerable<string> Methods(RouteEndpoint endpoint) =>

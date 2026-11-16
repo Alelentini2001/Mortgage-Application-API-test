@@ -65,7 +65,21 @@ internal static class TestTokens
     }
 
     /// <summary>A token with any header, the spec's claims and a signature computed by <paramref name="sign"/>.</summary>
-    public static string Raw(object header, TokenSpec spec, Func<byte[], string> sign)
+    public static string Raw(object header, TokenSpec spec, Func<byte[], string> sign) => Raw(header, Payload(spec), sign);
+
+    /// <summary>A token with any header, any payload and a signature computed by <paramref name="sign"/>.</summary>
+    public static string Raw(object header, IDictionary<string, object> payload, Func<byte[], string> sign)
+    {
+        var signingInput = $"{Encode(JsonSerializer.SerializeToUtf8Bytes(header))}.{Encode(JsonSerializer.SerializeToUtf8Bytes(payload))}";
+        return $"{signingInput}.{sign(Encoding.ASCII.GetBytes(signingInput))}";
+    }
+
+    /// <summary>A hand-built token really signed with ES256 by <paramref name="key"/>, whatever the header says.</summary>
+    public static string Es256(object header, IDictionary<string, object> payload, ECDsa key) =>
+        Raw(header, payload, input => Encode(key.SignData(input, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation)));
+
+    /// <summary>The spec's claims as a JSON payload: iat, nbf, exp, and iss, aud and sub when set.</summary>
+    public static Dictionary<string, object> Payload(TokenSpec spec)
     {
         var payload = new Dictionary<string, object>
         {
@@ -76,8 +90,14 @@ internal static class TestTokens
         AddIfSet(payload, "iss", spec.Issuer);
         AddIfSet(payload, "aud", spec.Audience);
         AddIfSet(payload, "sub", spec.Subject);
-        var signingInput = $"{Encode(JsonSerializer.SerializeToUtf8Bytes(header))}.{Encode(JsonSerializer.SerializeToUtf8Bytes(payload))}";
-        return $"{signingInput}.{sign(Encoding.ASCII.GetBytes(signingInput))}";
+        return payload;
+    }
+
+    /// <summary>The public half of a P-256 key as a JWK (for a <c>jwk</c> header).</summary>
+    public static object Jwk(ECDsa key)
+    {
+        var parameters = key.ExportParameters(includePrivateParameters: false);
+        return new { kty = "EC", crv = "P-256", x = Encode(parameters.Q.X!), y = Encode(parameters.Q.Y!) };
     }
 
     /// <summary>Unsigned: <c>{"alg":"none"}</c> and an empty signature.</summary>
