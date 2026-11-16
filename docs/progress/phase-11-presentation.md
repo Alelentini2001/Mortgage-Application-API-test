@@ -1,6 +1,6 @@
 # Phase 11: Fresh-clone rehearsal + presentation
 
-Status: **Ready for Checkpoint B (PR review)** · Branch: `phase-11-presentation` · PR: — · Started: 2026-11-16 · Finished: —
+Status: **Merged** · Branch: `phase-11-presentation` · PR: [#21](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/21) · Started: 2026-11-16 · Finished: 2026-11-16
 
 ## Goal
 
@@ -151,6 +151,14 @@ Approved by Alessandro on 2026-11-16 (`P11-02`), with Option A on `P11-D1`–`P1
   ```
 - **Purpose:** Final requirement traceability check at the end of Phase 11.
 - **Outcome:** All 12 Phase 11 requirements (`R43`, `R45`–`R55`) move to **met**, bringing final totals to **`55 met · 0 partial · 0 missing`**.
+
+### P11-06 · human→agent (Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Approved
+  ```
+- **Purpose:** Checkpoint B approval for PR #21 (`phase-11-presentation`, final phase).
+- **Outcome:** PR #21 approved and squash-merged into `main`; annotated tag `v1.0.0` created and pushed.
 
 ## What was built (files)
 
