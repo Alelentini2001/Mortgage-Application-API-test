@@ -31,7 +31,14 @@ public sealed record DevTokenRequest
     [Required(ErrorMessage = "Required.")]
     [RegularExpression(@"^[a-z0-9-]{1,64}\z", ErrorMessage = "Must be 1 to 64 lowercase letters, digits or hyphens.")]
     public string? Subject { get; init; }
+
+    /// <summary>The subject is an owner ID and must never reach a log (rules section 6).</summary>
+    public override string ToString() => $"{nameof(DevTokenRequest)} {{ redacted }}";
 }
 
 /// <summary>A signed token and the time it expires (its <c>exp</c> claim).</summary>
-public sealed record DevTokenResponse(string Token, DateTimeOffset ExpiresAt);
+public sealed record DevTokenResponse(string Token, DateTimeOffset ExpiresAt)
+{
+    /// <summary>Leaves out the token so formatting the record never logs a bearer token (rules section 6).</summary>
+    public override string ToString() => $"{nameof(DevTokenResponse)} {{ ExpiresAt = {ExpiresAt:O} }}";
+}

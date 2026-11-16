@@ -37,6 +37,7 @@ internal static class SubjectClaim
         }
 
         using var payload = JsonDocument.Parse(Base64Url.DecodeFromChars(jwt.EncodedPayload));
-        return payload.RootElement.TryGetProperty(Type, out var subject) && subject.ValueKind == JsonValueKind.String;
+        var subjects = payload.RootElement.EnumerateObject().Where(p => p.NameEquals(Type)).ToList();
+        return subjects.Count == 1 && subjects[0].Value.ValueKind == JsonValueKind.String;
     }
 }
