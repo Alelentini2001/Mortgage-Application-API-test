@@ -122,6 +122,7 @@ public sealed class DatabaseQueryPlanTests(ApiFactory factory) : IClassFixture<A
     private static async Task<List<string>> ExplainCapturedCommandAsync(
         MortgageApplicationsDbContext db, CapturedCommand captured)
     {
+        await db.Database.OpenConnectionAsync(Http.Ct);
         await using var command = db.Database.GetDbConnection().CreateCommand();
         command.CommandText = $"EXPLAIN QUERY PLAN {captured.CommandText}";
         foreach (var (name, value) in captured.Parameters)
