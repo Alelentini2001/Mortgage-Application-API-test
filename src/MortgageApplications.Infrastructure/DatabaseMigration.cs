@@ -15,5 +15,6 @@ public static class DatabaseMigration
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<MortgageApplicationsDbContext>();
         await db.Database.MigrateAsync(cancellationToken);
+        await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", cancellationToken);
     }
 }
