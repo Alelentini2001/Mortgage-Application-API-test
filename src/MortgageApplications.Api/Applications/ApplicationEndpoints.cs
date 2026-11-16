@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Http.HttpResults;
 using MortgageApplications.Api.Identity;
 using MortgageApplications.Api.Observability;
+using MortgageApplications.Api.Security;
 using MortgageApplications.Core.Applications;
 
 namespace MortgageApplications.Api.Applications;
@@ -18,14 +19,19 @@ public static partial class ApplicationEndpoints
         var group = endpoints.MapGroup("/api/applications").WithTags("Applications");
 
         group.MapPost("", CreateAsync)
+            .RequireRateLimiting(RateLimitingSetup.WritePolicyName)
             .WithSummary("Create a mortgage application")
-            .ProducesValidationProblem();
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status429TooManyRequests);
         group.MapGet("/{id:guid}", GetAsync)
             .WithSummary("Get an application")
             .ProducesProblem(StatusCodes.Status404NotFound);
         group.MapPost("/{id:guid}/assessments", AssessAsync)
+            .RequireRateLimiting(RateLimitingSetup.WritePolicyName)
             .WithSummary("Start an affordability assessment (202 Accepted; poll the Location until Completed or Failed)")
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
         group.MapGet("/{id:guid}/assessments/{assessmentId:guid}", GetAssessmentAsync)
             .WithSummary("Get an assessment (always 200; status is Pending, Completed or Failed; Declined is a Completed result)")
             .ProducesProblem(StatusCodes.Status404NotFound);
@@ -56,10 +62,11 @@ public static partial class ApplicationEndpoints
     }
 
     // 202 + Location (P6-D4): the body is the Pending assessment; the client polls the Location until the status is
-    // Completed or Failed. When the queue is full the request waits for room (P6-D2), bounded by its own token.
-    // Once queued, the request's server span gets the assessment ID, so a trace view finds the worker's span with the
-    // same tag (P5-D3 A), and the queued log carries the two IDs only. A 404 records neither.
-    private static async Task<Results<Accepted<AssessmentResponse>, NotFound>> AssessAsync(
+    // Completed or Failed. When the queue is full the request waits for room (P6-D2), bounded by its own token and
+    // Assessments:EnqueueTimeoutSeconds (P8-D2 A, 503 when full past the timeout; the saved Pending row recovers at
+    // startup). Once queued, the request's server span gets the assessment ID, so a trace view finds the worker's span
+    // with the same tag (P5-D3 A), and the queued log carries the two IDs only. A 404 records neither.
+    private static async Task<Results<Accepted<AssessmentResponse>, NotFound, StatusCodeHttpResult>> AssessAsync(
         Guid id,
         MortgageApplicationService service,
         ICurrentUser user,
@@ -67,7 +74,16 @@ public static partial class ApplicationEndpoints
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        var assessment = await service.AssessAsync(user.OwnerId, id, cancellationToken);
+        AffordabilityAssessment? assessment;
+        try
+        {
+            assessment = await service.AssessAsync(user.OwnerId, id, cancellationToken);
+        }
+        catch (TimeoutException)
+        {
+            return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
         if (assessment is null)
         {
             return TypedResults.NotFound();
