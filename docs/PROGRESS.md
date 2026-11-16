@@ -1,19 +1,19 @@
 # Progress
 
 ## Resume here
-- **Phase:** Phase 09 (optimisation + quality) **merged** (PR [#19](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/19)). Phase 08 merged before it (#12, `f1a21ea`). Phase file: `docs/progress/phase-09-quality.md`.
-- **Cross-IDE and cross-model portability:** started in Claude Code (Phases 00–07 implementation, Claude Opus 5.5 / Sonnet 4.6), then resumed in Google Antigravity IDE (Gemini 4 Argon) from Phase 07's gates through Phases 08 and 09 to showcase that `AGENTS.md`, `.claude/rules/`, `.claude/skills/`, and `.claude/agents/` (`test-designer`, `security-auditor`, `dotnet-reviewer`, `spec-checker`) run seamlessly across different IDEs and AI models.
+- **Phase:** Phase 10 (documentation / `README.md`) **merged** (PR [#20](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/20)). Phase 09 merged before it (#19, `ff53123`). Phase file: `docs/progress/phase-10-docs.md`.
+- **Cross-IDE and cross-model portability:** started in Claude Code (Phases 00–07 implementation, Claude Opus 5.5 / Sonnet 4.6), then resumed in Google Antigravity IDE (Gemini 4 Argon) from Phase 07's gates through Phases 08, 09, and 10 to showcase that `AGENTS.md`, `.claude/rules/`, `.claude/skills/`, and `.claude/agents/` (`test-designer`, `security-auditor`, `dotnet-reviewer`, `spec-checker`) run seamlessly across different IDEs and AI models.
 - **Working rule from Alessandro (P06-12):** phases run one at a time from now on, no parallel worktrees.
-- **Built so far:** four endpoints under `/api/applications` (create 201, get, assess 202 + background worker, get assessment 200 with Pending/Completed/Failed), ES256 JWT bearer authentication (`RequireAuthenticatedUser` fallback policy, owner from `sub` via `ClaimsCurrentUser`, fail-closed `POST /dev/token`, OpenAPI bearer scheme), fixed-window per-subject write rate limiting (429 + `Retry-After`), bounded full-queue enqueue timeout (503 + startup recovery), HTTP security headers + HSTS + `AllowedHosts`, NuGet `packages.lock.json` + `<packageSourceMapping>` + `--locked-mode`, Docker multi-arch `@sha256` digest pins + Dependabot, bash hook self-protection (`.claude/hooks/**`), scalar-projected background processing load + minimal column updates, SQLite `EXPLAIN QUERY PLAN` index verification + `WAL` journal mode, OpenTelemetry tracing, metrics and logs with an allowlist test, opt-in Aspire dashboard; **275 unit + 311 integration tests (586 total) + 113 hook cases**.
-- **Next action:** Start Phase 10 (documentation / `README.md`) on branch `phase-10-docs`.
+- **Built so far:** four endpoints under `/api/applications` (create 201, get, assess 202 + background worker, get assessment 200 with Pending/Completed/Failed), ES256 JWT bearer authentication (`RequireAuthenticatedUser` fallback policy, owner from `sub` via `ClaimsCurrentUser`, fail-closed `POST /dev/token`, OpenAPI bearer scheme), fixed-window per-subject write rate limiting (429 + `Retry-After`), bounded full-queue enqueue timeout (503 + startup recovery), HTTP security headers + HSTS + `AllowedHosts`, NuGet `packages.lock.json` + `<packageSourceMapping>` + `--locked-mode`, Docker multi-arch `@sha256` digest pins + Dependabot, bash hook self-protection (`.claude/hooks/**`), scalar-projected background processing load + minimal column updates, SQLite `EXPLAIN QUERY PLAN` index verification + `WAL` journal mode, OpenTelemetry tracing, metrics and logs with an allowlist test, opt-in Aspire dashboard, and complete `README.md` (`R19`, `R20`, `R34`–`R42`, `R44`); **275 unit + 311 integration tests (586 total) + 113 hook cases**.
+- **Next action:** Start Phase 11 (fresh-clone rehearsal + `DEMO-SCRIPT.md` + `docs/presentation/SLIDES.md`) on branch `phase-11-presentation`.
 - **Carry into later phases:**
-  - Phase 10: `README.md` (R34–R42), including `docker compose down -v` as the reset for a `data` volume with the wrong owner, `docker run --init` outside compose (ADR 0002), how `Jwt:SigningPublicKey` / production OIDC plugs in (P7-D2 A, ADR 0004), and multi-instance worker scaling (`RowVersion` concurrency token and `AttemptCount` retry cap, ADR 0003, P9-D3 A).
+  - Phase 11: fresh-clone rehearsal (two timed clean runs), `DEMO-SCRIPT.md`, and `docs/presentation/SLIDES.md` (`R43`, `R45`–`R55`).
 - **Open decisions / blockers for Alessandro:**
   - Optional ADRs for persistence (`P3-D1`) or Core domain shape (`P2-D1/D2`): `/adr` is user-invoked only.
   - `security-auditor` S10 (Phase 1): keep or redact local paths in the verbatim prompt logs before the repo goes public.
   - `spec-checker` questions (status wording, constraint rows R44/R50, final tag, optional scope R30–R33): see `docs/progress/phase-01-spec.md`, "Open issues".
   - Later: branch protection on `main` (require the CI checks).
-- **Last verify:** `./scripts/verify.sh` full → PASSED (**586 tests**: 275 unit + 311 integration; **113 hook cases**) on `phase-09-quality` (`4f152ee`), 2026-11-16.
+- **Last verify:** `./scripts/verify.sh` full → PASSED (**586 tests**: 275 unit + 311 integration; **113 hook cases**) on `phase-10-docs`, 2026-11-16.
 
 ## Phases
 
@@ -30,7 +30,7 @@
 | 07 | Authentication + authorisation | Merged | `phase-07-auth` | [#11](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/11) | 274 unit + 268 integration, 542/542; CI `docker` job also checks 401 and `/dev/token` | 2026-11-16 |
 | 08 | Security hardening | Merged | `phase-08-security` | [#12](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/12) | 274 unit + 303 integration, 577/577 + 113 hook cases | 2026-11-16 |
 | 09 | Optimisation + quality | Merged | `phase-09-quality` | [#19](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/19) | 275 unit + 311 integration, 586/586 + 113 hook cases | 2026-11-16 |
-| 10 | Documentation | Not started | — | — | — | — |
+| 10 | Documentation | Merged | `phase-10-docs` | [#20](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/20) | docs only (586 tests + 113 hook cases unchanged) | 2026-11-16 |
 | 11 | Fresh-clone rehearsal + presentation | Not started | — | — | — | — |
 
 ## Requirement traceability
@@ -38,7 +38,7 @@
 Snapshot at the end of Phase 3 (2026-11-14), produced by the `spec-checker` subagent (prompt P03-09) at `a446c64` from `docs/spec/ORIGINAL_SPEC.md`. Re-run at the end of every phase.
 
 **Status key.** "Met" needs code or a test. Design written down but not built is "partial".
-**Totals now:** 31 met · 10 partial · 14 missing after Phase 9 (R25 met; `spec-checker` P09-07). After Phase 7/8: 30 / 10 / 15 (R31 met, all four Optional Enhancements R30–R33 met; `spec-checker` P07-11). After Phase 5: 29 / 10 / 16 (R33 met; `spec-checker` P05-09). After Phase 6: 28 / 10 / 17 (R30 met, R13 now 202 + polling; `spec-checker` P06-08). After Phase 4: 27 / 10 / 18. End of Phase 3: 26 / 9 / 20.
+**Totals now:** 43 met · 4 partial · 8 missing after Phase 10 (R19, R20, R34–R42, R44 met; `spec-checker` P10-05). After Phase 9: 31 / 10 / 14 (R25 met; `spec-checker` P09-07). After Phase 7/8: 30 / 10 / 15 (R31 met, all four Optional Enhancements R30–R33 met; `spec-checker` P07-11). After Phase 5: 29 / 10 / 16 (R33 met; `spec-checker` P05-09). After Phase 6: 28 / 10 / 17 (R30 met, R13 now 202 + polling; `spec-checker` P06-08). After Phase 4: 27 / 10 / 18. End of Phase 3: 26 / 9 / 20.
 
 Paths: "Endpoints" = `src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs`; test classes are in `tests/MortgageApplications.IntegrationTests/` unless marked unit.
 
@@ -62,8 +62,8 @@ Paths: "Endpoints" = `src/MortgageApplications.Api/Applications/ApplicationEndpo
 | R16 | Decision: approved or declined | Req 3 | met | `Decision`; `AssessmentTests` (E1 Approved, E2 Declined) |
 | R17 | Maximum borrowing estimate | Req 3 | met | `MaxBorrowing` (OpenAPI description: income-based); `AssessmentTests`, `StartupTests` (OpenAPI) |
 | R18 | Short explanation for the decision | Req 3 | met | `Summary` + `Checks`; exact text asserted in `AssessmentTests` |
-| R19 | Logic reasonable and clearly explained | Req 3 | partial | Rules doc and the response's `summary`/`checks`; README in Phase 10; slides in Phase 11 |
-| R20 | State assumptions clearly | Req 3 | partial | Rules §7; the response carries the rate and rules version; README in Phase 10 |
+| R19 | Logic reasonable and clearly explained | Req 3 | met | `docs/spec/affordability-rules.md`, response `summary`/`checks`, `README.md:155-206`; slide 2 tracked in R54 |
+| R20 | State assumptions clearly | Req 3 | met | `docs/spec/affordability-rules.md` §1 & §7, response `assessmentRate`/`rulesVersion`, `README.md:159-169,198-206` |
 | R21 | ASP.NET 10 app, good framework use | Tech | met (judgement) | `net10.0`; `MapGroup`, `TypedResults`, `AddValidation`, `AddProblemDetails`, `IExceptionHandler`, `ValidateOnStart`, `TimeProvider`, EF Core (`Program.cs`). The spec-checker flags this as subjective |
 | R22 | Clear model structure and relationships | Tech | met | One-to-many application → assessments via FK, index, cascade delete (`AffordabilityAssessmentConfiguration`); entities in `Core/Applications/`. No navigation properties and no direct cascade test (no delete endpoint) |
 | R23 | Use of validations | Tech | met | Same as R10, plus `AffordabilityOptionsValidator` (`StartupTests`) and strict JSON |
@@ -77,19 +77,19 @@ Paths: "Endpoints" = `src/MortgageApplications.Api/Applications/ApplicationEndpo
 | R31 | Optional: authentication | Optional | met | ES256 JWT bearer (`AuthenticationSetup`, `ClaimsCurrentUser`, `SubjectClaim`, `TokenKeys`, `SigningPublicKey`), fail-closed `POST /dev/token` (`DevTokenEndpoint`), OpenAPI bearer scheme (`BearerSecurityTransformer`); `AuthenticationTests`, `AuthorizationTests`, `DevTokenTests`, `AuthTelemetryTests`, `StartupTests`; ADR 0004 |
 | R32 | Optional: Docker support | Optional | met | `Dockerfile` (`@sha256` digests, `dotnet restore --locked-mode`), `compose.yaml`; CI job "Docker image build and smoke test"; `SecurityHardeningTests`, `ComposeFileTests` |
 | R33 | Optional: logging or instrumentation | Optional | met | `[LoggerMessage]` logs, OpenTelemetry tracing and metrics (`AssessmentTelemetry`, `Program.cs`), opt-in dashboard; `TelemetryAllowlistTests`, `AssessmentSpanTests`, `AssessmentMetricTests`, `OtlpExportTests` |
-| R34 | README: setup instructions | Docs | missing | Phase 10 |
-| R35 | README: how to run the app | Docs | missing | Phase 10 |
-| R36 | README: how to run tests | Docs | missing | Phase 10 |
-| R37 | README: design decisions explained | Docs | missing | Phase 10 |
-| R38 | README: Design & Reflection section | Design | missing | Phase 10 |
-| R39 | 2-3 key design decisions and why | Design Q1 | missing | Phase 10 (inputs: ADR 0001, `DESIGN-JOURNAL.md`); Alessandro edits |
-| R40 | Scaling: first change under load | Design Q2 | partial | Draft in `PRODUCTION-LAYERS.md`, "Scaling"; README in Phase 10 |
-| R41 | Trade-offs: kept simple or left out | Design Q3 | partial | Notes in `PRODUCTION-LAYERS.md` and rules §7; README in Phase 10 |
-| R42 | Next steps with more time | Design Q4 | partial | Notes in `PRODUCTION-LAYERS.md`; README in Phase 10 |
+| R34 | README: setup instructions | Docs | met | `README.md:39-52` (`.NET 10 SDK` via `global.json`, Docker/Compose, optional `gitleaks`/`semgrep`, `git clone`, `dotnet restore --locked-mode`) |
+| R35 | README: how to run the app | Docs | met | `README.md:55-130` (`dotnet run`, `docker compose up --build`, Aspire dashboard override, `curl` walkthrough + `requests.http`, production auth) |
+| R36 | README: how to run tests | Docs | met | `README.md:133-151` (`./scripts/verify.sh`, `./scripts/verify.sh --fast`, `dotnet test --solution`, xUnit v3 `--filter-class` / `--filter-method`) |
+| R37 | README: design decisions explained | Docs | met | `README.md:209-222` (linked to ADRs 0001, 0003, 0004) |
+| R38 | README: Design & Reflection section | Design | met | `README.md:209-246` (`## Design & Reflection`, subsections 1–4) |
+| R39 | 2-3 key design decisions and why | Design Q1 | met | `README.md:211-222` (pure `Core` + `decimal`, save-before-enqueue background pipeline, fail-closed ES256 auth + owner scoping + allowlisted telemetry) |
+| R40 | Scaling: first change under load | Design Q2 | met | `README.md:224-231`, `docs/layers/PRODUCTION-LAYERS.md:16`, ADR 0003 (Azure SQL + Service Bus + `RowVersion` + `AttemptCount`) |
+| R41 | Trade-offs: kept simple or left out | Design Q3 | met | `README.md:232-238`, `docs/layers/PRODUCTION-LAYERS.md`, `docs/spec/affordability-rules.md` §7 |
+| R42 | Next steps with more time | Design Q4 | met | `README.md:239-246`, `docs/layers/PRODUCTION-LAYERS.md` |
 | R43 | Submit as GitHub repo or archive | Submission | partial | The GitHub repo exists; final state in Phase 11 |
-| R44 | Clarity over production-readiness | Time | partial | Expectation only; Phases 9-10 |
+| R44 | Clarity over production-readiness | Time | met (judgement) | Phase 9 clean-up + `README.md:9-23,155-246` |
 | R45 | Fresh clone in the session | Follow-up | missing | Phase 11 (two timed clean runs) |
-| R46 | Build and run from the clone | Follow-up | partial | `docker compose up --build` works from a fresh clone (Phase 4, check C1); README (Phase 10) and rehearsal (Phase 11) to do |
+| R46 | Build and run from the clone | Follow-up | partial | `docker compose up --build` works from a fresh clone (Phase 4, check C1) and `README.md:45-125` documents it; live rehearsal in Phase 11 |
 | R47 | Short live demo | Follow-up | missing | `requests.http` exists (Phase 3); `DEMO-SCRIPT.md` in Phase 11 |
 | R48 | Talk through code and choices | Follow-up | missing | Phase 11 (`DEMO-SCRIPT.md`, likely questions) |
 | R49 | At most 3 slides | Follow-up | missing | Phase 11 (`docs/presentation/SLIDES.md`) |
