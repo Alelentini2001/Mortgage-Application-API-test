@@ -10,7 +10,7 @@
     <!-- Api telemetry (approved at Phase 5 Checkpoint A, P5-D1): OpenTelemetry SDK hosting, ASP.NET Core
          instrumentation and the OTLP exporter. -->
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.21.0" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
     <!-- Api authentication (approved at Phase 7 Checkpoint A, P7-D9): JWT bearer validation. -->
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
