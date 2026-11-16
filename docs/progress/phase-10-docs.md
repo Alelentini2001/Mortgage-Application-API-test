@@ -1,6 +1,6 @@
 # Phase 10: Documentation (`README.md`)
 
-Status: **Ready for Checkpoint B (PR review)** · Branch: `phase-10-docs` · PR: — · Started: 2026-11-16 · Finished: —
+Status: **Merged** · Branch: `phase-10-docs` · PR: [#20](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/20) · Started: 2026-11-16 · Finished: 2026-11-16
 
 ## Goal
 
@@ -144,6 +144,14 @@ Approved by Alessandro on 2026-11-16 (`P10-02`), with Option A on both `P10-D1` 
   ```
 - **Purpose:** Requirement traceability at the end of Phase 10.
 - **Outcome:** 12 requirements (`R19`, `R20`, `R34`–`R42`, `R44`) moved to **met**, bringing overall totals to **43 met · 4 partial · 8 missing**; all 5 factual notes resolved in `README.md`.
+
+### P10-06 · human→agent (Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Approved
+  ```
+- **Purpose:** Checkpoint B approval for PR #20 (`phase-10-docs`).
+- **Outcome:** PR #20 approved and squash-merged into `main`.
 
 ## What was built (files)
 

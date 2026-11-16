@@ -1,11 +1,11 @@
 # Progress
 
 ## Resume here
-- **Phase:** Phase 10 (documentation / `README.md`) **ready for Checkpoint B** on branch `phase-10-docs`. Phase 09 merged before it (#19, `ff53123`). Phase file: `docs/progress/phase-10-docs.md`.
+- **Phase:** Phase 10 (documentation / `README.md`) **merged** (PR [#20](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/20)). Phase 09 merged before it (#19, `ff53123`). Phase file: `docs/progress/phase-10-docs.md`.
 - **Cross-IDE and cross-model portability:** started in Claude Code (Phases 00–07 implementation, Claude Opus 5.5 / Sonnet 4.6), then resumed in Google Antigravity IDE (Gemini 4 Argon) from Phase 07's gates through Phases 08, 09, and 10 to showcase that `AGENTS.md`, `.claude/rules/`, `.claude/skills/`, and `.claude/agents/` (`test-designer`, `security-auditor`, `dotnet-reviewer`, `spec-checker`) run seamlessly across different IDEs and AI models.
 - **Working rule from Alessandro (P06-12):** phases run one at a time from now on, no parallel worktrees.
 - **Built so far:** four endpoints under `/api/applications` (create 201, get, assess 202 + background worker, get assessment 200 with Pending/Completed/Failed), ES256 JWT bearer authentication (`RequireAuthenticatedUser` fallback policy, owner from `sub` via `ClaimsCurrentUser`, fail-closed `POST /dev/token`, OpenAPI bearer scheme), fixed-window per-subject write rate limiting (429 + `Retry-After`), bounded full-queue enqueue timeout (503 + startup recovery), HTTP security headers + HSTS + `AllowedHosts`, NuGet `packages.lock.json` + `<packageSourceMapping>` + `--locked-mode`, Docker multi-arch `@sha256` digest pins + Dependabot, bash hook self-protection (`.claude/hooks/**`), scalar-projected background processing load + minimal column updates, SQLite `EXPLAIN QUERY PLAN` index verification + `WAL` journal mode, OpenTelemetry tracing, metrics and logs with an allowlist test, opt-in Aspire dashboard, and complete `README.md` (`R19`, `R20`, `R34`–`R42`, `R44`); **275 unit + 311 integration tests (586 total) + 113 hook cases**.
-- **Next action:** Checkpoint B approval from Alessandro on the Phase 10 PR, then squash-merge and start Phase 11 (fresh-clone rehearsal + `DEMO-SCRIPT.md` + `docs/presentation/SLIDES.md`).
+- **Next action:** Start Phase 11 (fresh-clone rehearsal + `DEMO-SCRIPT.md` + `docs/presentation/SLIDES.md`) on branch `phase-11-presentation`.
 - **Carry into later phases:**
   - Phase 11: fresh-clone rehearsal (two timed clean runs), `DEMO-SCRIPT.md`, and `docs/presentation/SLIDES.md` (`R43`, `R45`–`R55`).
 - **Open decisions / blockers for Alessandro:**
@@ -30,7 +30,7 @@
 | 07 | Authentication + authorisation | Merged | `phase-07-auth` | [#11](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/11) | 274 unit + 268 integration, 542/542; CI `docker` job also checks 401 and `/dev/token` | 2026-11-16 |
 | 08 | Security hardening | Merged | `phase-08-security` | [#12](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/12) | 274 unit + 303 integration, 577/577 + 113 hook cases | 2026-11-16 |
 | 09 | Optimisation + quality | Merged | `phase-09-quality` | [#19](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/19) | 275 unit + 311 integration, 586/586 + 113 hook cases | 2026-11-16 |
-| 10 | Documentation | In review (Checkpoint B) | `phase-10-docs` | — | docs only (586 tests + 113 hook cases unchanged) | 2026-11-16 |
+| 10 | Documentation | Merged | `phase-10-docs` | [#20](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/20) | docs only (586 tests + 113 hook cases unchanged) | 2026-11-16 |
 | 11 | Fresh-clone rehearsal + presentation | Not started | — | — | — | — |
 
 ## Requirement traceability
