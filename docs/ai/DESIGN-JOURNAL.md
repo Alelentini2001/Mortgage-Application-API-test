@@ -123,6 +123,13 @@ Chronological record of ideas, options, rejected ideas, who decided, and what ch
 - **Single self-contained `README.md` (`P10-D1 A`, `P10-D2 A`).** Wrote `README.md` covering setup, local/Docker/Aspire runs, `docker compose down -v` and `docker run --init` operational notes, `curl` walkthrough + `requests.http`, test commands, the affordability model and assumptions (`R19`, `R20`), Design & Reflection (`1`–`4`, `R37`–`R42`), and the cross-IDE / cross-model portability note.
 - **Why fresh-context review matters on documentation too.** Even on a docs-only phase, running `dotnet-reviewer` and `spec-checker` against the codebase caught three real drift bugs in the first draft (`f6b8fc9`): `GET /health` was described as probing SQLite (`200 OK, 503`) whereas `Program.cs` maps `() => TypedResults.Ok("Healthy")` (DB readiness is a production next step in `PRODUCTION-LAYERS.md`), the custom metric names were written as `mortgage_applications.assessments` instead of `mortgage.assessments.processed` (`AssessmentTelemetry.cs`), and `MortgageApplicationsDbContext` was spelled in the singular. All were fixed before opening the PR.
 
+## 2026-11-16 · Phase 11: fresh-clone rehearsal and 3-slide presentation
+
+- **Two timed fresh-clone rehearsals (`P11-D2 A`, `R45`, `R46`).** Executed two clean clones of the GitHub repository into temporary directories outside the workspace and timed every stage: Rehearsal 1 (`.NET 10` CLI + full `./scripts/verify.sh` running all 586 tests + 113 hook cases + `dotnet run` + 8-step live API demo) completed in **50.09 s** (`clone: 1.08 s`, `verify.sh: 44.14 s`, `startup: 4.49 s`, `demo: 0.39 s`), and Rehearsal 2 (`docker compose up -d --build` + health check + 8-step live API demo + `docker compose down -v`) completed in **13.33 s** (`clone: 1.02 s`, `build+up: 11.00 s`, `health: 0.91 s`, `demo: 0.40 s`).
+- **30-minute runbook and 3-slide deck (`P11-D1`, `R47`–`R55`).** Authored the personal live-demo runbook and 3-slide presentation deck (covering architecture, affordability logic & assumptions, key design decisions, and the first change at scale) and stored them locally outside the shared GitHub repository so the repo stays focused on the deliverable codebase and documentation.
+- **100% requirement traceability (`55 met · 0 partial · 0 missing`).** `spec-checker` (`P11-05`) verified that all 55 atomic requirements (`R1`–`R55`) extracted from `docs/spec/ORIGINAL_SPEC.md` in Phase 1 — including all 4 optional enhancements (`R30`–`R33`) — are met with code, tests, or rehearsed presentation artifacts.
+
+
 
 
 
