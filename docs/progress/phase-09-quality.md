@@ -1,6 +1,6 @@
 # Phase 09: Optimisation + quality
 
-Status: **In progress: plan approved (2026-11-16), test design next** · Branch: `phase-09-quality` · PR: — · Started: 2026-11-16 · Finished: —
+Status: **In progress: awaiting test proposal approval** · Branch: `phase-09-quality` · PR: — · Started: 2026-11-16 · Finished: —
 
 ## Goal
 
@@ -80,9 +80,42 @@ Planning and orchestration in Google Antigravity IDE (Gemini 4 Argon), continuin
 - **Purpose:** Checkpoint A approval of the Phase 9 plan and decisions `P9-D1` to `P9-D4` (all Option A).
 - **Outcome:** decisions recorded; `test-designer` invoked (`P09-03`).
 
+### P09-03 · agent→subagent (`test-designer` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Phase 9 (optimisation + quality) of a .NET 10 mortgage-application API in /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-09-quality). Propose test cases for the approved plan; do not write code.
+
+  Read first:
+  - `docs/progress/phase-09-quality.md` (goal, plan, approved decisions P9-D1 to P9-D4, all Option A)
+  - `docs/layers/PRODUCTION-LAYERS.md` ("Database", "Caching", "Scaling")
+  - `src/MortgageApplications.Api/Program.cs`, `src/MortgageApplications.Api/Observability/AssessmentTelemetry.cs`, `src/MortgageApplications.Api/Assessments/AssessmentWorker.cs`
+  - `src/MortgageApplications.Core/Applications/AssessmentProcessingOutcome.cs`, `src/MortgageApplications.Core/Applications/MortgageApplicationService.cs`
+  - `src/MortgageApplications.Infrastructure/Persistence/EfMortgageApplicationRepository.cs`, `src/MortgageApplications.Infrastructure/Persistence/DatabaseMigration.cs`, `src/MortgageApplications.Infrastructure/DependencyInjection.cs`
+  - `tests/MortgageApplications.IntegrationTests/` (`OtlpExportTests.cs`, `AssessmentSpanTests.cs`, `AssessmentRepositoryTests.cs`, `AssessmentWorkerTests.cs`, `CapturingLoggerProvider.cs`, `JsonStrictnessTests.cs`)
+  - `tests/MortgageApplications.UnitTests/Applications/MortgageApplicationServiceTests.cs`
+  - `.claude/rules/backend.md`, `tests/CLAUDE.md`
+
+  What will be built (P9-D1 to P9-D4, all Option A):
+  1. OTEL_RESOURCE_ATTRIBUTES exact key matching (P9-D1, PR #9 /code-review 1): In Program.cs, OTEL_RESOURCE_ATTRIBUTES is split on , and each segment is trimmed so only an attribute whose key is "service.name" (kv.TrimStart().StartsWith("service.name=", StringComparison.Ordinal) with non-whitespace value) suppresses the default "mortgage-applications" service name. A key like "custom.service.name=other" must NOT suppress the default "mortgage-applications" service name, while "deployment.environment=demo, service.name=svc-trimmed" MUST keep "svc-trimmed".
+  2. Stored RulesVersion in AssessmentProcessingResult & single OutcomeTag set (P9-D1, PR #9 /code-review 2-3): AssessmentProcessingResult carries string? RulesVersion (from result.RulesVersion when Completed, null otherwise), and AssessmentWorker passes result.RulesVersion ?? affordabilityOptions.Value.RulesVersion! to AssessmentTelemetry.RecordProcessed. In AssessmentTelemetry.RecordProcessed, OutcomeTag is set on activity once (not duplicated in the loop).
+  3. EfMortgageApplicationRepository.FindForProcessingAsync & UpdateAssessmentAsync (P9-D1, PR #8 /code-review 3): FindForProcessingAsync projects the 5 scalar inputs (AnnualIncome, MonthlyExpenses, DepositAmount, PropertyValue, TermYears) instead of materializing/tracking the MortgageApplication entity (so db.ChangeTracker.Entries<MortgageApplication>() is empty after FindForProcessingAsync, while db.ChangeTracker.Entries<AffordabilityAssessment>() has the 1 tracked assessment in EntityState.Unchanged). UpdateAssessmentAsync calls db.Assessments.Update(assessment) only when db.Entry(assessment).State == EntityState.Detached, so for a tracked assessment only the modified properties (Status, Result, AssessedAt or FailedAt) are marked IsModified = true (not Id, ApplicationId, CreatedAt).
+  4. Timestamped CapturingLoggerProvider for RR5 (P9-D1): CapturedLog records a timestamp (Stopwatch.GetTimestamp() or DateTimeOffset.UtcNow), and Startup_sweep_failure_is_retried_and_completes_pending_assessment asserts that the elapsed time between the RequeueFailed log entry and the PendingRequeued log entry is at least 800 ms (for the 1 s configured retry delay, proving the retry actually waited).
+  5. SQLite EXPLAIN QUERY PLAN & WAL mode on file databases (P9-D2): DatabaseQueryPlanTests runs EXPLAIN QUERY PLAN against the SQLite connection for the repository's point/foreign-key lookups (FindAsync by Id + OwnerId, FindAssessmentAsync by Id + ApplicationId + OwnerId, FindForProcessingAsync join by assessment Id and application Id, and Applications lookup by OwnerId) and asserts every plan uses SEARCH with an index/primary key and never a full-table SCAN; and DatabaseMigration.MigrateDatabaseAsync sets PRAGMA journal_mode=WAL; when the SQLite database is file-backed (verified by a file-backed SQLite test checking PRAGMA journal_mode; returns "wal").
+
+  Use your output format (ID | given | when | then | why it matters), mark each case must or nice, keep the list tight and high-value, and list any ambiguities for Alessandro to settle.
+  ```
+- **Purpose:** propose Phase 9 test cases before writing any tests.
+- **Outcome:** 9 test cases (`P9-T1` to `P9-T9`); full text in [`phase-09/test-proposal.md`](phase-09/test-proposal.md).
+
 ## What was built (files)
 
 ## Tests
+
+### Proposal (`test-designer`, P09-03)
+
+Full proposal, verbatim: [`phase-09/test-proposal.md`](phase-09/test-proposal.md).
+
+**Recommended selection:** all 9 cases (`P9-T1`–`P9-T7` `must`, plus `P9-T8` detached-update fallback and `P9-T9` shared `Production` host in `JsonStrictnessTests`).
 
 ## Security gate
 
