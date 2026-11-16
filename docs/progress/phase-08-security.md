@@ -1,6 +1,6 @@
 # Phase 08: Security hardening
 
-Status: **In progress: awaiting test proposal approval** · Branch: `phase-08-security` · PR: — · Started: 2026-11-16 · Finished: —
+Status: **In progress: plan and tests approved (2026-11-16), implementation next** · Branch: `phase-08-security` · PR: — · Started: 2026-11-16 · Finished: —
 
 ## Goal
 
@@ -114,6 +114,12 @@ Planning and orchestration in Google Antigravity IDE (Gemini 4 Argon), continuin
   ```
 - **Purpose:** propose Phase 8 test cases before writing any tests.
 - **Outcome:** 25 test cases (`S8-01` to `S8-25`) and 3 questions (`A1`–`A3`); full text in [`phase-08/test-proposal.md`](phase-08/test-proposal.md).
+
+### P08-04 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > Approved
+- **Purpose:** approval of the Phase 8 test cases (`S8-01`–`S8-25`) and recommended answers `A1`–`A3`.
+- **Outcome:** failing tests written first (`S8-01`–`S8-25`), then implementation.
 
 ## What was built (files)
 
