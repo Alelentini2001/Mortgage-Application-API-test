@@ -1,11 +1,11 @@
 # Progress
 
 ## Resume here
-- **Phase:** Phase 08 (security hardening) **ready for Checkpoint B** on branch `phase-08-security` (PR [#12](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/12)). Phase 07 merged before it (#11, `e1c841d`). Phase file: `docs/progress/phase-08-security.md`.
+- **Phase:** Phase 08 (security hardening) **merged** via [#12](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/12), approved by Alessandro at Checkpoint B (`P08-08`). Phase 07 merged before it (#11, `e1c841d`). Phase file: `docs/progress/phase-08-security.md`.
 - **Cross-IDE and cross-model portability:** started in Claude Code (Phases 00–07 implementation, Claude Opus 5.5 / Sonnet 4.6), then resumed in Google Antigravity IDE (Gemini 4 Argon) from Phase 07's gates through Phase 08 to showcase that `AGENTS.md`, `.claude/rules/`, `.claude/skills/`, and `.claude/agents/` (`test-designer`, `security-auditor`, `dotnet-reviewer`, `spec-checker`) run seamlessly across different IDEs and AI models.
 - **Working rule from Alessandro (P06-12):** phases run one at a time from now on, no parallel worktrees.
 - **Built so far:** four endpoints under `/api/applications` (create 201, get, assess 202 + background worker, get assessment 200 with Pending/Completed/Failed), ES256 JWT bearer authentication (`RequireAuthenticatedUser` fallback policy, owner from `sub` via `ClaimsCurrentUser`, fail-closed `POST /dev/token`, OpenAPI bearer scheme), fixed-window per-subject write rate limiting (429 + `Retry-After`), bounded full-queue enqueue timeout (503 + startup recovery), HTTP security headers + HSTS + `AllowedHosts`, NuGet `packages.lock.json` + `<packageSourceMapping>` + `--locked-mode`, Docker multi-arch `@sha256` digest pins + Dependabot, bash hook self-protection (`.claude/hooks/**`), validation at the boundary, owner-scoped EF Core SQLite, ProblemDetails, OpenTelemetry tracing, metrics and logs with an allowlist test, opt-in Aspire dashboard; **274 unit + 303 integration tests (577 total) + 113 hook cases**.
-- **Next action:** Checkpoint B approval from Alessandro on PR #12, then squash-merge and start Phase 09 (optimisation + quality).
+- **Next action:** Phase 09 (optimisation + quality) Checkpoint A (`docs/progress/phase-09-quality.md`).
 - **Carry into later phases:**
   - Phase 9: PR #9 `/code-review` 1–4 (service-name detection, rules version from the stored result, double outcome tag, signal-specific OTLP keys); `/code-review` 1, 5 and 7 from Phase 3; PR #8 `/code-review` 1 (row that always fails stays Pending), 2 (stream the sweep), 3 (processing load tracking), 5 (split the I-13/I-14 test); Phase 6 R7, R8, RR5 (test assumptions); concurrency token before any second worker (R6, ADR 0003).
   - Phase 10: README, including `docker compose down -v` as the reset for a `data` volume with the wrong owner, `docker run --init` outside compose (ADR 0002), and how `Jwt:SigningPublicKey` / production OIDC plugs in (P7-D2 A, ADR 0004).
@@ -31,7 +31,7 @@
 | 06 | Background assessments | Merged | `phase-06-background` | [#8](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/8) | 269 unit + 115 integration, 384/384; CI `docker` job also checks the 202 flow | 2026-11-15 |
 | H1 | Harness: usage and model-choice rules (light) | Merged | `harness-01-context` | [#10](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/10) | docs only (442 tests unchanged) | 2026-11-15 |
 | 07 | Authentication + authorisation | Merged | `phase-07-auth` | [#11](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/11) | 274 unit + 268 integration, 542/542; CI `docker` job also checks 401 and `/dev/token` | 2026-11-16 |
-| 08 | Security hardening | In review (Checkpoint B) | `phase-08-security` | [#12](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/12) | 274 unit + 303 integration, 577/577 + 113 hook cases | 2026-11-16 |
+| 08 | Security hardening | Merged | `phase-08-security` | [#12](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/12) | 274 unit + 303 integration, 577/577 + 113 hook cases | 2026-11-16 |
 | 09 | Optimisation + quality | Not started | — | — | — | — |
 | 10 | Documentation | Not started | — | — | — | — |
 | 11 | Fresh-clone rehearsal + presentation | Not started | — | — | — | — |

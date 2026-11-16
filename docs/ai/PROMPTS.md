@@ -1375,3 +1375,9 @@ Copied from `docs/progress/harness-01-context.md` after the merge. H-00 (Alessan
   ```
 - **Purpose:** requirement traceability at the end of Phase 8.
 - **Outcome:** all 6 decisions (`P8-D1`–`P8-D6`) and all 25 test cases (`S8-01`–`S8-25`) are **met**.
+
+### P08-08 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > Approved
+- **Purpose:** Checkpoint B approval on PR #12.
+- **Outcome:** PR #12 squash-merged into `main`.
