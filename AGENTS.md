@@ -4,7 +4,7 @@ Instructions for any coding agent (Claude Code, Codex, Copilot) working in this 
 
 ## Purpose
 ASP.NET Core (.NET 10) JSON API for mortgage applications: create, retrieve, and assess affordability (LTV, DTI, decision, max borrowing, explanation).
-Backend only, no UI. Technical test for Canada Life; the human engineer of record is Alessandro.
+Backend only, no UI. Technical test; the human engineer of record is Alessandro.
 Source of truth for requirements: `docs/spec/ORIGINAL_SPEC.md`. Affordability rules: `docs/spec/affordability-rules.md`.
 
 ## Commands

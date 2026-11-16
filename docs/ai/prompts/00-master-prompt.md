@@ -4,7 +4,7 @@ Sent by Alessandro as the opening instruction for this project, prefixed with: "
 
 ---
 
-# Master prompt v2: agentic engineering (reusable harness + Canada Life .NET test)
+# Master prompt v2: agentic engineering (reusable harness + .NET technical test)
 
 ## How to use this (for you, Alessandro; not part of the prompt)
 
@@ -14,7 +14,7 @@ Sent by Alessandro as the opening instruction for this project, prefixed with: "
   1. Create an empty public GitHub repo, clone it, and `cd` in.
   2. Install the toolkit: dotnet/skills plugins, Microsoft Learn MCP, `gh` CLI (logged in) or GitHub MCP, NuGet MCP, Semgrep, Gitleaks, the OWASP skill, `jq`, and `/install-github-app`.
   3. Copy the test PDF text into `docs/spec/ORIGINAL_SPEC.md` yourself.
-  4. Start Claude Code with `claude --permission-mode plan`, paste everything below the line, and name the session (`/rename canada-life-test`).
+  4. Start Claude Code with `claude --permission-mode plan`, paste everything below the line, and name the session (`/rename mortgage-api-test`).
   5. At every **CHECKPOINT**, read the diff and the phase file, write your notes in the "Human review" section, and reply `approved` or give corrections.
   6. Run `/clear` after each merged phase. The harness resumes from `docs/PROGRESS.md`.
 - Rule for you: if you can't explain a merged line in the interview, it shouldn't have been merged.
@@ -180,7 +180,7 @@ Mark layers that don't apply as `N/A + reason`. Never skip one silently.
 Only parallelise phases with **no shared files**, each in its own worktree and branch (via `parallel-implementer` with `isolation: worktree`). Merge one at a time, rebase the next, and re-run all gates. Never run two agents on the same branch. Record what ran in parallel and why it was safe in `ORCHESTRATION.md`.
 
 ====================================================================
-# PART B: THIS PROJECT (Canada Life .NET technical test)
+# PART B: THIS PROJECT (.NET technical test)
 ====================================================================
 
 ## B1. Assignment summary (source of truth: docs/spec/ORIGINAL_SPEC.md)
@@ -240,7 +240,7 @@ Parallel plan for this project: phases 0-3 sequential → after Phase 3 is merge
 - `DESIGN-JOURNAL.md`: chronological thinking (first reading of the spec and what the reviewers want; each idea → options → choice → who decided; what changed and why).
 - `ORCHESTRATION.md`: a Mermaid diagram (me → lead agent → skills / MCP servers → subagents → hooks → gates → PR → CI + AI reviews → my approval → merge); for each tool and agent, why it was chosen and concrete contributions; what was **not** installed and why (lean context, skill supply-chain risk); guardrails; parallel runs.
 - `PROMPTS.md`: every prompt, verbatim, by phase, tagged `human→agent` or `agent→subagent`, with purpose and outcome.
-- `AI-USAGE.md` (1-2 pages): what the AI did versus what I decided, **real** corrections with links to the PRs, metrics (phases, PRs, tests, findings fixed), and how I'd run this workflow in a team at Canada Life (shared CLAUDE.md/AGENTS.md, required human + AI review, an approved tool list, data rules).
+- `AI-USAGE.md` (1-2 pages): what the AI did versus what I decided, **real** corrections with links to the PRs, metrics (phases, PRs, tests, findings fixed), and how I'd run this workflow in a team (shared CLAUDE.md/AGENTS.md, required human + AI review, an approved tool list, data rules).
 - **Final briefing** (your last message): the architecture in 5 sentences, 3 key decisions, the assessment logic, the scaling answer, trade-offs, security posture, the 5 key files and what to say about each, and the **weakest parts, honestly**, with how I should talk about them.
 
 ====================================================================

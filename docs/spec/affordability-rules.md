@@ -135,7 +135,7 @@ Structured `Checks` plus one `Summary` sentence (D7). Exact templates, with `{v}
 
 ## 8. Worked examples (golden tests for Phase 2)
 
-Inputs are income / monthly expenses / deposit / property value / term. Every row was computed with `System.Decimal` using exactly the formulas above. E1–E14 were also independently recomputed by the `dotnet-reviewer` with Python `decimal` at 28 and 50 digits (E10–E14 are the cases it proposed). E15–E18 were computed by the lead agent only (evidence: `docs/progress/phase-01-spec.md`, "Worked-example check" and "Review gate").
+Inputs are income / monthly expenses / deposit / property value / term. Every row was computed with `System.Decimal` using exactly the formulas above. E1–E14 were also independently recomputed by the `dotnet-reviewer` with Python `decimal` at 28 and 50 digits (E10–E14 are the cases it proposed). E15–E18 were computed by the lead agent in Phase 1, and E19 was proposed by `test-designer` and approved at Phase 2 (`P02-04`) to cover a mixed normal + `"before rounding"` failure summary (evidence: `docs/progress/phase-01-spec.md` and `docs/progress/phase-02-core.md`).
 
 | # | Inputs | Loan | LTV % | Payment | DTI % | LTI | MaxBorrowing | Decision | What it tests |
 |---|---|---|---|---|---|---|---|---|---|
@@ -157,6 +157,7 @@ Inputs are income / monthly expenses / deposit / property value / term. Every ro
 | E16 | 40,000 / 200 / 20,000 / 180,000 / 40y | 160,000.00 | 88.89 | 880.34 | 32.41 | 4.00 | 180,000.00 | **Approved** | maximum term (40y) |
 | E17 | 10,000,000 / 1,000,000 / 0 / 100,000,000 / 40y | 100,000,000.00 | 100.00 | 550,213.64 | 186.03 | 10.00 | 0.00 | **Declined** | maximum inputs; all three fail |
 | E18 | 1 / 1,000,000 / 0 / 100,000,000 / 5y | 100,000,000.00 | 100.00 | 1,933,280.15 | 3,519,936,183.53 | 100,000,000.00 | 0.00 | **Declined** | extreme ratios: storage must hold 10+ integer digits |
+| E19 | 60,000 / 500 / 19,988 / 290,000 / 30y | 270,012.00 | 93.11 | 1,618.86 | 42.38 | 4.50 | 270,000.00 | **Declined** | mixed normal LTV failure (93.11%) and "before rounding" LTI failure (4.5002 → 4.50×, P02-04) |
 
 Exact summaries for the golden tests:
 
@@ -170,6 +171,7 @@ Exact summaries for the golden tests:
 | E11 | `Declined: DTI 45.00% is above the 45.00% limit before rounding.` |
 | E13 | `Declined: LTV 90.00% is above the 90.00% limit before rounding; LTI 4.50× is above the 4.50× limit before rounding.` |
 | E17 | `Declined: LTV 100.00% is above the 90.00% limit; DTI 186.03% is above the 45.00% limit; LTI 10.00× is above the 4.50× limit.` |
+| E19 | `Declined: LTV 93.11% is above the 90.00% limit; LTI 4.50× is above the 4.50× limit before rounding.` |
 
 The summary for every other row follows the same templates. The full list printed by the check script is in the phase file.
 

@@ -1,6 +1,6 @@
 # Orchestration
 
-How the human, the lead agent, skills, subagents, hooks and gates work together. **v1 (Phase 0).** It will be updated as phases run.
+How the human, the lead agent, skills, subagents, hooks and gates work together. **Updated through Phase 11 (`v1.0.0`).** See [`docs/ai/AI-USAGE.md`](AI-USAGE.md) for the complete phase-by-phase record and the mid-Phase-07 (`3320a82`) handover from Claude Code (`Claude Opus 5.5` / `Sonnet 4.6`) to Google Antigravity IDE (`Gemini 4 Argon`).
 
 ```mermaid
 flowchart TD
@@ -34,11 +34,11 @@ flowchart TD
 | `AGENTS.md` + `CLAUDE.md` | memory | One tool-agnostic source of rules; CLAUDE.md adds only Claude-specific workflow (39 lines) | Phase 0 |
 | Nested `CLAUDE.md` (Core, tests, docs) | memory, on demand | Rules load only when that folder is touched | Phase 0 |
 | `.claude/rules/*.md` | path-scoped memory | Backend/test/infra rules load only for matching files; security is always loaded | Phase 0 |
-| `dotnet-reviewer` (opus) | subagent | Fresh-context review; the author never grades its own work | Not yet invoked |
-| `spec-checker` (sonnet) | subagent | Requirement traceability with file/test evidence | Not yet invoked |
-| `security-auditor` (opus) | subagent | One place that runs and triages every scanner | Not yet invoked |
-| `test-designer` (sonnet) | subagent | Separates test design (human picks) from implementation | Not yet invoked |
-| `parallel-implementer` (opus, worktree) | subagent | Isolated parallel phases (4 ∥ 6) | Not yet invoked |
+| `dotnet-reviewer` (opus / Gemini 4 Argon) | subagent | Fresh-context review; the author never grades its own work | Phases 01–11 (caught F1–F12 in Phase 1, R1–R8 across Phases 6–11) |
+| `spec-checker` (sonnet / Gemini 4 Argon) | subagent | Requirement traceability with file/test evidence | Phases 01–11 (verified 55/55 requirements met in `docs/PROGRESS.md`) |
+| `security-auditor` (opus / Gemini 4 Argon) | subagent | One place that runs and triages every scanner | Phases 01–11 (Gitleaks, Semgrep, NuGet audit, OWASP Top 10:2025) |
+| `test-designer` (sonnet / Gemini 4 Argon) | subagent | Separates test design (human picks) from implementation | Phases 02–09 (proposed E19 and all phase test suites before code) |
+| `parallel-implementer` (opus, worktree) | subagent | Isolated parallel phases (4 ∥ 6) | Phases 04 and 06 (retired after P06-12 in favour of sequential phases) |
 | `/phase`, `/verify-all`, `/progress`, `/adr`, `/retro` | skills (manual only) | Repeatable workflows that load only when typed | Phase 0 |
 | `affordability-rules` | skill (auto, path-scoped) | Loads the formulas only when Core or unit tests are touched | Phase 0 |
 | 5 hooks | enforcement | Things that must always happen don't rely on the model remembering | Proven by script tests (see phase 0 file) |

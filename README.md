@@ -2,7 +2,7 @@
 
 ASP.NET Core (.NET 10) JSON API for submitting mortgage applications, retrieving applications, and running asynchronous affordability assessments (loan-to-value, debt-to-income, loan-to-income, decision, maximum borrowing estimate, and structured explanation).
 
-Built as a backend-only technical exercise for **Canada Life**. Engineer of record: **Alessandro Lentini**.
+Built as a backend-only technical exercise. Engineer of record: **Alessandro Lentini**.
 
 ---
 
@@ -154,7 +154,7 @@ dotnet test --project tests/MortgageApplications.IntegrationTests -- --filter-cl
 
 ## Affordability Assessment Logic & Assumptions
 
-Full specification and 18 worked golden examples (`E1`–`E18`): [`docs/spec/affordability-rules.md`](docs/spec/affordability-rules.md) and [ADR 0001](docs/adr/0001-affordability-assessment-model.md).
+Full specification and 19 worked golden examples (`E1`–`E19`, where `E1`–`E18` were defined in Phase 1 and `E19` was added in Phase 2 `P02-04`): [`docs/spec/affordability-rules.md`](docs/spec/affordability-rules.md) and [ADR 0001](docs/adr/0001-affordability-assessment-model.md).
 
 ### Input Preconditions (HTTP `400 ValidationProblemDetails` vs. `Declined`)
 
@@ -211,7 +211,7 @@ Every assessment evaluates and reports all three checks in order (`LTV`, `DTI`, 
 ### 1. Key Design Decisions
 
 1. **Pure, deterministic domain core (`MortgageApplications.Core`) with `decimal` arithmetic and separate validation vs. decision ([ADR 0001](docs/adr/0001-affordability-assessment-model.md)):**
-   - `MortgageApplications.Core` has zero references to ASP.NET Core or EF Core. `AffordabilityCalculator` is a pure function of `(applicationInputs, options)` with no clock, database, or configuration access, making it trivially testable across 18 worked golden examples (`E1`–`E18`) and property-based invariant checks.
+   - `MortgageApplications.Core` has zero references to ASP.NET Core or EF Core. `AffordabilityCalculator` is a pure function of `(AffordabilityInputs, AffordabilityOptions)` with no clock, database, or configuration access, making it trivially testable across 19 worked golden examples (`E1`–`E19`) and property-based invariant checks.
    - Replacing a composite `Loan <= MaxBorrowing` check with three orthogonal checks (`LTV`, `DTI`, `LTI`) eliminated duplicate DTI failure reasons while preserving identical `Approved`/`Declined` outcomes and the $\text{Approved} \implies \text{Loan} \le \text{MaxBorrowing}$ invariant.
 2. **Save-before-enqueue asynchronous assessment pipeline with bounded backpressure and startup recovery ([ADR 0003](docs/adr/0003-background-assessment-queue.md)):**
    - `POST /api/applications/{id}/assessments` saves the `AffordabilityAssessment` row in `Pending` status **before** writing the assessment ID to the bounded `System.Threading.Channels` queue (`IAssessmentQueue`) and returning `202 Accepted`.
@@ -248,7 +248,7 @@ Every assessment evaluates and reports all three checks in order (`LTV`, `DTI`, 
 
 ## AI-Assisted Engineering & Cross-Environment Portability
 
-This repository was built using a structured, human-gated AI engineering harness documented in [`AGENTS.md`](AGENTS.md), [`docs/layers/PRODUCTION-LAYERS.md`](docs/layers/PRODUCTION-LAYERS.md), [`docs/PROGRESS.md`](docs/PROGRESS.md), [`docs/ai/DESIGN-JOURNAL.md`](docs/ai/DESIGN-JOURNAL.md), and the verbatim prompt log [`docs/ai/PROMPTS.md`](docs/ai/PROMPTS.md):
+This repository was built using a structured, human-gated AI engineering harness documented in [`AGENTS.md`](AGENTS.md), [`docs/ai/AI-USAGE.md`](docs/ai/AI-USAGE.md), [`docs/ai/context/AGENT-REGISTRY.md`](docs/ai/context/AGENT-REGISTRY.md), [`docs/ai/ORCHESTRATION.md`](docs/ai/ORCHESTRATION.md), [`docs/layers/PRODUCTION-LAYERS.md`](docs/layers/PRODUCTION-LAYERS.md), [`docs/PROGRESS.md`](docs/PROGRESS.md), [`docs/ai/DESIGN-JOURNAL.md`](docs/ai/DESIGN-JOURNAL.md), and the verbatim prompt log [`docs/ai/PROMPTS.md`](docs/ai/PROMPTS.md):
 
 - **Phase loop with human checkpoints:** every phase (`Phase 00`–`Phase 11`) stopped at **Checkpoint A** (plan & trade-off approval) and **Checkpoint B** (PR review & squash-merge approval) with test-first development (`test-designer`) and three mandatory read-only verification subagents (`security-auditor`, `dotnet-reviewer`, and `spec-checker`).
-- **Cross-IDE & cross-model portability showcase:** Phases `00`–`07` (implementation) were executed in **Claude Code (Claude Opus 5.5 / Sonnet 4.6)**, and from Phase `07`'s verification gates onward (`Phases 07`–`11`) development was intentionally switched to **Google Antigravity IDE (Gemini 4 Argon)**. Because all project context, architectural boundaries, rules (`.claude/rules/`), skills (`.claude/skills/`), and subagent prompts (`.claude/agents/`) live in version-controlled Markdown in the repository, the second IDE and model picked up mid-phase and caught additional edge cases (`DevTokenRequest`/`DevTokenResponse` `ToString()` redaction and duplicate JSON `"sub"` keys in `P07-10`) without changing a single rule or workflow file.
+- **Cross-IDE & cross-model portability (exact handover at `3320a82` / `P07-08`):** Phases `00`–`06`, Harness `H1`, and the initial Phase `07` implementation up to commit `3320a82` (prompts `P00-01`–`P07-07`) were executed in **Claude Code (Claude Opus 5.5 / Sonnet 4.6)**. At commit `3320a82` on branch `phase-07-auth` (prompt `P07-08`, `2026-11-16`), development was intentionally handed over to **Google Antigravity IDE (Gemini 4 Argon)** for Phase `07`'s verification gates (`P07-09`–`P07-11`), gate fixes (`83b2bd3`–`1fe0bdf`), `PR #11` merge (`e1c841d`), and all of Phases `08`–`11` (`PRs #12`, `#19`, `#20`, `#21`). Because all project context, architectural boundaries, rules (`.claude/rules/`), skills (`.claude/skills/`), and subagent prompts (`.claude/agents/`) live in version-controlled Markdown in the repository, the second IDE and model picked up mid-phase and caught additional edge cases (`DevTokenRequest`/`DevTokenResponse` `ToString()` redaction and duplicate JSON `"sub"` keys in `P07-10`) without changing a single rule or workflow file.
