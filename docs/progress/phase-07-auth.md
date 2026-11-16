@@ -199,6 +199,19 @@ Integration tests 3 more times (`dotnet test --project tests/MortgageApplication
 
 **Cases implemented** (ID in a comment above each): AU01–AU04, AU06, AU10, AU11, AU13–AU16, AU18, AU20, AU21, AU23, AU24 (DER and PEM secrets), AU26–AU29, AU31 and AU32 (checked on every bad-token case), AU40, AU42, AU50, AU51, AU52, AU54, AU60, AU61, AU64 (Staging, Production), AU65 (plus a test for A10), AU66–AU69, AU71, AU80 (Production; Staging = AU81), AU82, AU83, AU85 (including an invalid PEM), AU87, AU90, AU92, AU100, AU101, AU110. AU111 is the CI run itself (not done here).
 
+### Results after the gates
+
+The ten gate findings were fixed test-first on the branch (commits `828573e` tests, `7b681a5` and `64b90e0` fixes, `e0ba9d2` ADR 0004 and production layers). How each was proved (red run and mutation run saved locally in the scratchpad as `p7-gates-red.txt` and `p7-gates-mutation.txt`, not in the repo):
+
+- **Red first** (`828573e`, before any app change: 263 integration tests, 6 failed): G1 launch profiles (`Development_launch_profiles_enable_dev_auth`) and requests.http (`Requests_file_sends_a_token_on_every_api_request`); G2 dev auth with a configured key (`Startup_with_dev_auth_and_a_signing_key_fails`, no exception was thrown); G3 bearer `Authority` setting (`Bearer_scheme_authority_setting_is_ignored`, `Authority` was the configured URL); G5 numeric `sub` (created, 201); G10 `TokenRejected` event (none written).
+- **Temporary mutation, then reverted** (all at once on the pre-fix code; `git checkout` restored the files): `ClockSkew` 31 s, `RequireExpirationTime = false`, `ValidAlgorithms` removed, the token read from `?access_token=`, the single-`sub` check relaxed to "at least one", `SigningPublicKey` reading any PEM with `ImportFromPem` and no curve check, and AU40 sending `not-a-guid` as the route values. 11 of 74 tests in the three classes failed. Caught: the options guard (G4); "no exp claim" (G4); the query-string token (G4); P-384 and both private-key PEMs (G6); AU40's new endpoint check (G7: an unmatched path is a 401 too, so the old check would have passed). The other failures were the G2, G3 and G5-numeric red cases above.
+- **Passed first, and no mutation changed them**, recorded as they are: the ES384 header (with `ValidAlgorithms` removed it is still a 401, because the ES256 signature does not verify as ES384); the two-value `sub` array and the object `sub` (IdentityModel rejects them when it reads the token, before our check; relaxing our count check changed nothing); the RSA public PEM (cannot be imported as ECDSA either way); another key with an unknown `kid`, its own `jwk` or a `jku` (IdentityModel does not use these headers to find keys; no mutation was tried, as it would mean writing a key resolver); a trusted-key token with an unknown `kid` is accepted (pinned: `kid` is not a trust anchor); lowercase `bearer` is accepted (the handler matches the scheme name case-insensitively); the AU92 control now asserts the Debug host's logs contain `sentinel-issuer-41`, which they do, so the main assertion can fail (G9).
+- **G8** (AU16 robustness, no behaviour change): a warm-up request before the near-expiry token, and margins of 15 s inside and 45 s outside the 30 s skew (AU15 and AU16). There is no nbf pair (only AU18, 5 minutes ahead), so nothing else changed.
+- **Fix found going green:** the `ClaimValueTypes.String` check alone did not reject a numeric `sub`, because IdentityModel turns `12345` into a claim of type String. `SubjectClaim` now also checks that `sub` is a JSON string in the token's payload.
+- **Verify** (`./scripts/verify.sh`, full, after `e0ba9d2`): build 0 warnings, 0 errors; 537 tests, 0 failed; hook tests 91 passed; format check passed; `VERIFY PASSED (full)`.
+- **Integration tests 3 times:** 263 total, 0 failed in each run (15.8 s, 16.1 s, 15.9 s).
+- Not done: `dotnet run` with the launch profile and requests.http were not run by hand (the file tests check the settings; the compose run already showed `/dev/token` working in Development); the docker smoke test was not re-run after these fixes (compose has no `Jwt:SigningPublicKey`, so the new startup rule does not apply to it).
+
 ## Security gate
 
 ## Review gate
@@ -211,14 +224,16 @@ Integration tests 3 more times (`dotnet test --project tests/MortgageApplication
 
 - This session still has the agent definitions loaded before the H1 cut (H1 review R3). Restart Claude Code before the `test-designer` step.
 - **For Alessandro: anonymous unknown paths are 401, not 404.** The fallback policy also applies when no endpoint matches, so without a token `/no-such-path`, `/dev/token` outside Development (or without the flag) and `/openapi/v1.json` in Production are 401; with a valid token they are 404. AU64, AU65 and AU101 assert "same status as an unknown path" plus the authenticated 404. Accepting this seems right (it reveals no routes); the alternative is a custom middleware.
-- **For Alessandro: dev key with a configured key.** When `DevAuth:Enabled` is true in Development, the in-memory key pair is generated even if `Jwt:SigningPublicKey` is set, and both keys are trusted. The plan said "no key configured"; without this the endpoint would issue tokens the API rejects. Not covered by a test.
+- Resolved by the gates: dev key with a configured key. Startup now fails when `DevAuth:Enabled` is on and `Jwt:SigningPublicKey` is set (G2), so the dev key is the only trusted key in dev mode.
 - `error="invalid_token"` comes from an `OnChallenge` event: with `IncludeErrorDetails = false` the handler itself sends a bare `Bearer` (A5 wanted the error code without a description).
-- A token with more than one `sub` claim is rejected; not covered by a test.
+- Resolved by the gates: a `sub` array, number or object is a 401 (G5 tests).
+- New log field: the `TokenRejected` event carries `FailureType` (an exception type name, or `InvalidSubject`). It is not personal data, but rules section 6 (logging allowlist) and test O22's `_logKeys` do not name it yet; O22 does not see it because it sends no rejected token. Needs Alessandro's decision on adding it to the allowlist.
+- Settings under `Authentication:Schemes:Bearer:SigningKeys` (or other `TokenValidationParameters` bound by the framework) are replaced by the app's own parameters; only `Authority` and `MetadataAddress` are covered by a test (G3).
 - Default token: `ApiFactory` sets it in `ConfigureClient` (the client's default Authorization header), not in a `DelegatingHandler`. `CreateDefaultClient` is not virtual, so a handler cannot be added to every client; `ConfigureClient` runs for every client, after any handlers a test passes, and a request's own Authorization header wins.
 - If anyone lowers `Microsoft.AspNetCore.Authentication` below `Warning`, token issuer (and other IdentityModel non-PII values) reach the logs again (AU92 control).
 - The `ci.yml` change took three edits, not one (the remaining `curl -H @auth-header.txt` additions were missed in the first edit).
 - Commit `b28b2c1` alone does not pass every test: the corrected expectations are in `0b996c4` and AU110 passes only after `1d0944f`. The branch tip passes.
-- Not done here (lead's later steps): ADR 0004, README, security gate, review gate, spec check, a real CI run (AU111, including that `::add-mask::` hides the token on GitHub).
+- Not done here (lead's later steps): README, a real CI run (AU111, including that `::add-mask::` hides the token on GitHub). ADR 0004 was updated for the gate fixes (`e0ba9d2`); its status is still Proposed.
 
 ## Time spent (approx.)
 
