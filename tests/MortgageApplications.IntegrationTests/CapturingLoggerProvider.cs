@@ -39,8 +39,10 @@ public sealed class CapturingLoggerProvider : ILoggerProvider, ISupportExternalS
         string? Exception,
         IReadOnlyList<KeyValuePair<string, string?>> State,
         IReadOnlyList<KeyValuePair<string, string?>> Scopes,
-        string? TraceId)
+        string? TraceId,
+        long TimestampTicks)
     {
+        public TimeSpan ElapsedSince(LogEntry earlier) => Stopwatch.GetElapsedTime(earlier.TimestampTicks, TimestampTicks);
         /// <summary>
         /// Everything a log sink would store for this entry: message, exception, state and scope values. The
         /// activity-tracking scope IDs (trace, span and parent ID) are left out: they are random hex, which could
@@ -87,7 +89,8 @@ public sealed class CapturingLoggerProvider : ILoggerProvider, ISupportExternalS
                 exception?.ToString(),
                 Pairs(state),
                 scopes,
-                Activity.Current?.TraceId.ToHexString()));
+                Activity.Current?.TraceId.ToHexString(),
+                Stopwatch.GetTimestamp()));
         }
     }
 }

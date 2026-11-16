@@ -10,4 +10,5 @@ namespace MortgageApplications.Core.Applications;
 public sealed record AssessmentProcessingResult(
     AssessmentProcessingOutcome Outcome,
     Guid? ApplicationId,
-    Decision? Decision);
+    Decision? Decision,
+    string? RulesVersion = null);

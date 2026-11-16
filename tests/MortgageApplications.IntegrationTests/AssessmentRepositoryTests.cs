@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MortgageApplications.Core.Affordability;
 using MortgageApplications.Core.Applications;
+using MortgageApplications.Infrastructure.Persistence;
 
 namespace MortgageApplications.IntegrationTests;
 
@@ -68,6 +70,67 @@ public sealed class AssessmentRepositoryTests(ApiFactory factory) : IClassFixtur
         Assert.Equal(failedAt, reloaded.FailedAt);
         Assert.Null(reloaded.AssessedAt);
         Assert.Null(reloaded.Result);
+    }
+
+    // P9-T2 (PR #8 /code-review 3): FindForProcessingAsync projects the 5 scalar inputs without tracking the parent
+    // MortgageApplication, and UpdateAssessmentAsync on the already-tracked assessment leaves immutable columns
+    // (Id, ApplicationId, CreatedAt, FailedAt) unmodified.
+    [Fact]
+    public async Task FindForProcessingAsync_does_not_track_application_and_update_modifies_only_changed_columns()
+    {
+        var seeded = await SeedPendingAsync();
+        var assessedAt = Now();
+        var expected = Calculator().Assess(_e1);
+
+        await using (var scope = _host.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<MortgageApplicationsDbContext>();
+            var repository = scope.ServiceProvider.GetRequiredService<IMortgageApplicationRepository>();
+
+            var work = (await repository.FindForProcessingAsync(seeded.Id, Http.Ct))!;
+
+            Assert.Equal(_e1, work.Inputs);
+            Assert.Empty(db.ChangeTracker.Entries<MortgageApplication>());
+            var entry = Assert.Single(db.ChangeTracker.Entries<AffordabilityAssessment>());
+            Assert.Equal(EntityState.Unchanged, entry.State);
+
+            work.Assessment.Complete(expected, assessedAt);
+            var modifiedBeforeSave = entry.Properties.Where(p => p.IsModified).Select(p => p.Metadata.Name).Order(StringComparer.Ordinal).ToList();
+            Assert.Equal(["AssessedAt", "Result", "Status"], modifiedBeforeSave);
+
+            // Guard: if UpdateAssessmentAsync called db.Assessments.Update on the tracked entity, every non-key property
+            // (including ApplicationId, CreatedAt and FailedAt) would become IsModified = true before SaveChangesAsync.
+            var modifiedOnSaving = new List<string>();
+            db.SavingChanges += (_, _) =>
+                modifiedOnSaving.AddRange(entry.Properties.Where(p => p.IsModified).Select(p => p.Metadata.Name));
+            await repository.UpdateAssessmentAsync(work.Assessment, Http.Ct);
+            Assert.Equal(["AssessedAt", "Result", "Status"], modifiedOnSaving.Order(StringComparer.Ordinal));
+        }
+
+        var reloaded = (await WithRepositoryAsync(r => r.FindAssessmentAsync(seeded.ApplicationId, seeded.Id, _owner, Http.Ct)))!;
+        Assert.Equal(AssessmentStatus.Completed, reloaded.Status);
+        Assert.Equal(assessedAt, reloaded.AssessedAt);
+    }
+
+    // P9-T8: UpdateAssessmentAsync still saves an assessment loaded in another scope (EntityState.Detached fallback).
+    [Fact]
+    public async Task UpdateAssessmentAsync_saves_a_detached_assessment()
+    {
+        var seeded = await SeedPendingAsync();
+        var assessedAt = Now();
+        var expected = Calculator().Assess(_e1);
+        var detached = (await WithRepositoryAsync(r => r.FindAssessmentAsync(seeded.ApplicationId, seeded.Id, _owner, Http.Ct)))!;
+        detached.Complete(expected, assessedAt);
+
+        await WithRepositoryAsync(async r =>
+        {
+            await r.UpdateAssessmentAsync(detached, Http.Ct);
+            return true;
+        });
+
+        var reloaded = (await WithRepositoryAsync(r => r.FindAssessmentAsync(seeded.ApplicationId, seeded.Id, _owner, Http.Ct)))!;
+        Assert.Equal(AssessmentStatus.Completed, reloaded.Status);
+        Assert.Equal(assessedAt, reloaded.AssessedAt);
     }
 
     // The processing load returns the stored inputs with a tracked assessment, which UpdateAssessmentAsync saves.

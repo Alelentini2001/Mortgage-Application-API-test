@@ -381,8 +381,9 @@ public sealed class AssessmentWorkerTests
         var client = host.CreateClient();
 
         Assert.Equal("Completed", Http.Status(await client.PollUntilFinishedAsync(location)));
-        Assert.Single(factory.Logs.Entries, e => e.EventName == "RequeueFailed");
-        Assert.Single(factory.Logs.Entries, e => e.EventName == "PendingRequeued");
+        var requeueFailed = Assert.Single(factory.Logs.Entries, e => e.EventName == "RequeueFailed");
+        var pendingRequeued = Assert.Single(factory.Logs.Entries, e => e.EventName == "PendingRequeued");
+        Assert.True(pendingRequeued.ElapsedSince(requeueFailed) >= TimeSpan.FromMilliseconds(800));
     }
 
     // W-6: stopping an idle worker returns quickly, ends its loop normally and logs no error.
