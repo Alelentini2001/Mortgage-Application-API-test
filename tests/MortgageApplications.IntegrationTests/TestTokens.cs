@@ -78,6 +78,14 @@ internal static class TestTokens
     public static string Es256(object header, IDictionary<string, object> payload, ECDsa key) =>
         Raw(header, payload, input => Encode(key.SignData(input, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation)));
 
+    /// <summary>A hand-built ES256 token with a raw JSON payload string (for duplicate JSON properties).</summary>
+    public static string Es256RawJson(object header, string payloadJson, ECDsa key)
+    {
+        var signingInput = $"{Encode(JsonSerializer.SerializeToUtf8Bytes(header))}.{Encode(Encoding.UTF8.GetBytes(payloadJson))}";
+        var signature = Encode(key.SignData(Encoding.ASCII.GetBytes(signingInput), HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
+        return $"{signingInput}.{signature}";
+    }
+
     /// <summary>The spec's claims as a JSON payload: iat, nbf, exp, and iss, aud and sub when set.</summary>
     public static Dictionary<string, object> Payload(TokenSpec spec)
     {

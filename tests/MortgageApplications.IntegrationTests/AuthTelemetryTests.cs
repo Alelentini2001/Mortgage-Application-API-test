@@ -84,15 +84,22 @@ public sealed class AuthTelemetryTests
     }
 
     // G10 (gate item 10): with the framework's rejection logs hidden at Warning, the app writes its own
-    // TokenRejected event (Information) for a rejected token, holding only the failure's exception type name: no
-    // message, token, issuer or subject.
-    [Fact]
-    public async Task Rejected_token_writes_a_token_rejected_event_with_the_failure_type_only()
+    // TokenRejected event (Information) for a rejected token (both OnAuthenticationFailed and OnTokenValidated's
+    // InvalidSubject path), holding only the failure type: no message, token, issuer or subject.
+    [Theory]
+    [InlineData("tampered signature", "^[A-Za-z]+Exception$")]
+    [InlineData("invalid subject", "^InvalidSubject$")]
+    public async Task Rejected_token_writes_a_token_rejected_event_with_the_failure_type_only(string kind, string expectedPattern)
     {
         await using var factory = new ApiFactory();
         const string issuer = "sentinel-issuer-51";
         const string subject = "sentinel-subject-52";
-        var token = TestTokens.TamperSignature(factory.Sign(TokenSpec.Valid(subject) with { Issuer = issuer }));
+        var token = kind switch
+        {
+            "tampered signature" => TestTokens.TamperSignature(factory.Sign(TokenSpec.Valid(subject) with { Issuer = issuer })),
+            "invalid subject" => factory.Sign(TokenSpec.Valid(new string('s', 129)) with { Issuer = ApiFactory.Issuer }),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown rejection kind."),
+        };
 
         var response = await factory.CreateAnonymousClient()
             .PostJsonWithAuthorizationAsync("/api/applications", Http.BaseBody, $"Bearer {token}");
@@ -104,7 +111,7 @@ public sealed class AuthTelemetryTests
         Assert.Null(entry.Exception);
         var (key, failureType) = Assert.Single(entry.State, kv => kv.Key != "{OriginalFormat}");
         Assert.Equal("FailureType", key);
-        Assert.Matches("^[A-Za-z]+Exception$", failureType);
+        Assert.Matches(expectedPattern, failureType);
         foreach (var sentinel in token.Split('.').Append(token).Append(issuer).Append(subject))
         {
             Assert.DoesNotContain(sentinel, entry.Text, StringComparison.Ordinal);

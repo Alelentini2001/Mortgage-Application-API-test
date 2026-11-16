@@ -157,6 +157,7 @@ public sealed class AuthenticationTests(ApiFactory factory) : IClassFixture<ApiF
         "G5 numeric sub",
         "G5 object sub",
         "G5 array of two subs",
+        "G5 duplicate sub properties",
     ];
 
     // AU16: a token that expired 15 s ago is inside the 30 s clock skew and still accepted (A2: real clock; gate item
@@ -294,6 +295,11 @@ public sealed class AuthenticationTests(ApiFactory factory) : IClassFixture<ApiF
             "G5 object sub" => TestTokens.Es256(Es256Header, With(payload, "sub", new { id = _sentinelOwner }), factory.SigningKey),
             "G5 array of two subs" =>
                 TestTokens.Es256(Es256Header, With(payload, "sub", new[] { _sentinelOwner, "bob" }), factory.SigningKey),
+            "G5 duplicate sub properties" =>
+                TestTokens.Es256RawJson(
+                    Es256Header,
+                    $$"""{"iat":{{payload["iat"]}},"nbf":{{payload["nbf"]}},"exp":{{payload["exp"]}},"iss":"{{ApiFactory.Issuer}}","aud":"{{ApiFactory.Audience}}","sub":"{{_sentinelOwner}}","sub":"bob"}""",
+                    factory.SigningKey),
             _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown bad token case."),
         };
     }

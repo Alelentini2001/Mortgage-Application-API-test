@@ -132,6 +132,21 @@ public sealed class StartupTests
         { "Jwt:SigningPublicKey", "not-a-pem-key" },
     };
 
+    // Review gate: the exact valid limits of Jwt:TokenLifetimeMinutes (1 and 60) start the app.
+    [Theory]
+    [MemberData(nameof(ValidTokenLifetimeLimits))]
+    public async Task Startup_with_token_lifetime_at_a_limit_starts(string minutes)
+    {
+        using var factory = new ApiFactory();
+        using var valid = factory.WithWebHostBuilder(builder => builder.UseSetting("Jwt:TokenLifetimeMinutes", minutes));
+
+        var response = await valid.CreateClient().GetPathAsync("/health");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    public static TheoryData<string> ValidTokenLifetimeLimits => ["1", "60"];
+
     // G2 (gate item 2, fail closed): the dev token endpoint and a configured signing key cannot be on together, so
     // the dev key is always the only trusted key when DevAuth is on. The message names both settings, not the key.
     [Fact]

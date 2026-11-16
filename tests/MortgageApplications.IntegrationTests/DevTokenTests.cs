@@ -40,6 +40,10 @@ public sealed class DevTokenTests(ApiFactory factory) : IClassFixture<ApiFactory
         var expiresAt = body.RootElement.GetProperty("expiresAt").GetDateTimeOffset();
         Assert.Equal(token.ValidTo, expiresAt.UtcDateTime);
         Assert.InRange(expiresAt, DateTimeOffset.UtcNow.AddSeconds(895), DateTimeOffset.UtcNow.AddSeconds(905));
+        foreach (var forbidden in text.Split('.').Append(text).Append("alice"))
+        {
+            Assert.DoesNotContain(factory.Logs.Entries, e => e.Text.Contains(forbidden, StringComparison.Ordinal));
+        }
     }
 
     // AU61: a token from the endpoint is accepted by the same host's real validation path.
