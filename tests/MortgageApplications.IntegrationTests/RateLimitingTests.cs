@@ -153,6 +153,33 @@ public sealed class RateLimitingTests(ApiFactory factory) : IClassFixture<ApiFac
         Assert.Equal(HttpStatusCode.Created, authorized.StatusCode);
     }
 
+    // Gate R1/S1: sending a valid Bearer token to POST /dev/token still uses the "dev-token" partition (cannot rotate
+    // tokens to bypass the /dev/token limit), and an authenticated user whose sub is "dev-token" has a separate
+    // prefixed bucket ("sub:dev-token") from POST /dev/token.
+    [Fact]
+    public async Task Dev_token_ignores_bearer_sub_and_does_not_collide_with_sub_named_dev_token()
+    {
+        using var host = factory.WithWebHostBuilder(builder => builder
+            .UseSetting("DevAuth:Enabled", "true")
+            .UseSetting("Jwt:SigningPublicKey", "")
+            .UseSetting("RateLimiting:PermitLimit", "1")
+            .UseSetting("RateLimiting:WindowSeconds", "60"));
+        var anonymous = host.CreateClient().WithoutToken();
+
+        var first = await anonymous.PostJsonAsync("/dev/token", """{"subject":"dev-token"}""");
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        using var doc = System.Text.Json.JsonDocument.Parse(await first.BodyAsync());
+        var token = doc.RootElement.GetProperty("token").GetString()!;
+
+        var secondWithBearer = await host.CreateClient().WithToken(token)
+            .PostJsonAsync("/dev/token", """{"subject":"bob"}""");
+        var apiCallAsDevTokenSubject = await host.CreateClient().WithToken(token)
+            .PostJsonAsync("/api/applications", Http.BaseBody);
+
+        await AssertTooManyRequestsAsync(secondWithBearer, maxWindowSeconds: 60);
+        Assert.Equal(HttpStatusCode.Created, apiCallAsDevTokenSubject.StatusCode);
+    }
+
     private WebApplicationFactory<Program> WithRateLimit(int permitLimit, int windowSeconds) =>
         factory.WithWebHostBuilder(builder => builder
             .UseSetting("RateLimiting:PermitLimit", permitLimit.ToString(CultureInfo.InvariantCulture))

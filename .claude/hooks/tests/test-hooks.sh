@@ -81,6 +81,12 @@ bash_cmd 2 'ln -sf /bin/true .claude/hooks/block-dangerous-bash.sh'
 bash_cmd 2 'bash -c "echo x > .claude/hooks/protect-files.sh"'
 bash_cmd 2 "python3 -c \"open('.claude/hooks/block-dangerous-bash.sh','w').write('x')\""
 bash_cmd 2 "python3 -c \"import pathlib; pathlib.Path('.claude/settings.json').write_text('{}')\""
+bash_cmd 2 'cp /tmp/x .claude/hooks'
+bash_cmd 2 'mv .claude/hooks/block-dangerous-bash.sh /tmp/x'
+bash_cmd 2 'mv .claude/settings.json /tmp/x'
+bash_cmd 2 'rm -f .claude/hooks/block-dangerous-bash.sh'
+bash_cmd 2 'chmod -x .claude/hooks/block-dangerous-bash.sh'
+bash_cmd 2 "python3 -c \"import shutil; shutil.rmtree('.claude/hooks')\""
 
 # --- block-dangerous-bash: must allow (0) ---
 bash_cmd 0 'git push --force-with-lease origin x'
@@ -124,6 +130,8 @@ edit_file 2 '.git/config'
 edit_file 0 'src/MortgageApplications.Api/Program.cs'
 edit_file 0 'src/X/Migrations/20260101_New.cs'
 edit_file 0 'docs/env-setup.md'
+edit_file 0 '.claude/settings.json'
+edit_file 0 '.claude/hooks/block-dangerous-bash.sh'
 
 # --- verify-on-stop: loop guard and no-change skip (fast paths, no build) ---
 expect 0 verify-on-stop.sh '{"stop_hook_active":true}'
