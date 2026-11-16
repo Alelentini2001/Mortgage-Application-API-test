@@ -1,6 +1,6 @@
 # Phase 08: Security hardening
 
-Status: **In progress: plan approved (2026-11-16), test design next** · Branch: `phase-08-security` · PR: — · Started: 2026-11-16 · Finished: —
+Status: **In progress: awaiting test proposal approval** · Branch: `phase-08-security` · PR: — · Started: 2026-11-16 · Finished: —
 
 ## Goal
 
@@ -88,9 +88,47 @@ Planning and orchestration in Google Antigravity IDE (Gemini 4 Argon), continuin
 - **Purpose:** Checkpoint A approval of the Phase 8 plan and decisions `P8-D1` to `P8-D6` (all Option A).
 - **Outcome:** decisions recorded; `test-designer` invoked (`P08-03`).
 
+### P08-03 · agent→subagent (`test-designer` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Phase 8 (security hardening) of a .NET 10 mortgage-application API in /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-08-security). Propose test cases for the approved plan; do not write code.
+
+  Read first:
+  - `docs/progress/phase-08-security.md` (goal, plan, approved decisions P8-D1 to P8-D6, all Option A)
+  - `docs/layers/PRODUCTION-LAYERS.md` ("Security", "Rate limiting", "Scaling")
+  - `.claude/rules/security.md`, `.claude/rules/tests.md`, `tests/CLAUDE.md`
+  - `src/MortgageApplications.Api/Program.cs`, `src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs`, `src/MortgageApplications.Api/Assessments/*`, `src/MortgageApplications.Api/Identity/DevTokenEndpoint.cs`, `src/MortgageApplications.Api/appsettings.json`
+  - `tests/MortgageApplications.IntegrationTests/` (`ApiFactory.cs`, `AssessmentWorkerTests.cs`, `StartupTests.cs`, `ComposeFileTests.cs`, `LocalRunFileTests.cs`)
+  - `.claude/hooks/block-dangerous-bash.sh`, `.claude/hooks/tests/test-hooks.sh`
+  - `Dockerfile`, `compose.observability.yaml`, `scripts/verify.sh`, `.github/workflows/ci.yml`
+
+  What will be built (P8-D1 to P8-D6, all Option A):
+  1. Rate limiting (P8-D1): Built-in AddRateLimiter fixed-window policy on POST /api/applications, POST /api/applications/{id}/assessments, and POST /dev/token, partitioned by authenticated owner sub (and a separate "dev-token" partition for /dev/token), QueueLimit = 0, returning 429 Too Many Requests (ProblemDetails: status, title, traceId) + Retry-After header (seconds), creating or queueing nothing on 429. GET endpoints and /health are not rate-limited by this write policy. Options RateLimiting:PermitLimit ([Range(1, 10_000)], default 60) and RateLimiting:WindowSeconds ([Range(1, 3600)], default 60), validated at startup. Unauthenticated requests to /api/* still get 401 before consuming a rate-limit permit.
+  2. Bounded enqueue timeout (P8-D2): Configurable Assessments:EnqueueTimeoutSeconds ([Range(1, 300)], default 10 s, validated at startup) around IAssessmentQueue.EnqueueAsync when POST /api/applications/{id}/assessments waits on a full queue (QueueCapacity = 1, worker held). When the enqueue times out, the endpoint returns 503 Service Unavailable (ProblemDetails, no internal exception details leaked), while the saved Pending assessment row remains in SQLite so the worker/startup recovery completes it once released. A client disconnect (RequestAborted) still cancels without returning 503.
+  3. Security headers, HSTS, and AllowedHosts (P8-D3): Every response includes X-Content-Type-Options: nosniff, X-Frame-Options: DENY, and Referrer-Policy: no-referrer; /api/* and /dev/token responses also include Cache-Control: no-store. Outside Development, UseHsts() is enabled (sending Strict-Transport-Security over HTTPS requests). AllowedHosts in appsettings.json is "localhost;127.0.0.1", so an untrusted Host header (e.g. Host: evil.example) returns 400 Bad Request, while localhost and 127.0.0.1 succeed.
+  4. NuGet lock files & source mapping (P8-D4): nuget.config with <clear />, nuget.org (https://api.nuget.org/v3/index.json), and <packageSourceMapping> (* -> nuget.org); <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile> in Directory.Build.props; 5 packages.lock.json files committed; dotnet restore --locked-mode in scripts/verify.sh, Dockerfile, and .github/workflows/ci.yml.
+  5. Container digest pinning & Dependabot (P8-D5): Multi-arch @sha256:... digests on mcr.microsoft.com/dotnet/sdk:10.0 and mcr.microsoft.com/dotnet/aspnet:10.0 in Dockerfile and mcr.microsoft.com/aspire/dashboard:13.6.2 in compose.observability.yaml; .github/dependabot.yml covering nuget, docker, and github-actions (weekly).
+  6. Bash hook self-protection (P8-D6): block-dangerous-bash.sh blocks shell writes (redirects >/>>, tee, sed -i, cp/mv/ln, and inline python/sh -c writes) targeting .claude/hooks/** or .claude/settings*.json with exit code 2, tested in .claude/hooks/tests/test-hooks.sh.
+
+  Use your output format (ID | given | when | then | why it matters), mark each case must or nice, keep the list tight and high-value, and list any ambiguities for Alessandro to settle.
+  ```
+- **Purpose:** propose Phase 8 test cases before writing any tests.
+- **Outcome:** 25 test cases (`S8-01` to `S8-25`) and 3 questions (`A1`–`A3`); full text in [`phase-08/test-proposal.md`](phase-08/test-proposal.md).
+
 ## What was built (files)
 
 ## Tests
+
+### Proposal (`test-designer`, P08-03)
+
+Full proposal, verbatim: [`phase-08/test-proposal.md`](phase-08/test-proposal.md).
+
+**Recommended selection:** all 24 `must` cases (`S8-01`–`S8-06`, `S8-08`–`S8-25`) plus `S8-07` (`nice`, 1 s fixed-window replenishment).
+
+**Questions and recommended answers:**
+- **A1 (Shared vs per-endpoint write bucket, `P8-D1`):** One shared `"write"` policy partitioned by authenticated `sub` across `POST /api/applications` and `POST /api/applications/{id}/assessments` (and `"dev-token"` as its own partition key on `POST /dev/token`).
+- **A2 (`UseHsts()` default `ExcludedHosts` vs `AllowedHosts`, `P8-D3`):** Keep ASP.NET Core's default `HstsOptions.ExcludedHosts` intact (so `localhost` browsers are never HSTS-pinned) and in `S8-19` configure `AllowedHosts = "localhost;127.0.0.1;example.com"` on the test host and send `https://example.com/health`.
+- **A3 (`Cache-Control: no-store` scope, `P8-D3`):** Set `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and `Cache-Control: no-store` on all responses from our middleware (an API-only service has no cacheable static assets; setting `no-store` across responses is simple and uniform, and satisfies `S8-01`, `S8-03`, and `S8-18`).
 
 ## Security gate
 
