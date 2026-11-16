@@ -112,5 +112,12 @@ Chronological record of ideas, options, rejected ideas, who decided, and what ch
 - **Supply-chain locks and digest pins (`P8-D4`, `P8-D5`).** Added `nuget.config` (`<clear />`, `nuget.org` over HTTPS, `<packageSourceMapping>` `*`), `<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>` with 5 committed `packages.lock.json` files and `--locked-mode` restores across `verify.sh`, `Dockerfile` and CI, plus multi-arch `@sha256` digests in `Dockerfile` and `compose.observability.yaml` and `.github/dependabot.yml`.
 - **Harness self-protection (`P8-D6`, H1 review R4).** Extended `block-dangerous-bash.sh` to block shell writes and inline interpreter access to `.claude/hooks` and `.claude/settings*.json` (including `mv` source arguments, `rm` and `chmod`, caught by the Phase 8 gates), expanding `test-hooks.sh` to 113 cases.
 
+## 2026-11-16 · Phase 9: optimisation + quality
+
+- **Carried review items (`P9-D1`).** Resolved the carried review items from Phases 3, 5 and 6: exact `service.name` key parsing in `OTEL_RESOURCE_ATTRIBUTES`, stored `result.RulesVersion` forwarded through `AssessmentProcessingResult` to `AssessmentTelemetry` (with a single `OutcomeTag` write), scalar projection in `EfMortgageApplicationRepository.FindForProcessingAsync` so EF Core tracks only the assessment row, and `EntityState.Detached`-aware `UpdateAssessmentAsync` so EF Core writes only the 3 modified columns (`Status`, `Result`, `AssessedAt`/`FailedAt`).
+- **Database query plans, WAL and caching (`P9-D2`).** `DatabaseQueryPlanTests` uses a `DbCommandInterceptor` (`R1`) to capture the real SQL commands executed by `EfMortgageApplicationRepository` and runs `EXPLAIN QUERY PLAN`, proving every lookup uses an index/PK `SEARCH` (`IX_MortgageApplications_OwnerId`, `IX_AffordabilityAssessments_ApplicationId`) with `0` `SCAN` lines. `dotnet-reviewer` (`R3`) caught that EF Core only sets `PRAGMA journal_mode=WAL` when creating a brand-new SQLite file, leaving an existing `DELETE`-mode file unchanged; fixed in `DatabaseMigration.MigrateDatabaseAsync` (`0db33e8`). Because every `GET` is a sub-millisecond primary-key lookup on per-owner data (`Cache-Control: no-store`), output caching is not needed.
+- **Rule wording alignment (`P9-D4`).** Updated `.claude/rules/backend.md` and `tests/CLAUDE.md` to match the approved `P3-D1` (API-boundary DTO mapping) and `P9-D4` (`AffordabilityCalculatorPropertyTests` exception), clearing both open items in `docs/PROGRESS.md`.
+
+
 
 

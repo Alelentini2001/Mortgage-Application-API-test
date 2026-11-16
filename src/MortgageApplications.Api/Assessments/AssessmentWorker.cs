@@ -117,10 +117,13 @@ public sealed partial class AssessmentWorker(
                     .ProcessAssessmentAsync(assessmentId, stoppingToken);
             }
 
-            // The rules version is the configured one, which the calculator also uses (Q4: also for Failed). It is
-            // validated as required at startup.
+            // The rules version comes from the stored result when Completed, and from the configured options on Failed
+            // (PR #9 /code-review 2, P9-D1 A).
             telemetry.RecordProcessed(
-                activity, result, affordabilityOptions.Value.RulesVersion!, timeProvider.GetElapsedTime(started));
+                activity,
+                result,
+                result.RulesVersion ?? affordabilityOptions.Value.RulesVersion!,
+                timeProvider.GetElapsedTime(started));
             switch (result.Outcome)
             {
                 case AssessmentProcessingOutcome.Failed:

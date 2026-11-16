@@ -1,22 +1,19 @@
 # Progress
 
 ## Resume here
-- **Phase:** Phase 08 (security hardening) **merged** via [#12](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/12), approved by Alessandro at Checkpoint B (`P08-08`). Phase 07 merged before it (#11, `e1c841d`). Phase file: `docs/progress/phase-08-security.md`.
-- **Cross-IDE and cross-model portability:** started in Claude Code (Phases 00–07 implementation, Claude Opus 5.5 / Sonnet 4.6), then resumed in Google Antigravity IDE (Gemini 4 Argon) from Phase 07's gates through Phase 08 to showcase that `AGENTS.md`, `.claude/rules/`, `.claude/skills/`, and `.claude/agents/` (`test-designer`, `security-auditor`, `dotnet-reviewer`, `spec-checker`) run seamlessly across different IDEs and AI models.
+- **Phase:** Phase 09 (optimisation + quality) **merged** (PR [#19](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/19)). Phase 08 merged before it (#12, `f1a21ea`). Phase file: `docs/progress/phase-09-quality.md`.
+- **Cross-IDE and cross-model portability:** started in Claude Code (Phases 00–07 implementation, Claude Opus 5.5 / Sonnet 4.6), then resumed in Google Antigravity IDE (Gemini 4 Argon) from Phase 07's gates through Phases 08 and 09 to showcase that `AGENTS.md`, `.claude/rules/`, `.claude/skills/`, and `.claude/agents/` (`test-designer`, `security-auditor`, `dotnet-reviewer`, `spec-checker`) run seamlessly across different IDEs and AI models.
 - **Working rule from Alessandro (P06-12):** phases run one at a time from now on, no parallel worktrees.
-- **Built so far:** four endpoints under `/api/applications` (create 201, get, assess 202 + background worker, get assessment 200 with Pending/Completed/Failed), ES256 JWT bearer authentication (`RequireAuthenticatedUser` fallback policy, owner from `sub` via `ClaimsCurrentUser`, fail-closed `POST /dev/token`, OpenAPI bearer scheme), fixed-window per-subject write rate limiting (429 + `Retry-After`), bounded full-queue enqueue timeout (503 + startup recovery), HTTP security headers + HSTS + `AllowedHosts`, NuGet `packages.lock.json` + `<packageSourceMapping>` + `--locked-mode`, Docker multi-arch `@sha256` digest pins + Dependabot, bash hook self-protection (`.claude/hooks/**`), validation at the boundary, owner-scoped EF Core SQLite, ProblemDetails, OpenTelemetry tracing, metrics and logs with an allowlist test, opt-in Aspire dashboard; **274 unit + 303 integration tests (577 total) + 113 hook cases**.
-- **Next action:** Phase 09 (optimisation + quality) Checkpoint A (`docs/progress/phase-09-quality.md`).
+- **Built so far:** four endpoints under `/api/applications` (create 201, get, assess 202 + background worker, get assessment 200 with Pending/Completed/Failed), ES256 JWT bearer authentication (`RequireAuthenticatedUser` fallback policy, owner from `sub` via `ClaimsCurrentUser`, fail-closed `POST /dev/token`, OpenAPI bearer scheme), fixed-window per-subject write rate limiting (429 + `Retry-After`), bounded full-queue enqueue timeout (503 + startup recovery), HTTP security headers + HSTS + `AllowedHosts`, NuGet `packages.lock.json` + `<packageSourceMapping>` + `--locked-mode`, Docker multi-arch `@sha256` digest pins + Dependabot, bash hook self-protection (`.claude/hooks/**`), scalar-projected background processing load + minimal column updates, SQLite `EXPLAIN QUERY PLAN` index verification + `WAL` journal mode, OpenTelemetry tracing, metrics and logs with an allowlist test, opt-in Aspire dashboard; **275 unit + 311 integration tests (586 total) + 113 hook cases**.
+- **Next action:** Start Phase 10 (documentation / `README.md`) on branch `phase-10-docs`.
 - **Carry into later phases:**
-  - Phase 9: PR #9 `/code-review` 1–4 (service-name detection, rules version from the stored result, double outcome tag, signal-specific OTLP keys); `/code-review` 1, 5 and 7 from Phase 3; PR #8 `/code-review` 1 (row that always fails stays Pending), 2 (stream the sweep), 3 (processing load tracking), 5 (split the I-13/I-14 test); Phase 6 R7, R8, RR5 (test assumptions); concurrency token before any second worker (R6, ADR 0003).
-  - Phase 10: README, including `docker compose down -v` as the reset for a `data` volume with the wrong owner, `docker run --init` outside compose (ADR 0002), and how `Jwt:SigningPublicKey` / production OIDC plugs in (P7-D2 A, ADR 0004).
+  - Phase 10: `README.md` (R34–R42), including `docker compose down -v` as the reset for a `data` volume with the wrong owner, `docker run --init` outside compose (ADR 0002), how `Jwt:SigningPublicKey` / production OIDC plugs in (P7-D2 A, ADR 0004), and multi-instance worker scaling (`RowVersion` concurrency token and `AttemptCount` retry cap, ADR 0003, P9-D3 A).
 - **Open decisions / blockers for Alessandro:**
-  - Phase 3: `.claude/rules/backend.md` says reads "project to DTOs" but P3-D1 returns entities through the Core port: reword the rule or accept the exception (`/code-review` 3); optional ADR for the persistence choice (`/adr` is user-invoked).
-  - Optional ADR for the Core domain shape (P2-D1/D2): `/adr` is user-invoked only.
-  - Whether to write the property-test exception into `tests/CLAUDE.md` ("No logic in tests beyond setup"; Phase 2 `/code-review` finding 7).
+  - Optional ADRs for persistence (`P3-D1`) or Core domain shape (`P2-D1/D2`): `/adr` is user-invoked only.
   - `security-auditor` S10 (Phase 1): keep or redact local paths in the verbatim prompt logs before the repo goes public.
   - `spec-checker` questions (status wording, constraint rows R44/R50, final tag, optional scope R30–R33): see `docs/progress/phase-01-spec.md`, "Open issues".
   - Later: branch protection on `main` (require the CI checks).
-- **Last verify:** `./scripts/verify.sh` full → PASSED (**577 tests**: 274 unit + 303 integration; **113 hook cases**) on `phase-08-security` (`2a74405`), 2026-11-16.
+- **Last verify:** `./scripts/verify.sh` full → PASSED (**586 tests**: 275 unit + 311 integration; **113 hook cases**) on `phase-09-quality` (`4f152ee`), 2026-11-16.
 
 ## Phases
 
@@ -32,7 +29,7 @@
 | H1 | Harness: usage and model-choice rules (light) | Merged | `harness-01-context` | [#10](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/10) | docs only (442 tests unchanged) | 2026-11-15 |
 | 07 | Authentication + authorisation | Merged | `phase-07-auth` | [#11](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/11) | 274 unit + 268 integration, 542/542; CI `docker` job also checks 401 and `/dev/token` | 2026-11-16 |
 | 08 | Security hardening | Merged | `phase-08-security` | [#12](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/12) | 274 unit + 303 integration, 577/577 + 113 hook cases | 2026-11-16 |
-| 09 | Optimisation + quality | Not started | — | — | — | — |
+| 09 | Optimisation + quality | Merged | `phase-09-quality` | [#19](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/19) | 275 unit + 311 integration, 586/586 + 113 hook cases | 2026-11-16 |
 | 10 | Documentation | Not started | — | — | — | — |
 | 11 | Fresh-clone rehearsal + presentation | Not started | — | — | — | — |
 
@@ -41,7 +38,7 @@
 Snapshot at the end of Phase 3 (2026-11-14), produced by the `spec-checker` subagent (prompt P03-09) at `a446c64` from `docs/spec/ORIGINAL_SPEC.md`. Re-run at the end of every phase.
 
 **Status key.** "Met" needs code or a test. Design written down but not built is "partial".
-**Totals now:** 30 met · 10 partial · 15 missing after Phase 7 (R31 met, all four Optional Enhancements R30–R33 met; `spec-checker` P07-11). After Phase 5: 29 / 10 / 16 (R33 met; `spec-checker` P05-09). After Phase 6: 28 / 10 / 17 (R30 met, R13 now 202 + polling; `spec-checker` P06-08). After Phase 4: 27 / 10 / 18. End of Phase 3: 26 / 9 / 20.
+**Totals now:** 31 met · 10 partial · 14 missing after Phase 9 (R25 met; `spec-checker` P09-07). After Phase 7/8: 30 / 10 / 15 (R31 met, all four Optional Enhancements R30–R33 met; `spec-checker` P07-11). After Phase 5: 29 / 10 / 16 (R33 met; `spec-checker` P05-09). After Phase 6: 28 / 10 / 17 (R30 met, R13 now 202 + polling; `spec-checker` P06-08). After Phase 4: 27 / 10 / 18. End of Phase 3: 26 / 9 / 20.
 
 Paths: "Endpoints" = `src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs`; test classes are in `tests/MortgageApplications.IntegrationTests/` unless marked unit.
 
@@ -71,9 +68,9 @@ Paths: "Endpoints" = `src/MortgageApplications.Api/Applications/ApplicationEndpo
 | R22 | Clear model structure and relationships | Tech | met | One-to-many application → assessments via FK, index, cascade delete (`AffordabilityAssessmentConfiguration`); entities in `Core/Applications/`. No navigation properties and no direct cascade test (no delete endpoint) |
 | R23 | Use of validations | Tech | met | Same as R10, plus `AffordabilityOptionsValidator` (`StartupTests`) and strict JSON |
 | R24 | Thoughtful organisation of business logic | Tech | met | Core: calculator, `ApplicationInputRules`, `MortgageApplicationService`; Infrastructure: repository; thin Api handlers |
-| R25 | Clean and readable code | Tech | missing | Not judged by tests; Phase 9 clean-up pass |
+| R25 | Clean and readable code | Tech | met (judgement) | Phase 9 clean-up pass (`Program.cs`, `AssessmentTelemetry`, `AssessmentWorker`, `MortgageApplicationService`, `EfMortgageApplicationRepository`, `.claude/rules/backend.md`, `tests/CLAUDE.md`); `TreatWarningsAsErrors` + `dotnet format --verify-no-changes` |
 | R26 | Exposes a JSON API | Tech | met | `TypedResults` JSON bodies; integration tests parse them |
-| R27 | Automated tests are required | Testing | met | `tests/MortgageApplications.UnitTests/`, `tests/MortgageApplications.IntegrationTests/` (`WebApplicationFactory`); 577/577 + 113 hook cases |
+| R27 | Automated tests are required | Testing | met | `tests/MortgageApplications.UnitTests/`, `tests/MortgageApplications.IntegrationTests/` (`WebApplicationFactory`); 586/586 + 113 hook cases |
 | R28 | Tests for core business logic | Testing | met | `tests/MortgageApplications.UnitTests/Affordability/` (golden E1–E19, boundaries, rounding, culture, property tests) |
 | R29 | Tests for critical validation rules | Testing | met | `ValidationTests` (HTTP 400 per field and bound); unit `ApplicationInputRulesTests`, `InputGuardTests` |
 | R30 | Optional: background processing | Optional | met | `AssessmentWorker`, `ChannelAssessmentQueue` (`EnqueueTimeoutSeconds` → 503 + startup recovery), `IAssessmentQueue`; `AssessmentWorkerTests`; ADR 0003 |

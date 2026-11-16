@@ -14,8 +14,12 @@ namespace MortgageApplications.IntegrationTests;
 /// Production (the framework writes an empty 4xx and the status-code middleware writes the body): security L2,
 /// review F5.
 /// </summary>
-public sealed class JsonStrictnessTests(ApiFactory factory) : IClassFixture<ApiFactory>
+public sealed class JsonStrictnessTests(ApiFactory factory) : IClassFixture<ApiFactory>, IDisposable
 {
+    private readonly WebApplicationFactory<Program> _production =
+        factory.WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
+
+    public void Dispose() => _production.Dispose();
     // (environment, request body, a value that must not come back)
     public static TheoryData<string, string, string> BadBodies
     {
@@ -45,8 +49,7 @@ public sealed class JsonStrictnessTests(ApiFactory factory) : IClassFixture<ApiF
     [MemberData(nameof(BadBodies))]
     public async Task Post_unreadable_body_returns_400_problem_without_echo(string environment, string body, string sentinel)
     {
-        using var host = HostFor(environment);
-        var client = host.CreateClient();
+        var client = ClientFor(environment);
 
         var response = await client.PostJsonAsync("/api/applications", body);
 
@@ -72,8 +75,7 @@ public sealed class JsonStrictnessTests(ApiFactory factory) : IClassFixture<ApiF
     [MemberData(nameof(Environments))]
     public async Task Post_wrong_content_type_returns_415_problem(string environment)
     {
-        using var host = HostFor(environment);
-        var client = host.CreateClient();
+        var client = ClientFor(environment);
         var content = new StringContent(Http.BaseBody, Encoding.UTF8, "text/plain");
 
         var response = await client.PostAsync(new Uri("/api/applications", UriKind.Relative), content, Http.Ct);
@@ -81,8 +83,8 @@ public sealed class JsonStrictnessTests(ApiFactory factory) : IClassFixture<ApiF
         await response.AssertProblemAsync(HttpStatusCode.UnsupportedMediaType);
     }
 
-    private WebApplicationFactory<Program> HostFor(string environment) =>
-        factory.WithWebHostBuilder(builder => builder.UseEnvironment(environment));
+    private HttpClient ClientFor(string environment) =>
+        environment == "Production" ? _production.CreateClient() : factory.CreateClient();
 
     private async Task<int> CountApplicationsAsync()
     {

@@ -9,6 +9,6 @@ paths:
 - Errors return ProblemDetails (`AddProblemDetails` + `IExceptionHandler`), with the trace ID.
 - DI lifetimes: `DbContext` is scoped. Singletons (e.g. `BackgroundService`) create a scope per work item.
 - Async all the way; accept and pass `CancellationToken`.
-- Read queries use `AsNoTracking()` and project to DTOs.
+- Read queries use `AsNoTracking()` and map to DTOs at the API boundary (`P3-D1`).
 - Log with `[LoggerMessage]` source-generated methods. Never log monetary values or personal data.
 - Configuration via the options pattern (`IOptions<T>`), validated at startup.

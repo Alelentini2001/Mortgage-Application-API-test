@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MortgageApplications.Core.Affordability;
 using MortgageApplications.Core.Applications;
 
 namespace MortgageApplications.Infrastructure.Persistence;
@@ -36,21 +37,48 @@ internal sealed class EfMortgageApplicationRepository(MortgageApplicationsDbCont
                 && db.Applications.Any(a => a.Id == applicationId && a.OwnerId == ownerId))
             .SingleOrDefaultAsync(cancellationToken);
 
-    // Worker only (not owner-scoped). Tracked, so the change the worker makes is saved by UpdateAssessmentAsync in
-    // this context. The inputs are read as stored: the entity constructor EF uses does not re-check them.
+    // Worker only (not owner-scoped). Tracks only the assessment (projected scalar inputs avoid materializing or
+    // tracking the parent application, PR #8 /code-review 3), so the change the worker makes is saved by
+    // UpdateAssessmentAsync in this context.
     public async Task<AssessmentWorkItem?> FindForProcessingAsync(Guid assessmentId, CancellationToken cancellationToken)
     {
         var row = await db.Assessments
             .Where(s => s.Id == assessmentId)
-            .Join(db.Applications, s => s.ApplicationId, a => a.Id, (s, a) => new { Assessment = s, Application = a })
+            .Join(
+                db.Applications,
+                s => s.ApplicationId,
+                a => a.Id,
+                (s, a) => new
+                {
+                    Assessment = s,
+                    a.AnnualIncome,
+                    a.MonthlyExpenses,
+                    a.DepositAmount,
+                    a.PropertyValue,
+                    a.TermYears,
+                })
             .SingleOrDefaultAsync(cancellationToken);
-        return row is null ? null : new AssessmentWorkItem(row.Assessment, row.Application.ToInputs());
+        return row is null
+            ? null
+            : new AssessmentWorkItem(
+                row.Assessment,
+                new AffordabilityInputs(
+                    row.AnnualIncome,
+                    row.MonthlyExpenses,
+                    row.DepositAmount,
+                    row.PropertyValue,
+                    row.TermYears));
     }
 
     public async Task UpdateAssessmentAsync(AffordabilityAssessment assessment, CancellationToken cancellationToken)
     {
-        // Marks the assessment Modified, whether this context already tracks it (loaded above) or not.
-        db.Assessments.Update(assessment);
+        // When loaded by FindForProcessingAsync in this context, EF already tracks which properties changed;
+        // calling Update is needed only for a detached instance (PR #8 /code-review 3, P9-D1 A).
+        if (db.Entry(assessment).State == EntityState.Detached)
+        {
+            db.Assessments.Update(assessment);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 

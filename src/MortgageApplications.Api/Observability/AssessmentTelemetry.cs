@@ -77,15 +77,13 @@ public sealed class AssessmentTelemetry : IDisposable
         var tags = new TagList { { OutcomeTag, result.Outcome.ToString() } };
         if (result.Decision is { } decision)
         {
-            tags.Add(DecisionTag, decision.ToString());
+            var decisionText = decision.ToString();
+            tags.Add(DecisionTag, decisionText);
+            activity?.SetTag(DecisionTag, decisionText);
         }
 
         tags.Add(RulesVersionTag, rulesVersion);
-        foreach (var tag in tags)
-        {
-            activity?.SetTag(tag.Key, tag.Value);
-        }
-
+        activity?.SetTag(RulesVersionTag, rulesVersion);
         _processed.Add(1, tags);
         _duration.Record(elapsed.TotalSeconds, tags);
     }

@@ -1380,4 +1380,126 @@ Copied from `docs/progress/harness-01-context.md` after the merge. H-00 (Alessan
 - **Prompt (verbatim):**
   > Approved
 - **Purpose:** Checkpoint B approval on PR #12.
-- **Outcome:** PR #12 squash-merged into `main`.
+- **Outcome:** PR #12 squash-merged into `main` (`f1a21ea`).
+
+---
+
+## Phase 09: Optimisation + quality
+
+### P09-01 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > Approved
+- **Purpose:** approve Phase 8 Checkpoint B, merge PR #12, and start Phase 9 planning.
+- **Outcome:** PR #12 merged (`f1a21ea`); Phase 9 plan written (`docs/progress/phase-09-quality.md`).
+
+### P09-02 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > Approved options A on all
+- **Purpose:** Checkpoint A approval of the Phase 9 plan and decisions `P9-D1` to `P9-D4` (all Option A).
+- **Outcome:** decisions recorded; `test-designer` invoked (`P09-03`).
+
+### P09-03 · agent→subagent (`test-designer` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Phase 9 (optimisation + quality) of a .NET 10 mortgage-application API in /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-09-quality). Propose test cases for the approved plan; do not write code.
+
+  Read first:
+  - `docs/progress/phase-09-quality.md` (goal, plan, approved decisions P9-D1 to P9-D4, all Option A)
+  - `docs/layers/PRODUCTION-LAYERS.md` ("Database", "Caching", "Scaling")
+  - `src/MortgageApplications.Api/Program.cs`, `src/MortgageApplications.Api/Observability/AssessmentTelemetry.cs`, `src/MortgageApplications.Api/Assessments/AssessmentWorker.cs`
+  - `src/MortgageApplications.Core/Applications/AssessmentProcessingOutcome.cs`, `src/MortgageApplications.Core/Applications/MortgageApplicationService.cs`
+  - `src/MortgageApplications.Infrastructure/Persistence/EfMortgageApplicationRepository.cs`, `src/MortgageApplications.Infrastructure/Persistence/DatabaseMigration.cs`, `src/MortgageApplications.Infrastructure/DependencyInjection.cs`
+  - `tests/MortgageApplications.IntegrationTests/` (`OtlpExportTests.cs`, `AssessmentSpanTests.cs`, `AssessmentRepositoryTests.cs`, `AssessmentWorkerTests.cs`, `CapturingLoggerProvider.cs`, `JsonStrictnessTests.cs`)
+  - `tests/MortgageApplications.UnitTests/Applications/MortgageApplicationServiceTests.cs`
+  - `.claude/rules/backend.md`, `tests/CLAUDE.md`
+
+  What will be built (P9-D1 to P9-D4, all Option A):
+  1. OTEL_RESOURCE_ATTRIBUTES exact key matching (P9-D1, PR #9 /code-review 1): In Program.cs, OTEL_RESOURCE_ATTRIBUTES is split on , and each segment is trimmed so only an attribute whose key is "service.name" (kv.TrimStart().StartsWith("service.name=", StringComparison.Ordinal) with non-whitespace value) suppresses the default "mortgage-applications" service name. A key like "custom.service.name=other" must NOT suppress the default "mortgage-applications" service name, while "deployment.environment=demo, service.name=svc-trimmed" MUST keep "svc-trimmed".
+  2. Stored RulesVersion in AssessmentProcessingResult & single OutcomeTag set (P9-D1, PR #9 /code-review 2-3): AssessmentProcessingResult carries string? RulesVersion (from result.RulesVersion when Completed, null otherwise), and AssessmentWorker passes result.RulesVersion ?? affordabilityOptions.Value.RulesVersion! to AssessmentTelemetry.RecordProcessed. In AssessmentTelemetry.RecordProcessed, OutcomeTag is set on activity once (not duplicated in the loop).
+  3. EfMortgageApplicationRepository.FindForProcessingAsync & UpdateAssessmentAsync (P9-D1, PR #8 /code-review 3): FindForProcessingAsync projects the 5 scalar inputs (AnnualIncome, MonthlyExpenses, DepositAmount, PropertyValue, TermYears) instead of materializing/tracking the MortgageApplication entity (so db.ChangeTracker.Entries<MortgageApplication>() is empty after FindForProcessingAsync, while db.ChangeTracker.Entries<AffordabilityAssessment>() has the 1 tracked assessment in EntityState.Unchanged). UpdateAssessmentAsync calls db.Assessments.Update(assessment) only when db.Entry(assessment).State == EntityState.Detached, so for a tracked assessment only the modified properties (Status, Result, AssessedAt or FailedAt) are marked IsModified = true (not Id, ApplicationId, CreatedAt).
+  4. Timestamped CapturingLoggerProvider for RR5 (P9-D1): CapturedLog records a timestamp (Stopwatch.GetTimestamp() or DateTimeOffset.UtcNow), and Startup_sweep_failure_is_retried_and_completes_pending_assessment asserts that the elapsed time between the RequeueFailed log entry and the PendingRequeued log entry is at least 800 ms (for the 1 s configured retry delay, proving the retry actually waited).
+  5. SQLite EXPLAIN QUERY PLAN & WAL mode on file databases (P9-D2): DatabaseQueryPlanTests runs EXPLAIN QUERY PLAN against the SQLite connection for the repository's point/foreign-key lookups (FindAsync by Id + OwnerId, FindAssessmentAsync by Id + ApplicationId + OwnerId, FindForProcessingAsync join by assessment Id and application Id, and Applications lookup by OwnerId) and asserts every plan uses SEARCH with an index/primary key and never a full-table SCAN; and DatabaseMigration.MigrateDatabaseAsync sets PRAGMA journal_mode=WAL; when the SQLite database is file-backed (verified by a file-backed SQLite test checking PRAGMA journal_mode; returns "wal").
+
+  Use your output format (ID | given | when | then | why it matters), mark each case must or nice, keep the list tight and high-value, and list any ambiguities for Alessandro to settle.
+  ```
+- **Purpose:** propose Phase 9 test cases before writing any tests.
+- **Outcome:** 9 test cases (`P9-T1` to `P9-T9`); full text in `docs/progress/phase-09/test-proposal.md`.
+
+### P09-04 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > Approved
+- **Purpose:** approval of the Phase 9 test cases (`P9-T1`–`P9-T9`).
+- **Outcome:** failing tests written first (`dbc93ad`), then implementation (`31b6b89`, `807ed6a`, `0f4fcb1`, `0db33e8`, `4f152ee`).
+
+### P09-05 · agent→subagent (`security-auditor` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Security gate for Phase 9 (optimisation + quality) of a .NET 10 mortgage-application API in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-09-quality. Read only: do not edit files or switch branches.
+
+  Read first: .claude/rules/security.md, AGENTS.md, docs/progress/phase-09-quality.md (goal, plan, decisions P9-D1 to P9-D4, approved test cases P9-T1 to P9-T9).
+
+  Do:
+  1. Run `gitleaks git --no-banner --redact -v` and `gitleaks dir --no-banner --redact .`
+  2. Run `semgrep scan --config p/csharp --config p/secrets --error --quiet` (and with `--baseline-commit main`).
+  3. Run `dotnet list MortgageApplications.slnx package --vulnerable --include-transitive`.
+  4. Review the diff (`git diff main...HEAD`) against OWASP Top 10:2025 and the repo security rules:
+     - `AssessmentProcessingResult.RulesVersion` is an allowlisted field (rules section 6) and carries no applicant data.
+     - `EfMortgageApplicationRepository.FindForProcessingAsync` and `UpdateAssessmentAsync` keep the same worker-only boundaries and parameterized LINQ queries (`DatabaseQueryPlanTests` uses `query.CreateDbCommand()`, no raw user SQL).
+     - `Program.cs` `OTEL_RESOURCE_ATTRIBUTES` parsing cannot throw or leak data.
+     - `.claude/rules/backend.md` and `tests/CLAUDE.md` updates keep all security rules intact.
+
+  Output:
+  - Exact commands run and trimmed outputs.
+  - A findings table: `tool/check | finding (file:line) | severity | real or false positive | reason | fix`.
+  - A one-line verdict: `PASS` or `FAIL`.
+  ```
+- **Purpose:** security gate on `phase-09-quality`.
+- **Outcome:** **PASS**. 0 leaks (169 commits + working tree), 0 Semgrep findings, 0 vulnerable packages, 0 OWASP findings.
+
+### P09-06 · agent→subagent (`dotnet-reviewer` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Fresh-context diff review of Phase 9 (optimisation + quality) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-09-quality. Read only: do not edit files, do not build or run tests.
+
+  Get the diff with `git diff main...HEAD`. Read the touched files in full (`src/MortgageApplications.Core/Applications/AssessmentProcessingResult.cs`, `src/MortgageApplications.Core/Applications/MortgageApplicationService.cs`, `src/MortgageApplications.Infrastructure/Persistence/EfMortgageApplicationRepository.cs`, `src/MortgageApplications.Api/Program.cs`, `src/MortgageApplications.Api/Observability/AssessmentTelemetry.cs`, `src/MortgageApplications.Api/Assessments/AssessmentWorker.cs`, `.claude/rules/backend.md`, `tests/CLAUDE.md`, `tests/MortgageApplications.UnitTests/Applications/MortgageApplicationServiceTests.cs`, `tests/MortgageApplications.IntegrationTests/AssessmentRepositoryTests.cs`, `tests/MortgageApplications.IntegrationTests/DatabaseQueryPlanTests.cs`, `tests/MortgageApplications.IntegrationTests/OtlpExportTests.cs`, `tests/MortgageApplications.IntegrationTests/CapturingLoggerProvider.cs`, `tests/MortgageApplications.IntegrationTests/AssessmentWorkerTests.cs`, `tests/MortgageApplications.IntegrationTests/JsonStrictnessTests.cs`), plus `docs/progress/phase-09-quality.md` and `docs/progress/phase-09/test-proposal.md`.
+
+  Check in priority order:
+  1. Correctness of the telemetry, repository, and `OTEL_RESOURCE_ATTRIBUTES` changes (`P9-D1`).
+  2. Test coverage and quality: whether every approved case (`P9-T1`–`P9-T9`) is implemented and can fail if the behaviour under test breaks.
+  3. Clean and readable code (`R25`).
+
+  Output only a list, most severe first, one finding per line:
+  `file:line | severity (critical/high/medium/low) | why it is wrong | concrete fix`
+  If you find nothing real, output `No findings.` and the list of files you reviewed. State plainly that you did not build or run tests.
+  ```
+- **Purpose:** fresh-context review of `phase-09-quality`.
+- **Outcome:** 5 findings (`R1`–`R5`), all fixed test-first in `0f4fcb1`, `0db33e8`, and `4f152ee`.
+
+### P09-07 · agent→subagent (`spec-checker` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Requirement traceability check at the end of Phase 9 (optimisation + quality) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-09-quality. Read only: do not edit files.
+
+  Read:
+  - `docs/spec/ORIGINAL_SPEC.md` and `docs/spec/affordability-rules.md`
+  - `docs/layers/PRODUCTION-LAYERS.md` ("Database", "Caching", "Scaling")
+  - `docs/PROGRESS.md` (the R1-R55 traceability table)
+  - `docs/progress/phase-09-quality.md` and `docs/progress/phase-09/test-proposal.md`
+  - The Phase 9 code and tests changed in `git diff main...HEAD`
+
+  Do:
+  1. Map every Phase 9 goal, decision (`P9-D1` to `P9-D4`), and approved test case (`P9-T1` to `P9-T9`) to the file:line and test name that meet it.
+  2. Check how the R1–R55 traceability table in `docs/PROGRESS.md` changes after Phase 9 (specifically R25 "Clean and readable code" moving from `missing` to `met`, R27 test count moving to `584/584 + 113 hook cases`, and the updated overall summary counts).
+  3. Check which rows of `docs/layers/PRODUCTION-LAYERS.md` ("Database", "Caching") need wording updates now that Phase 9 is complete.
+  4. Output a Markdown table for the Phase 9 items and at most 5 short notes.
+  ```
+- **Purpose:** requirement traceability at the end of Phase 9.
+- **Outcome:** **R25 (`Clean and readable code`)** moves from `missing` to **met**, bringing overall totals to **31 met · 10 partial · 14 missing**; all `P9-D1`–`P9-D4` and `P9-T1`–`P9-T9` met after `0f4fcb1` and `0db33e8`.
+
+### P09-08 · human→agent (Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Approved
+  ```
+- **Purpose:** Checkpoint B approval for PR #19 (`phase-09-quality`).
+- **Outcome:** PR #19 approved and squash-merged into `main`.

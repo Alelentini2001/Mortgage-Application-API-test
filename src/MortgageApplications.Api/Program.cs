@@ -43,9 +43,11 @@ var openTelemetry = builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource =>
     {
         // AddService would override a service name set through OTEL_SERVICE_NAME or as service.name in
-        // OTEL_RESOURCE_ATTRIBUTES, so the default name applies only when neither sets one.
-        var namedByAttributes = builder.Configuration["OTEL_RESOURCE_ATTRIBUTES"]?
-            .Contains("service.name=", StringComparison.Ordinal) ?? false;
+        // OTEL_RESOURCE_ATTRIBUTES, so the default name applies only when neither sets one (PR #9 /code-review 1).
+        var namedByAttributes = (builder.Configuration["OTEL_RESOURCE_ATTRIBUTES"] ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(kv => kv.StartsWith("service.name=", StringComparison.Ordinal)
+                && !string.IsNullOrWhiteSpace(kv["service.name=".Length..]));
         if (string.IsNullOrWhiteSpace(builder.Configuration["OTEL_SERVICE_NAME"]) && !namedByAttributes)
         {
             resource.AddService("mortgage-applications");

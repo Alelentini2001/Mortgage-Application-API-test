@@ -114,6 +114,7 @@ public sealed class OtlpExportTests
     {
         { "OTEL_SERVICE_NAME", "svc-by-name", "svc-by-name" },
         { "OTEL_RESOURCE_ATTRIBUTES", "deployment.environment=demo,service.name=svc-by-attributes", "svc-by-attributes" },
+        { "OTEL_RESOURCE_ATTRIBUTES", "deployment.environment=demo, service.name=svc-trimmed", "svc-trimmed" },
     };
 
     // Review gate: a service name from OTEL_SERVICE_NAME or from service.name in OTEL_RESOURCE_ATTRIBUTES is kept;
@@ -133,6 +134,29 @@ public sealed class OtlpExportTests
         var exported = Text(collector.Requests);
         Assert.Contains(expected, exported, StringComparison.Ordinal);
         Assert.DoesNotContain("mortgage-applications", exported, StringComparison.Ordinal);
+    }
+
+    // P9-T5 (PR #9 /code-review 1): a suffix key like custom.service.name= or a blank service.name= in
+    // OTEL_RESOURCE_ATTRIBUTES does not suppress the default service name.
+    [Theory]
+    [InlineData("custom.service.name=other")]
+    [InlineData("deployment.environment=demo,service.name=   ")]
+    public async Task Default_service_name_is_kept_when_resource_attributes_do_not_set_service_name(string attributes)
+    {
+        using var collector = new FakeOtlpCollector();
+        await using var factory = new ApiFactory();
+        var host = ExportingHost(
+            factory,
+            ("OTEL_EXPORTER_OTLP_ENDPOINT", collector.Endpoint),
+            ("OTEL_RESOURCE_ATTRIBUTES", attributes));
+
+        Assert.Equal(HttpStatusCode.OK, (await host.CreateClient().GetPathAsync("/health")).StatusCode);
+        await collector.WaitForAsync(
+            r => Text(r).Contains("mortgage-applications", StringComparison.Ordinal),
+            "the default service name mortgage-applications");
+        await host.DisposeAsync();
+
+        Assert.Contains("mortgage-applications", Text(collector.Requests), StringComparison.Ordinal);
     }
 
     private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> ExportingHost(
