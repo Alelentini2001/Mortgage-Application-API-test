@@ -15,7 +15,7 @@ public sealed class ComposeFileTests
     {
         var text = File.ReadAllText(Path.Combine(_root, "compose.observability.yaml"));
 
-        Assert.Matches(@"image: mcr\.microsoft\.com/aspire/dashboard:\d+\.\d+\.\d+\s", text);
+        Assert.Matches(@"image: mcr\.microsoft\.com/aspire/dashboard:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}\s", text);
         Assert.Contains("\"127.0.0.1:18888:18888\"", text, StringComparison.Ordinal);
         Assert.DoesNotMatch(@"-\s*""?[0-9.:]*1889[0-9]:", text);
         Assert.DoesNotMatch(@"-\s*""?1888[0-9]:", text);

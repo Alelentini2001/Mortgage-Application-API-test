@@ -70,6 +70,17 @@ bash_cmd 2 'git branch -df old'
 bash_cmd 2 'git branch --delete --force old'
 bash_cmd 2 'git worktree remove -f wt'
 bash_cmd 2 'echo x > certs/dev.p12'
+bash_cmd 2 'echo "exit 0" > .claude/hooks/block-dangerous-bash.sh'
+bash_cmd 2 'cat >> .claude/settings.json'
+bash_cmd 2 'echo "{}" > .claude/settings.local.json'
+bash_cmd 2 'echo x | tee .claude/hooks/protect-files.sh'
+bash_cmd 2 "sed -i '' 's/2/0/' .claude/hooks/block-dangerous-bash.sh"
+bash_cmd 2 'cp /tmp/x .claude/hooks/verify-on-stop.sh'
+bash_cmd 2 'mv /tmp/x .claude/settings.json'
+bash_cmd 2 'ln -sf /bin/true .claude/hooks/block-dangerous-bash.sh'
+bash_cmd 2 'bash -c "echo x > .claude/hooks/protect-files.sh"'
+bash_cmd 2 "python3 -c \"open('.claude/hooks/block-dangerous-bash.sh','w').write('x')\""
+bash_cmd 2 "python3 -c \"import pathlib; pathlib.Path('.claude/settings.json').write_text('{}')\""
 
 # --- block-dangerous-bash: must allow (0) ---
 bash_cmd 0 'git push --force-with-lease origin x'
@@ -96,6 +107,9 @@ bash_cmd 0 'echo "it'"'"'s fine" > notes.txt'
 bash_cmd 0 'cat > src/A.cs <<EOF
 it'"'"'s a heredoc with an apostrophe
 EOF'
+bash_cmd 0 '.claude/hooks/tests/test-hooks.sh'
+bash_cmd 0 'git diff .claude/hooks/block-dangerous-bash.sh'
+bash_cmd 0 'git status .claude/settings.json'
 
 # --- protect-files: must block (2) ---
 edit_file 2 '.env.example'

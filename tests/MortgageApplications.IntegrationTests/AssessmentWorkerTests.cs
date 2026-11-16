@@ -167,6 +167,56 @@ public sealed class AssessmentWorkerTests
         Assert.Equal("Completed", Http.Status(await restarted.CreateClient().PollUntilFinishedAsync(thirdLocation)));
     }
 
+    // S8-22 (P8-D2): when the queue stays full past Assessments:EnqueueTimeoutSeconds, POST /api/applications/{id}/assessments
+    // returns 503 ProblemDetails (no internal exception details or sentinel numbers leaked), leaves the saved Pending
+    // row in SQLite, and a restarted host completes it.
+    [Fact(Timeout = _timeoutMs)]
+    public async Task Full_queue_past_enqueue_timeout_returns_503_leaves_pending_row_and_a_restart_completes_it()
+    {
+        await using var factory = new ApiFactory();
+        var gate = new WorkerGate();
+        var host = factory.WithWebHostBuilder(
+            builder => builder
+                .ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Assessments:QueueCapacity"] = "1",
+                    ["Assessments:EnqueueTimeoutSeconds"] = "1",
+                }))
+                .ConfigureTestServices(services => services.HoldWorkerAt(gate)),
+            runWorker: true);
+        var client = host.CreateClient();
+        await WaitForStartupRequeueAsync(factory);
+        var applicationId = await client.CreateApplicationAsync(Telemetry.SentinelBody);
+        var first = await client.PostAssessmentAsync(applicationId);
+        await gate.Entered.WaitAsync(_wait, TestContext.Current.CancellationToken);
+        var second = await client.PostAssessmentAsync(applicationId);
+
+        var third = await client.PostAssessmentAsync(applicationId);
+
+        await third.AssertProblemAsync(HttpStatusCode.ServiceUnavailable);
+        Assert.True(third.Headers.CacheControl?.NoStore);
+        var body = await third.BodyAsync();
+        foreach (var forbidden in new[] { "OperationCanceledException", "TimeoutException", "85123", "912.34", "61234", "301234", ApiFactory.DefaultOwner })
+        {
+            Assert.DoesNotContain(forbidden, body, StringComparison.Ordinal);
+            Assert.DoesNotContain(factory.Logs.Entries, e => e.Text.Contains(forbidden, StringComparison.Ordinal));
+        }
+
+        var thirdId = (await AssessmentIdsAsync(host.Services))
+            .Except([Guid.Parse(await first.IdAsync()), Guid.Parse(await second.IdAsync())])
+            .Single();
+        var thirdLocation = $"/api/applications/{applicationId}/assessments/{thirdId}";
+        Assert.Equal("Pending", Http.Status(await (await client.GetPathAsync(thirdLocation)).BodyAsync()));
+        gate.Open();
+        await client.PollUntilFinishedAsync(first.Headers.Location!.OriginalString);
+        await client.PollUntilFinishedAsync(second.Headers.Location!.OriginalString);
+        await host.DisposeAsync();
+
+        await using var restarted = factory.WithWebHostBuilder(_ => { }, runWorker: true);
+
+        Assert.Equal("Completed", Http.Status(await restarted.CreateClient().PollUntilFinishedAsync(thirdLocation)));
+    }
+
     // I-11: stopping the host while the worker is in the middle of an item leaves it Pending, not Failed.
     [Fact(Timeout = _timeoutMs)]
     public async Task Shutdown_while_processing_leaves_the_assessment_pending()

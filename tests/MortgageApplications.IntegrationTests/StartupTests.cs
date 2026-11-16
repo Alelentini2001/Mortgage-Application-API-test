@@ -265,6 +265,57 @@ public sealed class StartupTests
 
     public static TheoryData<string> ValidRetryDelayLimits => ["1", "3600"];
 
+    // S8-08 to S8-13 (P8-D1, P8-D2): RateLimiting:PermitLimit (1..10,000), RateLimiting:WindowSeconds (1..3,600), and
+    // Assessments:EnqueueTimeoutSeconds (1..300) fail closed outside their ranges and start at their exact limits.
+    [Theory]
+    [MemberData(nameof(InvalidPhase8Settings))]
+    public void Startup_with_invalid_rate_limiting_or_enqueue_timeout_setting_fails(string key, string value, string expectedProperty)
+    {
+        using var factory = new ApiFactory();
+        using var invalid = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(new Dictionary<string, string?> { [key] = value })));
+
+        var ex = Assert.ThrowsAny<Exception>(() => invalid.CreateClient());
+
+        Assert.Contains(expectedProperty, FindOptionsFailure(ex).Message, StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string, string, string> InvalidPhase8Settings => new()
+    {
+        { "RateLimiting:PermitLimit", "0", "PermitLimit" },
+        { "RateLimiting:PermitLimit", "-1", "PermitLimit" },
+        { "RateLimiting:PermitLimit", "10001", "PermitLimit" },
+        { "RateLimiting:WindowSeconds", "0", "WindowSeconds" },
+        { "RateLimiting:WindowSeconds", "-1", "WindowSeconds" },
+        { "RateLimiting:WindowSeconds", "3601", "WindowSeconds" },
+        { "Assessments:EnqueueTimeoutSeconds", "0", "EnqueueTimeoutSeconds" },
+        { "Assessments:EnqueueTimeoutSeconds", "-1", "EnqueueTimeoutSeconds" },
+        { "Assessments:EnqueueTimeoutSeconds", "301", "EnqueueTimeoutSeconds" },
+    };
+
+    [Theory]
+    [MemberData(nameof(ValidPhase8Limits))]
+    public async Task Startup_with_rate_limiting_or_enqueue_timeout_at_a_limit_starts(string key, string value)
+    {
+        using var factory = new ApiFactory();
+        using var valid = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(new Dictionary<string, string?> { [key] = value })));
+
+        var response = await valid.CreateClient().GetPathAsync("/health");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    public static TheoryData<string, string> ValidPhase8Limits => new()
+    {
+        { "RateLimiting:PermitLimit", "1" },
+        { "RateLimiting:PermitLimit", "10000" },
+        { "RateLimiting:WindowSeconds", "1" },
+        { "RateLimiting:WindowSeconds", "3600" },
+        { "Assessments:EnqueueTimeoutSeconds", "1" },
+        { "Assessments:EnqueueTimeoutSeconds", "300" },
+    };
+
     // I44 (replaces the Phase 0 placeholder)
     [Fact]
     public async Task Health_returns_200()
