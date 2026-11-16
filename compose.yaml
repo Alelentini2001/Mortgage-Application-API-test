@@ -6,12 +6,15 @@ services:
     # unhandled startup exception, so the container hangs at full CPU instead of exiting (found by check C14).
     init: true
     ports:
-      # Loopback only: there is no authentication until Phase 7.
+      # Loopback only. DevAuth below lets anyone who can reach the port mint a token for any subject (ADR 0004),
+      # which is acceptable only because the port is bound to 127.0.0.1. Never widen this bind.
       - "127.0.0.1:8080:8080"
     environment:
       # Development, so the existing Development-only startup migration creates the schema (P4-D1, ADR 0002).
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__MortgageApplications: Data Source=/app/data/mortgage-applications.db
+      # Dev token endpoint POST /dev/token (Phase 7). It works only in Development; startup fails if it is on elsewhere.
+      DevAuth__Enabled: "true"
     volumes:
       - data:/app/data
 
