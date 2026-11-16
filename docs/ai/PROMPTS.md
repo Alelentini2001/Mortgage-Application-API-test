@@ -1607,3 +1607,76 @@ Copied from `docs/progress/harness-01-context.md` after the merge. H-00 (Alessan
   ```
 - **Purpose:** Approve Phase 10 Checkpoint B (#20) and proceed to Phase 11 (`phase-11-presentation`) Checkpoint A plan.
 - **Outcome:** PR #20 squash-merged (`dc539df`); `phase-11-presentation` branch and Phase 11 plan created; stopped at Checkpoint A for approval.
+
+### P11-02 · human→agent (Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Approved
+  ```
+- **Purpose:** Checkpoint A approval for Phase 11 (`P11-D1`–`P11-D3` Option A).
+- **Outcome:** Ran the two timed fresh-clone rehearsals (`50.09 s` CLI + full `verify.sh`; `13.33 s` Docker Compose), wrote `docs/presentation/DEMO-SCRIPT.md` and `docs/presentation/SLIDES.md` (`495b0f3`), ran `./scripts/verify.sh`, and ran the three Phase 11 gate subagents (`P11-03`–`P11-05`).
+
+### P11-03 · agent→subagent (`security-auditor` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Security audit of Phase 11 (Fresh-clone rehearsal + presentation) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-11-presentation. Read only: do not edit files.
+
+  Read:
+  - `docs/presentation/DEMO-SCRIPT.md`
+  - `docs/presentation/SLIDES.md`
+  - `README.md`
+  - `docs/progress/phase-11-presentation.md`
+
+  Run:
+  1. `gitleaks git --no-banner --redact -v` and `gitleaks dir --no-banner --redact .`
+  2. `semgrep scan --config p/csharp --config p/secrets --error --quiet`
+  3. `dotnet list MortgageApplications.slnx package --vulnerable --include-transitive`
+
+  Also verify:
+  - No real secrets, tokens, or private keys appear in `docs/presentation/DEMO-SCRIPT.md` or `docs/presentation/SLIDES.md`.
+  - No temporary rehearsal files or SQLite `.db` files were accidentally left in the repository working tree (`git status -s`).
+
+  Output a concise security gate verdict (PASS/FAIL) and any findings.
+  ```
+- **Purpose:** Security gate for Phase 11.
+- **Outcome:** **PASS** (0 leaks in 188 commits + working tree, 0 Semgrep findings, 0 vulnerable packages, 0 leftover rehearsal files).
+
+### P11-04 · agent→subagent (`dotnet-reviewer` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Fresh-context diff review of Phase 11 (Fresh-clone rehearsal + presentation) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-11-presentation. Read only: do not edit files, do not build or run tests.
+
+  Get the diff with `git diff main...HEAD`. Read `docs/presentation/DEMO-SCRIPT.md`, `docs/presentation/SLIDES.md`, and `README.md` in full, and cross-check every file link, relative path, route, status code, formula, check limit, test count, and architectural claim against the codebase and `docs/spec/ORIGINAL_SPEC.md` ("Follow-Up Discussion").
+
+  Specifically check:
+  1. Every Markdown relative link in `docs/presentation/DEMO-SCRIPT.md` and `docs/presentation/SLIDES.md` resolves to an existing file on disk.
+  2. `docs/presentation/SLIDES.md` has at most 3 slides (`R49`), is brief and conversation-starting (`R51`), and covers all 4 topics in `ORIGINAL_SPEC.md:149-152` (`R52`–`R55`).
+  3. `docs/presentation/DEMO-SCRIPT.md` places the slides after the demo (`R50`), keeps total session time <= 30 minutes (`R50`), and matches the actual API behaviour.
+
+  Output only a list, most severe first, one finding per line:
+  `file:line | severity (critical/high/medium/low) | why it is wrong | concrete fix`
+  If you find nothing real, output `No findings.` and the list of files you reviewed. State plainly that you did not build or run tests.
+  ```
+- **Purpose:** Fresh-context review of `DEMO-SCRIPT.md`, `SLIDES.md`, and `README.md`.
+- **Outcome:** 5 findings (`R1`–`R5`), all fixed in `DEMO-SCRIPT.md` and `SLIDES.md`.
+
+### P11-05 · agent→subagent (`spec-checker` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Requirement traceability check at the end of Phase 11 (Fresh-clone rehearsal + presentation, final phase) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-11-presentation. Read only: do not edit files.
+
+  Read:
+  - `docs/presentation/DEMO-SCRIPT.md`
+  - `docs/presentation/SLIDES.md`
+  - `README.md`
+  - `docs/spec/ORIGINAL_SPEC.md`
+  - `docs/PROGRESS.md` (the R1-R55 traceability table)
+  - `docs/progress/phase-11-presentation.md`
+
+  Do:
+  1. Map every Phase 11 requirement (`R43`, `R45`, `R46`, `R47`, `R48`, `R49`, `R50`, `R51`, `R52`, `R53`, `R54`, `R55`) to the exact `file:line` and rehearsal evidence that meet it.
+  2. State how the R1–R55 traceability table in `docs/PROGRESS.md` changes after Phase 11 (which rows move to `met` and the final overall summary counts of `met / partial / missing` out of 55).
+  3. Output a Markdown table for `R43` and `R45`–`R55` and at most 5 short notes.
+  ```
+- **Purpose:** Final requirement traceability check at the end of Phase 11.
+- **Outcome:** All 12 Phase 11 requirements (`R43`, `R45`–`R55`) move to **met**, bringing final totals to **`55 met · 0 partial · 0 missing`**.

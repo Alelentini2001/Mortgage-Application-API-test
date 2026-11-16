@@ -81,6 +81,7 @@ ASSESS1=$(curl -s -X POST "$BASE_URL/api/applications/$APP1/assessments" \
   -H "Authorization: Bearer $ALICE" | jq -r '.id')
 
 # 6. Poll the assessment -> 200 OK (status: Completed, decision: Approved, LTV 80.00%, DTI 33.02%, LTI 2.82x, MaxBorrowing 381535.82)
+sleep 0.2
 curl -s "$BASE_URL/api/applications/$APP1/assessments/$ASSESS1" \
   -H "Authorization: Bearer $ALICE" | jq .
 
@@ -106,11 +107,11 @@ curl -i "$BASE_URL/api/applications/$APP1" -H "Authorization: Bearer $BOB"
 
 ## 4. Codebase Walkthrough Pointers (`09:00–14:00`, `R48`)
 
-Open these 6 files in order to tell the story from pure domain logic to HTTP, background processing, persistence, and verification:
+Walk through these 5 groups in order to tell the story from pure domain logic to HTTP, background processing, persistence, and verification:
 
 1. **Pure Domain & Calculator (`MortgageApplications.Core`):**
    - [`src/MortgageApplications.Core/Affordability/AffordabilityCalculator.cs`](../../src/MortgageApplications.Core/Affordability/AffordabilityCalculator.cs): pure `decimal` arithmetic, exponentiation by squaring (`Pow`), 3 independent checks (`LTV`, `DTI`, `LTI`), income-based `MaxBorrowing`, unrounded comparison, and single end-rounding (`Math.Round(..., 2, MidpointRounding.AwayFromZero) + 0.00m`).
-   - [`src/MortgageApplications.Core/Applications/ApplicationInputRules.cs`](../../src/MortgageApplications.Core/Applications/ApplicationInputRules.cs): shared input preconditions (`AnnualIncome`, `MonthlyExpenses`, `DepositAmount`, `PropertyValue`, `TermYears`, `<= 2 dp`, minimum loan `1,000`).
+   - [`src/MortgageApplications.Core/Affordability/ApplicationInputRules.cs`](../../src/MortgageApplications.Core/Affordability/ApplicationInputRules.cs): shared input preconditions (`AnnualIncome`, `MonthlyExpenses`, `DepositAmount`, `PropertyValue`, `TermYears`, `<= 2 dp`, minimum loan `1,000`).
 2. **Use Cases & Save-Before-Enqueue (`MortgageApplications.Core`):**
    - [`src/MortgageApplications.Core/Applications/MortgageApplicationService.cs`](../../src/MortgageApplications.Core/Applications/MortgageApplicationService.cs): `CreateAsync`, `GetAsync`, `AssessAsync` (persists `Pending` row first, then calls `IAssessmentQueue.EnqueueAsync`), `GetAssessmentAsync`, and worker-only `ProcessAssessmentAsync`.
 3. **Persistence & Query Plans (`MortgageApplications.Infrastructure`):**

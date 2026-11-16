@@ -21,7 +21,7 @@ author: Alessandro Lentini
                                                 (EF Core 10 + SQLite WAL, Owner-Scoped)
 ```
 
-- **`Core` has zero framework dependencies** — pure C# domain entities, `decimal` calculator, and ports (`IMortgageApplicationRepository`, `IAssessmentQueue`, `ICurrentUser`).
+- **`Core` has zero framework dependencies** — pure C# domain entities, `decimal` calculator, and ports (`IMortgageApplicationRepository`, `IAssessmentQueue`; `ICurrentUser` resolves `sub` at the `Api` boundary).
 - **4 Optional Enhancements built & verified:** Background assessments (`202 Accepted` + polling), ES256 JWT authentication + owner isolation, Docker (`@sha256` digest-pinned, non-root `init: true`), and OpenTelemetry (traces, metrics, structured `[LoggerMessage]` logs, opt-in Aspire dashboard).
 - **586 automated tests** (`275` unit + `311` integration) + **113 hook tests**, built phase-by-phase with TDD and fresh-context AI review gates across **Claude Code** and **Google Antigravity IDE**.
 
@@ -36,7 +36,7 @@ Speaker notes (~2 min):
 
 # Slide 2 · Affordability Logic & Assumptions
 
-**Pure `decimal` Function: `(ApplicationInputs, AffordabilityOptions) → AffordabilityResult`**
+**Pure `decimal` Function: `(AffordabilityInputs, AffordabilityOptions) → AffordabilityResult`**
 
 | Check | Formula (`System.Decimal`, full precision) | v1.0 Limit |
 |---|---|---|
