@@ -1134,3 +1134,121 @@ Copied from `docs/progress/harness-01-context.md` after the merge. H-00 (Alessan
   > Approved, merge
 - **Purpose:** Checkpoint B approval of PR #10.
 - **Outcome:** squash-merged as `1d7ca9e` after both CI jobs passed on `5db990c`.
+
+---
+
+## Phase 07: Authentication + authorisation
+
+### P07-01 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > continue with phase 7
+- **Purpose:** start Phase 7.
+- **Outcome:** Phase 7 plan and Checkpoint A (`docs/progress/phase-07-auth.md`).
+
+### P07-02 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Approved, all A
+- **Purpose:** Checkpoint A approval (P7-D1 to P7-D4 and P7-D9 all option A, package approved).
+- **Outcome:** decisions recorded; branch `phase-07-auth` created; `test-designer` run (P07-03).
+
+### P07-03 · agent→subagent (`test-designer`) · 2026-11-15
+- **Prompt (verbatim):**
+  ```
+  Phase 7 (authentication + authorisation) of a .NET 10 mortgage-application API (Minimal APIs, EF Core SQLite, background assessment worker, OpenTelemetry). Propose test cases for the approved plan; do not write code. If your agent instructions mention scripts/context/brief.sh, CONTEXT-INDEX.md or a handover template, ignore that: those files were removed.
+
+  Read first in /Users/ale_ssd/Developer/Mortgage-Application-API-test (branch phase-07-auth): docs/progress/phase-07-auth.md (goal, plan, decisions P7-D1 to P7-D4 and P7-D9, all option A), docs/layers/PRODUCTION-LAYERS.md ("Auth & permissions" row), .claude/rules/security.md, .claude/rules/tests.md, tests/CLAUDE.md, and the code and tests: src/MortgageApplications.Api/Program.cs, src/MortgageApplications.Api/Identity/*, src/MortgageApplications.Api/Applications/ApplicationEndpoints.cs, tests/MortgageApplications.IntegrationTests/ (ApiFactory, Http, NotFoundAndOwnerTests, StartupTests, ErrorHandlingTests, ObservabilityLogTests, TelemetryAllowlistTests), compose.yaml, .github/workflows/ci.yml.
+
+  What will be built (not written yet): JWT bearer authentication with ES256 (ECDSA P-256), issuer, audience, lifetime and signature validated, algorithm pinned, MapInboundClaims = false, ClockSkew 30 s; fallback authorization policy RequireAuthenticatedUser with AllowAnonymous only on /health and POST /dev/token; ClaimsCurrentUser reading sub (missing, empty or longer than 128 characters rejected as 401); options Jwt (issuer, audience, lifetime) and DevAuth (enabled) validated at startup; outside Development startup fails if DevAuth:Enabled is true or no validation key or authority is configured; POST /dev/token {"subject":"alice"} (pattern ^[a-z0-9-]{1,64}$) returns {token, expiresAt} (15 min), registered only in Development with DevAuth:Enabled=true, signed with a key pair generated in memory at startup; an OpenAPI bearer security scheme in Development; compose sets DevAuth__Enabled=true; the CI docker job gets a token first; ApiFactory owns its own test key and sends a token for a default test owner on every request, and existing ICurrentUser overrides become tokens for other subjects.
+
+  Cover at least: 401 with no token, a malformed token, a bad signature, a token signed with another key, expired (just past the 30 s skew and just inside it), not yet valid, wrong issuer, wrong audience, alg none / unsigned, HS256 with the public key as secret (algorithm confusion), a token without sub, an empty sub, a 129-character sub (and 128 accepted); 401 responses are ProblemDetails with a WWW-Authenticate header and leak no token or exception text; every application endpoint requires auth (enumerate them from the endpoint data source so a new endpoint cannot slip through) and /health does not; cross-user: another subject's application and assessment are 404 with the same body as an unknown ID, and nothing is created or queued for them; owner comes only from sub (a body or header claiming another owner has no effect); dev endpoint: 404 in Production and Staging even with the flag, 404 in Development without the flag, works in Development with the flag, subject pattern boundaries (1 and 64 characters, 65, uppercase, symbols, empty, missing, extra properties), tokens it issues are accepted, expiresAt about 15 minutes, a token from one app instance is rejected by another (in-memory key); startup fails when DevAuth:Enabled=true outside Development and when nothing to validate tokens is configured outside Development; the background worker still processes items (it has no user); telemetry and logs never contain the token, the sub value (owner ID) or the Authorization header (extend the Phase 5 allowlist tests); the OpenAPI document declares the bearer scheme in Development; existing tests keep their meaning. Say which are unit vs integration tests, how tests create tokens without new packages (the JwtBearer package brings Microsoft.IdentityModel.JsonWebTokens transitively through the Api project reference), how to control time for expiry tests without sleeping, and which existing tests must change.
+
+  Use your agent's output format. Mark each case must or nice, keep the list tight, and list ambiguities in the plan for Alessandro to settle.
+  ```
+- **Purpose:** propose Phase 7 test cases before any test is written.
+- **Outcome:** about 70 cases (AU01–AU112) and 14 questions (A1–A14); full text in `docs/progress/phase-07/test-proposal.md`.
+
+### P07-04 · human→agent · 2026-11-15
+- **Prompt (verbatim):**
+  > Approved
+- **Purpose:** approval of the recommended test selection and the answers A1–A14.
+- **Outcome:** implementation delegated, test-first (P07-05).
+
+### P07-05 to P07-07 · agent→subagent (implementer and first gates in Claude Code) · 2026-11-15 to 2026-11-16
+- **Prompt:** not recorded verbatim before the session switch from Claude Code to Antigravity IDE (honesty rule: not reconstructed).
+- **Purpose:** implement Phase 7 test-first (`9b259ee`–`cf6dad0`), draft ADR 0004 (`5430b17`), run the first security and review gates (`G1`–`G10`), and fix `G1`–`G10` test-first (`828573e`, `7b681a5`, `64b90e0`, `e0ba9d2`, `3320a82`).
+- **Outcome:** 537 tests passing at `3320a82`; see `docs/progress/phase-07-auth.md`.
+
+### P07-08 · human→agent (Antigravity IDE · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  > ok so continue where it stopped, and when tracking down tasks and what we did, state that we tried also to switch to different AI models and IDEs to showcase that these skills, agents and instructions can be used seamessly in different environments
+- **Purpose:** resume Phase 7 from `3320a82` in Antigravity IDE (Gemini 4 Argon), run the `.claude/agents/` gate subagents, fix any findings, update phase and progress records, and open the PR.
+- **Outcome:** `security-auditor` (P07-09), `dotnet-reviewer` (P07-10) and `spec-checker` (P07-11) defined from `.claude/agents/*.md` and run; 5 findings from P07-10 fixed test-first (`83b2bd3`, `8f86bce`).
+
+### P07-09 · agent→subagent (`security-auditor` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Security gate for Phase 7 (authentication + authorisation) of a .NET 10 mortgage-application API in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-07-auth (HEAD 3320a82). Read only: do not edit files or switch branches.
+
+  Read first: .claude/rules/security.md, AGENTS.md, docs/progress/phase-07-auth.md (goal, plan, decisions P7-D1 to P7-D4 and P7-D9, approved answers A1-A14, "What was built", "Tests > Results after the gates", "Open issues"), docs/adr/0004-authentication-and-authorisation.md.
+
+  Do:
+  1. Run `gitleaks git --no-banner --redact -v` (or `--log-opts="main..HEAD"`) and `gitleaks dir --no-banner --redact .`
+  2. Run `semgrep scan --config p/csharp --config p/secrets --error --quiet` (and with `--baseline-commit main`).
+  3. Run `dotnet list MortgageApplications.slnx package --vulnerable --include-transitive`.
+  4. Review the diff (`git diff main...HEAD`) against OWASP Top 10:2025 and the Phase 7 security requirements:
+     - ES256 (ECDSA P-256) pinned via `ValidAlgorithms`, `RequireSignedTokens`, `RequireExpirationTime`, `ClockSkew` 30 s, `MapInboundClaims = false`, `IncludeErrorDetails = false`.
+     - `Authority` and `MetadataAddress` cleared so `Authentication:Schemes:Bearer:*` cannot add trusted keys; header `kid`, `jwk`, `jku` do not resolve keys.
+     - `SigningPublicKey` accepts only a `PUBLIC KEY` PEM on P-256; outside Development startup fails if `Jwt:SigningPublicKey` is missing or if `DevAuth:Enabled` is true; startup also fails if `DevAuth:Enabled` is true while `Jwt:SigningPublicKey` is set.
+     - `POST /dev/token` is mapped only in `Development` with `DevAuth:Enabled=true`, validates `subject` with `^[a-z0-9-]{1,64}\z`, issues 15-minute tokens with an in-memory key pair.
+     - Fallback authorization policy `RequireAuthenticatedUser`; `AllowAnonymous` only on `/health`, `/dev/token` (when registered), and in Development OpenAPI and Scalar.
+     - `SubjectClaim` / `ClaimsCurrentUser` requires a single JSON string `sub`, non-blank, <= 128 chars; owner comes only from `sub`; another user's application or assessment returns an identical 404.
+     - No token, `Authorization` header, `sub` (owner ID), issuer or exception text leaks in logs, spans, metrics, ProblemDetails or `WWW-Authenticate`; `Microsoft.AspNetCore.Authentication` is at `Warning` and app-owned `TokenRejected` logs only `FailureType`.
+     - CI `.github/workflows/ci.yml` masks the dev token (`::add-mask::`) and passes it via `@auth-header.txt`.
+
+  Output:
+  - Exact commands run and trimmed outputs.
+  - A findings table: `tool/check | finding (file:line) | severity | real or false positive | reason | fix`.
+  - A one-line verdict: `PASS` or `FAIL`.
+  ```
+- **Purpose:** security gate on `phase-07-auth` at `3320a82`.
+- **Outcome:** **PASS**. Gitleaks (146 commits + working tree): 0 leaks; Semgrep (`p/csharp` + `p/secrets`, full and `--baseline-commit main`): 0 findings; `dotnet list package --vulnerable --include-transitive`: 0 vulnerable packages; OWASP Top 10:2025: 1 low/info item (`FailureType` log key not yet in `TelemetryAllowlistTests._logKeys`).
+
+### P07-10 · agent→subagent (`dotnet-reviewer` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Fresh-context diff review of Phase 7 (authentication + authorisation) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-07-auth (HEAD 3320a82). Read only: do not edit files, do not build or run tests.
+
+  Get the diff with `git diff main...HEAD`. Read the touched files in full (`src/MortgageApplications.Api/Program.cs`, `src/MortgageApplications.Api/Identity/*`, `src/MortgageApplications.Api/appsettings.json`, `src/MortgageApplications.Api/Properties/launchSettings.json`, `src/MortgageApplications.Api/requests.http`, `compose.yaml`, `.github/workflows/ci.yml`, `Directory.Packages.props`, `src/MortgageApplications.Api/MortgageApplications.Api.csproj`, `tests/MortgageApplications.IntegrationTests/*`), plus `AGENTS.md`, `.claude/rules/backend.md`, `.claude/rules/security.md`, `.claude/rules/tests.md`, `tests/CLAUDE.md`, `docs/progress/phase-07-auth.md` (plan, decisions, approved test cases and answers A1-A14, "Tests > Results after the gates", "Open issues"), and `docs/adr/0004-authentication-and-authorisation.md`.
+
+  Check in priority order:
+  1. Security & auth correctness: ES256 validation, key handling (`TokenKeys`, `SigningPublicKey`, `CryptoProviderFactory` lifetime and disposal), `SubjectClaim` JSON payload parsing and claim validation, `ClaimsCurrentUser` lifetime and fallback behaviour, `DevTokenEndpoint` / `DevTokenIssuer` gating and Startup validation (`JwtOptionsValidator`), `OnChallenge` header formatting, OpenAPI `BearerSecurityTransformer`.
+  2. Framework usage: DI lifetimes (`TokenKeys` singleton vs options validation, `IHttpContextAccessor` + scoped `ICurrentUser`), middleware order (`UseExceptionHandler`, `UseStatusCodePages`, `UseAuthentication`, `UseAuthorization`), endpoint metadata.
+  3. Test gaps: whether the tests in `AuthenticationTests`, `AuthorizationTests`, `DevTokenTests`, `AuthTelemetryTests`, `StartupTests`, `LocalRunFileTests`, `ComposeFileTests` can fail when the behaviour under test breaks, and whether any approved must-case in `docs/progress/phase-07-auth.md` is missing or weak.
+  4. Over-engineering or dead code.
+
+  Output only a list, most severe first, one finding per line:
+  `file:line | severity (critical/high/medium/low) | why it is wrong | concrete fix`
+  If you find nothing real, output `No findings.` and the list of files you reviewed. State plainly that you did not build or run tests.
+  ```
+- **Purpose:** second fresh-context review of `phase-07-auth` at `3320a82`.
+- **Outcome:** 1 medium and 4 low findings (R2-1 to R2-5), all fixed test-first in `83b2bd3` and `8f86bce`.
+
+### P07-11 · agent→subagent (`spec-checker` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Requirement traceability check at the end of Phase 7 (authentication + authorisation) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-07-auth (HEAD 3320a82). Read only: do not edit files.
+
+  Read:
+  - `docs/spec/ORIGINAL_SPEC.md` and `docs/spec/affordability-rules.md`
+  - `docs/PROGRESS.md` (the existing R1-R55 traceability table)
+  - `docs/progress/phase-07-auth.md` (goal, plan, decisions, what was built, tests, open issues)
+  - `docs/adr/0004-authentication-and-authorisation.md`
+  - The Phase 7 code and tests under `src/MortgageApplications.Api/` and `tests/MortgageApplications.IntegrationTests/`
+
+  Do:
+  1. Check every Phase 7 goal and approved requirement (R31 optional authentication, owner scoping from `sub`, 401 on missing/invalid tokens with `WWW-Authenticate` and ProblemDetails, cross-user 404, fail-closed `POST /dev/token`, no token or `sub` in logs/spans/metrics, OpenAPI bearer scheme in Development, Docker compose + CI smoke test with dev token) and map each to the file:line and test name that meet it.
+  2. Check how the R1-R55 table in `docs/PROGRESS.md` changes after Phase 7 (specifically R31 and the overall met / partial / missing totals, plus whether R6/section 6 of `docs/spec/affordability-rules.md` is affected by the new `TokenRejected` log event's `FailureType` field).
+  3. Output a Markdown table for the Phase 7 requirements and the updated R1-R55 summary counts, plus at most 5 short notes on any open items or discrepancies.
+  ```
+- **Purpose:** requirement traceability at the end of Phase 7.
+- **Outcome:** R31 is **met** (all four Optional Enhancements R30–R33 are now met); overall totals move to **30 met · 10 partial · 15 missing**.
