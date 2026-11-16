@@ -9,7 +9,7 @@ namespace MortgageApplications.Api.Identity;
 /// "Configure JWT bearer authentication": signature, issuer, audience and lifetime are validated, and
 /// <c>MapInboundClaims = false</c> keeps <c>sub</c> as <c>sub</c>.
 /// </summary>
-internal static class AuthenticationSetup
+internal static partial class AuthenticationSetup
 {
     public static IServiceCollection AddJwtAuthentication(this IServiceCollection services)
     {
@@ -38,6 +38,10 @@ internal static class AuthenticationSetup
 
     private static void Configure(JwtBearerOptions options, IOptions<JwtOptions> jwt, TokenKeys keys)
     {
+        // Trust comes only from the Jwt:* settings. The framework also binds Authentication:Schemes:Bearer:*, where an
+        // Authority or MetadataAddress would make the handler fetch and trust that server's keys (security gate).
+        options.Authority = null;
+        options.MetadataAddress = null!; // the property is not nullable, but the handler treats null as "not set"
         options.MapInboundClaims = false;
         // A5: no error_description, so no validation exception text reaches the client.
         options.IncludeErrorDetails = false;
@@ -61,11 +65,19 @@ internal static class AuthenticationSetup
             // A missing, blank, repeated or over-long sub is a 401 here, never a 500 later (A4).
             OnTokenValidated = context =>
             {
-                if (!SubjectClaim.IsValid(context.Principal))
+                if (!SubjectClaim.IsValid(context.Principal, context.SecurityToken))
                 {
+                    TokenRejected(context.HttpContext, "InvalidSubject");
                     context.Fail("The token has no valid subject.");
                 }
 
+                return Task.CompletedTask;
+            },
+            // Security signal: the framework's own rejection logs are hidden at Warning (they carry token values, AU92).
+            // This event says only that a token was rejected and the failure's exception type name.
+            OnAuthenticationFailed = context =>
+            {
+                TokenRejected(context.HttpContext, context.Exception.GetType().Name);
                 return Task.CompletedTask;
             },
             // With IncludeErrorDetails off the handler sends a bare "Bearer". A rejected token still gets
@@ -81,4 +93,17 @@ internal static class AuthenticationSetup
             },
         };
     }
+
+    private static void TokenRejected(HttpContext httpContext, string failureType)
+    {
+        var logger = httpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(AuthenticationSetup));
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            LogTokenRejected(logger, failureType);
+        }
+    }
+
+    [LoggerMessage(EventId = 8, EventName = "TokenRejected", Level = LogLevel.Information,
+        Message = "Bearer token rejected: {FailureType}.")]
+    private static partial void LogTokenRejected(ILogger logger, string failureType);
 }

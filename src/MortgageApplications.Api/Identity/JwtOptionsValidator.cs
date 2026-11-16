@@ -46,11 +46,31 @@ internal sealed class JwtOptionsValidator(IHostEnvironment environment) : IValid
     }
 }
 
-/// <summary>Fail closed: the dev token endpoint can never be switched on outside Development.</summary>
-internal sealed class DevAuthOptionsValidator(IHostEnvironment environment) : IValidateOptions<DevAuthOptions>
+/// <summary>
+/// Fail closed: the dev token endpoint can never be switched on outside Development, nor together with a configured
+/// signing key, so in dev mode the in-memory dev key is the only trusted key (security gate, Phase 7).
+/// </summary>
+internal sealed class DevAuthOptionsValidator(IHostEnvironment environment, IConfiguration configuration)
+    : IValidateOptions<DevAuthOptions>
 {
-    public ValidateOptionsResult Validate(string? name, DevAuthOptions options) =>
-        options.Enabled && !environment.IsDevelopment()
-            ? ValidateOptionsResult.Fail("DevAuth:Enabled must be false outside Development.")
-            : ValidateOptionsResult.Success;
+    public ValidateOptionsResult Validate(string? name, DevAuthOptions options)
+    {
+        if (!options.Enabled)
+        {
+            return ValidateOptionsResult.Success;
+        }
+
+        var failures = new List<string>();
+        if (!environment.IsDevelopment())
+        {
+            failures.Add("DevAuth:Enabled must be false outside Development.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(configuration[$"{JwtOptions.SectionName}:{nameof(JwtOptions.SigningPublicKey)}"]))
+        {
+            failures.Add("DevAuth:Enabled must be false when Jwt:SigningPublicKey is set: the dev key must be the only trusted key.");
+        }
+
+        return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
+    }
 }
