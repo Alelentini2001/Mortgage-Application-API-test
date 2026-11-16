@@ -95,6 +95,7 @@ public sealed class AssessmentRepositoryTests(ApiFactory factory) : IClassFixtur
             Assert.Equal(EntityState.Unchanged, entry.State);
 
             work.Assessment.Complete(expected, assessedAt);
+            db.ChangeTracker.DetectChanges();
             var modifiedBeforeSave = entry.Properties.Where(p => p.IsModified).Select(p => p.Metadata.Name).Order(StringComparer.Ordinal).ToList();
             Assert.Equal(["AssessedAt", "Result", "Status"], modifiedBeforeSave);
 
