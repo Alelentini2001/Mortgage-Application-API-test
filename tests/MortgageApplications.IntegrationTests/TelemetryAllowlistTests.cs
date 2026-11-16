@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Net;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
-using MortgageApplications.Api.Identity;
 using MortgageApplications.Core.Applications;
 
 namespace MortgageApplications.IntegrationTests;
@@ -99,7 +98,7 @@ public sealed class TelemetryAllowlistTests
         await capture.WaitForProcessSpanAsync(failed);
 
         Assert.Contains(factory.Logs.Entries, e => e.EventName == "ProcessingError");
-        var owner = host.Services.GetRequiredService<ICurrentUser>().OwnerId;
+        const string owner = ApiFactory.DefaultOwner;
         var clean = new ForbiddenNumbers([], []);
         var texts = capture.Spans.Select(s => s.Text)
             .Concat(capture.Measurements.Select(m => m.TagText))

@@ -31,7 +31,8 @@ public sealed class StartupTests
     }
 
     // I43: no Affordability section must not start with zero limits. Review F4: only that section is missing;
-    // the connection string is put back, so the failure can only come from the options validation.
+    // the connection string (and, from Phase 7, the Jwt section) is put back, so the failure can only come from the
+    // affordability options validation.
     [Fact]
     public void Startup_without_affordability_section_fails()
     {
@@ -42,12 +43,117 @@ public sealed class StartupTests
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:MortgageApplications"] = "Data Source=:memory:",
+                ["Jwt:Issuer"] = ApiFactory.Issuer,
+                ["Jwt:Audience"] = ApiFactory.Audience,
+                ["Jwt:SigningPublicKey"] = factory.PublicKeyPem,
             });
         }));
 
         var ex = Assert.ThrowsAny<Exception>(() => missing.CreateClient());
 
         Assert.NotNull(FindOptionsFailure(ex));
+    }
+
+    // AU80 (+ AU81 for Staging): DevAuth:Enabled=true outside Development stops the app at startup (fail closed),
+    // even with a valid key; the message names the setting.
+    [Theory]
+    [MemberData(nameof(NonDevelopmentEnvironments))]
+    public void Startup_with_dev_auth_outside_development_fails(string environment)
+    {
+        using var factory = new ApiFactory();
+        using var host = factory.WithWebHostBuilder(builder => builder
+            .UseEnvironment(environment)
+            .UseSetting("DevAuth:Enabled", "true"));
+
+        var ex = Assert.ThrowsAny<Exception>(() => host.CreateClient());
+
+        Assert.Contains("DevAuth:Enabled", FindOptionsFailure(ex).Message, StringComparison.Ordinal);
+    }
+
+    public static TheoryData<string> NonDevelopmentEnvironments => ["Production", "Staging"];
+
+    // AU82: outside Development, no signing public key stops the app at startup; the message names the setting.
+    [Fact]
+    public void Startup_in_production_without_a_signing_key_fails()
+    {
+        using var factory = new ApiFactory();
+        using var host = factory.WithWebHostBuilder(builder => builder
+            .UseEnvironment("Production")
+            .UseSetting("Jwt:SigningPublicKey", ""));
+
+        var ex = Assert.ThrowsAny<Exception>(() => host.CreateClient());
+
+        Assert.Contains("Jwt:SigningPublicKey", FindOptionsFailure(ex).Message, StringComparison.Ordinal);
+    }
+
+    // AU83 (A14): Production with a configured key starts; /health is anonymous, the API needs a token.
+    [Fact]
+    public async Task Startup_in_production_with_a_signing_key_requires_a_token()
+    {
+        using var factory = new ApiFactory();
+        using var host = factory.WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
+        var anonymous = host.CreateClient().WithoutToken();
+
+        var health = await anonymous.GetPathAsync("/health");
+        var withoutToken = await anonymous.PostJsonAsync("/api/applications", Http.BaseBody);
+        var withToken = await host.CreateClient().PostJsonAsync("/api/applications", Http.BaseBody);
+
+        Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+        await withoutToken.AssertProblemAsync(HttpStatusCode.Unauthorized);
+        Assert.Equal(HttpStatusCode.Created, withToken.StatusCode);
+    }
+
+    // AU85 (A9, A11): an invalid Jwt option stops the app at startup; the message names the setting, not the value.
+    [Theory]
+    [MemberData(nameof(InvalidJwtSettings))]
+    public void Startup_with_invalid_jwt_setting_fails(string key, string value)
+    {
+        using var factory = new ApiFactory();
+        using var host = factory.WithWebHostBuilder(builder => builder.UseSetting(key, value));
+
+        var ex = Assert.ThrowsAny<Exception>(() => host.CreateClient());
+
+        var message = FindOptionsFailure(ex).Message;
+        Assert.Contains(key, message, StringComparison.Ordinal);
+        if (value.Trim().Length > 1)
+        {
+            Assert.DoesNotContain(value, message, StringComparison.Ordinal);
+        }
+    }
+
+    public static TheoryData<string, string> InvalidJwtSettings => new()
+    {
+        { "Jwt:Issuer", "" },
+        { "Jwt:Audience", " " },
+        { "Jwt:TokenLifetimeMinutes", "0" },
+        { "Jwt:TokenLifetimeMinutes", "-1" },
+        { "Jwt:TokenLifetimeMinutes", "61" },
+        { "Jwt:SigningPublicKey", "not-a-pem-key" },
+    };
+
+    // AU87: no Jwt section at all does not start with defaults. Only that section is missing: the connection string
+    // and the Affordability section are put back.
+    [Fact]
+    public void Startup_without_jwt_section_fails()
+    {
+        using var factory = new ApiFactory();
+        using var missing = factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.Sources.Clear();
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:MortgageApplications"] = "Data Source=:memory:",
+                ["Affordability:RulesVersion"] = "1.0",
+                ["Affordability:AssessmentRate"] = "0.06",
+                ["Affordability:MaxLoanToValuePercent"] = "90",
+                ["Affordability:MaxDebtToIncomePercent"] = "45",
+                ["Affordability:MaxLoanToIncomeMultiple"] = "4.5",
+            });
+        }));
+
+        var ex = Assert.ThrowsAny<Exception>(() => missing.CreateClient());
+
+        Assert.Contains("Jwt:", FindOptionsFailure(ex).Message, StringComparison.Ordinal);
     }
 
     // Q7: the queue capacity is validated at startup (1 to 10,000), like the affordability options.
@@ -140,6 +246,58 @@ public sealed class StartupTests
     }
 
     public static TheoryData<string> DevelopmentOnlyPaths => ["/openapi/v1.json", "/scalar", "/scalar/v1"];
+
+    // AU100: in Development the OpenAPI document is anonymous (A3) and declares an http bearer JWT scheme; the
+    // protected operations require it, /health and /dev/token do not.
+    [Fact]
+    public async Task OpenApi_in_development_declares_the_bearer_scheme_on_protected_operations()
+    {
+        using var factory = new ApiFactory();
+        using var host = DevTokenTests.DevOn(factory);
+
+        var response = await host.CreateClient().WithoutToken().GetPathAsync("/openapi/v1.json");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var document = System.Text.Json.JsonDocument.Parse(await response.BodyAsync());
+        var root = document.RootElement;
+        var (name, scheme) = Assert.Single(root.GetProperty("components").GetProperty("securitySchemes").EnumerateObject()
+            .Select(p => (p.Name, p.Value)));
+        Assert.Equal("http", scheme.GetProperty("type").GetString());
+        Assert.Equal("bearer", scheme.GetProperty("scheme").GetString());
+        Assert.Equal("JWT", scheme.GetProperty("bearerFormat").GetString());
+        var paths = root.GetProperty("paths");
+        foreach (var (path, method) in new[]
+        {
+            ("/api/applications", "post"),
+            ("/api/applications/{id}", "get"),
+            ("/api/applications/{id}/assessments", "post"),
+            ("/api/applications/{id}/assessments/{assessmentId}", "get"),
+        })
+        {
+            var security = paths.GetProperty(path).GetProperty(method).GetProperty("security");
+            Assert.Contains(security.EnumerateArray(), requirement => requirement.TryGetProperty(name, out _));
+        }
+
+        Assert.False(paths.GetProperty("/health").GetProperty("get").TryGetProperty("security", out _));
+        Assert.False(paths.GetProperty("/dev/token").GetProperty("post").TryGetProperty("security", out _));
+    }
+
+    // AU101 (I46 without a token): in Production an anonymous request for a Development-only path gets the same
+    // status as any unknown path, never the document.
+    [Theory]
+    [MemberData(nameof(DevelopmentOnlyPaths))]
+    public async Task Development_only_path_without_token_in_production_is_like_an_unknown_path(string path)
+    {
+        using var factory = new ApiFactory();
+        using var production = factory.WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
+        var anonymous = production.CreateClient().WithoutToken();
+
+        var response = await anonymous.GetPathAsync(path);
+        var unknown = await anonymous.GetPathAsync("/no-such-path");
+
+        Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(unknown.StatusCode, response.StatusCode);
+    }
 
     // O27 (X1, carried over from Phase 4): outside Development the app does not migrate its database at startup;
     // Development does (control). The host uses a fresh named in-memory database that ApiFactory did not migrate.

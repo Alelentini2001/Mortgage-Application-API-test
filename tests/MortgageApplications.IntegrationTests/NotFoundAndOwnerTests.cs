@@ -1,11 +1,8 @@
 using System.Net;
 using System.Text.Json;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MortgageApplications.Api.Assessments;
-using MortgageApplications.Api.Identity;
 using MortgageApplications.Core.Applications;
 using MortgageApplications.Infrastructure.Persistence;
 
@@ -13,7 +10,8 @@ namespace MortgageApplications.IntegrationTests;
 
 /// <summary>
 /// I29–I33, I35, I37: unknown, malformed and foreign IDs all return the same 404 ProblemDetails (security S2:
-/// no existence leak). The other owner's client shares this factory's database (A12).
+/// no existence leak). The other owner's client shares this factory's database (A12). Phase 7: the other owner is a
+/// token for another subject (AU50, AU51), no longer an <c>ICurrentUser</c> override.
 /// </summary>
 public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
@@ -74,14 +72,15 @@ public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<Ap
         await response.AssertProblemAsync(HttpStatusCode.NotFound);
     }
 
-    // I35: another owner gets 404 everywhere, with the same body as for an unknown ID; the owner still gets 200.
+    // I35 / AU50: another owner (a token for another subject) gets 404 everywhere, with the same body as for an
+    // unknown ID; the owner still gets 200.
     [Fact]
     public async Task Other_owner_gets_the_same_404_as_an_unknown_id()
     {
         var applicationId = await _client.CreateApplicationAsync();
         var assessmentId = await (await _client.PostAssessmentAsync(applicationId)).IdAsync();
-        using var otherFactory = OtherOwnerFactory();
-        var other = otherFactory.CreateClient();
+        using var otherFactory = factory.WithWebHostBuilder(_ => { });
+        var other = OtherOwnerClient(otherFactory);
         var unknown = await (await other.GetPathAsync($"/api/applications/{Guid.NewGuid()}")).AssertProblemAsync(HttpStatusCode.NotFound);
         // Review F2: the other owner's host must see the same database, or the 404s below would prove nothing.
         Assert.True(await ApplicationExistsAsync(otherFactory.Services, Guid.Parse(applicationId)));
@@ -104,14 +103,14 @@ public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<Ap
             (await _client.GetPathAsync($"/api/applications/{applicationId}/assessments/{assessmentId}")).StatusCode);
     }
 
-    // I-5: unknown, malformed and another owner's application IDs give the same 404, save no assessment and queue
-    // nothing. The other owner's host runs without the worker, so its queue count shows what was enqueued.
+    // I-5 / AU51: unknown, malformed and another owner's application IDs give the same 404, save no assessment and
+    // queue nothing. The other owner's host runs without the worker, so its queue count shows what was enqueued.
     [Fact]
     public async Task Post_assessment_for_unknown_malformed_or_other_owner_application_queues_nothing()
     {
         var applicationId = await _client.CreateApplicationAsync();
-        using var otherFactory = OtherOwnerFactory();
-        var other = otherFactory.CreateClient();
+        using var otherFactory = factory.WithWebHostBuilder(_ => { });
+        var other = OtherOwnerClient(otherFactory);
         var queue = otherFactory.Services.GetRequiredService<ChannelAssessmentQueue>();
         var assessmentsBefore = await CountAssessmentsAsync();
 
@@ -130,7 +129,7 @@ public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<Ap
     [Fact]
     public async Task Assessment_and_error_bodies_never_contain_the_owner()
     {
-        var owner = factory.Services.GetRequiredService<ICurrentUser>().OwnerId;
+        const string owner = ApiFactory.DefaultOwner;
         var applicationId = await _client.CreateApplicationAsync();
         var created = await _client.PostAssessmentAsync(applicationId);
         var fetched = await _client.GetPathAsync(created.Headers.Location!.OriginalString);
@@ -144,9 +143,8 @@ public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<Ap
         }
     }
 
-    private WebApplicationFactory<Program> OtherOwnerFactory() =>
-        factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(
-            services => services.AddSingleton<ICurrentUser>(new TestUser("other-owner"))));
+    private HttpClient OtherOwnerClient(Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> host) =>
+        host.CreateClient().WithToken(factory.TokenFor("other-owner"));
 
     // Everything except the per-request fields.
     private static string Strip(JsonElement problem) =>
@@ -169,10 +167,5 @@ public sealed class NotFoundAndOwnerTests(ApiFactory factory) : IClassFixture<Ap
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MortgageApplicationsDbContext>();
         return await db.Set<AffordabilityAssessment>().CountAsync(Http.Ct);
-    }
-
-    private sealed class TestUser(string ownerId) : ICurrentUser
-    {
-        public string OwnerId { get; } = ownerId;
     }
 }

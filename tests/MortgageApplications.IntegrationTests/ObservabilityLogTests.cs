@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using MortgageApplications.Api.Identity;
 using MortgageApplications.Core.Applications;
 
 namespace MortgageApplications.IntegrationTests;
@@ -51,10 +50,9 @@ public sealed class ObservabilityLogTests
         await using var factory = new ApiFactory();
         var client = factory.CreateClient();
         var applicationId = await client.CreateApplicationAsync();
-        using var other = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(
-            services => services.AddSingleton<ICurrentUser>(new OtherOwner())));
+        var other = factory.CreateClient().WithToken(factory.TokenFor("other-owner"));
 
-        await (await other.CreateClient().PostAssessmentAsync(applicationId)).AssertProblemAsync(HttpStatusCode.NotFound);
+        await (await other.PostAssessmentAsync(applicationId)).AssertProblemAsync(HttpStatusCode.NotFound);
         await (await client.PostAssessmentAsync(Guid.NewGuid().ToString())).AssertProblemAsync(HttpStatusCode.NotFound);
 
         Assert.DoesNotContain(factory.Logs.Entries, e => e.EventName == "AssessmentQueued");
@@ -84,7 +82,7 @@ public sealed class ObservabilityLogTests
         Assert.Equal(traced.TraceId, error.TraceId);
         var span = await capture.WaitForSpanAsync(
             s => s.TraceId == traced.TraceId && s.Kind == ActivityKind.Server, "the 500 request's server span");
-        var owner = throwing.Services.GetRequiredService<ICurrentUser>().OwnerId;
+        const string owner = ApiFactory.DefaultOwner;
         var clean = new ForbiddenNumbers([], []);
         var texts = factory.Logs.Entries.Select(e => e.Text).Append(span.Text).Select(clean.Sanitize).ToList();
         foreach (var sentinel in new[] { "85123", "912.34", "61234", "301234", owner })
@@ -148,10 +146,5 @@ public sealed class ObservabilityLogTests
         await factory.CreateClient().CreateApplicationAsync();
 
         Assert.DoesNotContain(factory.Logs.Entries, e => e.Category == _efCommand && e.Level < LogLevel.Warning);
-    }
-
-    private sealed class OtherOwner : ICurrentUser
-    {
-        public string OwnerId => "other-owner";
     }
 }

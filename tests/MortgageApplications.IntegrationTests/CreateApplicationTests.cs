@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
-using MortgageApplications.Api.Identity;
 
 namespace MortgageApplications.IntegrationTests;
 
@@ -64,7 +63,7 @@ public sealed class CreateApplicationTests(ApiFactory factory) : IClassFixture<A
     [Fact]
     public async Task Post_and_get_never_return_the_owner()
     {
-        var owner = factory.Services.GetRequiredService<ICurrentUser>().OwnerId;
+        const string owner = ApiFactory.DefaultOwner;
 
         var created = await _client.PostJsonAsync("/api/applications", Http.BaseBody);
         var fetched = await _client.GetPathAsync(created.Headers.Location!.OriginalString);
