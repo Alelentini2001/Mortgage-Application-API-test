@@ -1,6 +1,6 @@
 # Phase 09: Optimisation + quality
 
-Status: **In progress: plan and tests approved (2026-11-16), implementation next** · Branch: `phase-09-quality` · PR: — · Started: 2026-11-16 · Finished: —
+Status: **Ready for Checkpoint B (PR review)** · Branch: `phase-09-quality` · PR: [#13](https://github.com/Alelentini2001/Mortgage-Application-API-test/pull/13) · Started: 2026-11-16 · Finished: —
 
 ## Goal
 
@@ -111,9 +111,90 @@ Planning and orchestration in Google Antigravity IDE (Gemini 4 Argon), continuin
 - **Prompt (verbatim):**
   > Approved
 - **Purpose:** approval of the Phase 9 test cases (`P9-T1`–`P9-T9`).
-- **Outcome:** failing tests written first (`P9-T1`–`P9-T9`), then implementation.
+- **Outcome:** failing tests written first (`dbc93ad`), then implementation (`31b6b89`, `807ed6a`, `0f4fcb1`, `0db33e8`, `4f152ee`).
+
+### P09-05 · agent→subagent (`security-auditor` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Security gate for Phase 9 (optimisation + quality) of a .NET 10 mortgage-application API in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-09-quality. Read only: do not edit files or switch branches.
+
+  Read first: .claude/rules/security.md, AGENTS.md, docs/progress/phase-09-quality.md (goal, plan, decisions P9-D1 to P9-D4, approved test cases P9-T1 to P9-T9).
+
+  Do:
+  1. Run `gitleaks git --no-banner --redact -v` and `gitleaks dir --no-banner --redact .`
+  2. Run `semgrep scan --config p/csharp --config p/secrets --error --quiet` (and with `--baseline-commit main`).
+  3. Run `dotnet list MortgageApplications.slnx package --vulnerable --include-transitive`.
+  4. Review the diff (`git diff main...HEAD`) against OWASP Top 10:2025 and the repo security rules:
+     - `AssessmentProcessingResult.RulesVersion` is an allowlisted field (rules section 6) and carries no applicant data.
+     - `EfMortgageApplicationRepository.FindForProcessingAsync` and `UpdateAssessmentAsync` keep the same worker-only boundaries and parameterized LINQ queries (`DatabaseQueryPlanTests` uses `query.CreateDbCommand()`, no raw user SQL).
+     - `Program.cs` `OTEL_RESOURCE_ATTRIBUTES` parsing cannot throw or leak data.
+     - `.claude/rules/backend.md` and `tests/CLAUDE.md` updates keep all security rules intact.
+
+  Output:
+  - Exact commands run and trimmed outputs.
+  - A findings table: `tool/check | finding (file:line) | severity | real or false positive | reason | fix`.
+  - A one-line verdict: `PASS` or `FAIL`.
+  ```
+- **Purpose:** security gate on `phase-09-quality`.
+- **Outcome:** **PASS**. 0 leaks (169 commits + working tree), 0 Semgrep findings, 0 vulnerable packages, 0 OWASP findings.
+
+### P09-06 · agent→subagent (`dotnet-reviewer` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Fresh-context diff review of Phase 9 (optimisation + quality) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-09-quality. Read only: do not edit files, do not build or run tests.
+
+  Get the diff with `git diff main...HEAD`. Read the touched files in full (`src/MortgageApplications.Core/Applications/AssessmentProcessingResult.cs`, `src/MortgageApplications.Core/Applications/MortgageApplicationService.cs`, `src/MortgageApplications.Infrastructure/Persistence/EfMortgageApplicationRepository.cs`, `src/MortgageApplications.Api/Program.cs`, `src/MortgageApplications.Api/Observability/AssessmentTelemetry.cs`, `src/MortgageApplications.Api/Assessments/AssessmentWorker.cs`, `.claude/rules/backend.md`, `tests/CLAUDE.md`, `tests/MortgageApplications.UnitTests/Applications/MortgageApplicationServiceTests.cs`, `tests/MortgageApplications.IntegrationTests/AssessmentRepositoryTests.cs`, `tests/MortgageApplications.IntegrationTests/DatabaseQueryPlanTests.cs`, `tests/MortgageApplications.IntegrationTests/OtlpExportTests.cs`, `tests/MortgageApplications.IntegrationTests/CapturingLoggerProvider.cs`, `tests/MortgageApplications.IntegrationTests/AssessmentWorkerTests.cs`, `tests/MortgageApplications.IntegrationTests/JsonStrictnessTests.cs`), plus `docs/progress/phase-09-quality.md` and `docs/progress/phase-09/test-proposal.md`.
+
+  Check in priority order:
+  1. Correctness of the telemetry, repository, and `OTEL_RESOURCE_ATTRIBUTES` changes (`P9-D1`).
+  2. Test coverage and quality: whether every approved case (`P9-T1`–`P9-T9`) is implemented and can fail if the behaviour under test breaks.
+  3. Clean and readable code (`R25`).
+
+  Output only a list, most severe first, one finding per line:
+  `file:line | severity (critical/high/medium/low) | why it is wrong | concrete fix`
+  If you find nothing real, output `No findings.` and the list of files you reviewed. State plainly that you did not build or run tests.
+  ```
+- **Purpose:** fresh-context review of `phase-09-quality`.
+- **Outcome:** 5 findings (`R1`–`R5`), all fixed test-first in `0f4fcb1`, `0db33e8`, and `4f152ee`.
+
+### P09-07 · agent→subagent (`spec-checker` in Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Requirement traceability check at the end of Phase 9 (optimisation + quality) in /Users/ale_ssd/Developer/Mortgage-Application-API-test, branch phase-09-quality. Read only: do not edit files.
+
+  Read:
+  - `docs/spec/ORIGINAL_SPEC.md` and `docs/spec/affordability-rules.md`
+  - `docs/layers/PRODUCTION-LAYERS.md` ("Database", "Caching", "Scaling")
+  - `docs/PROGRESS.md` (the R1-R55 traceability table)
+  - `docs/progress/phase-09-quality.md` and `docs/progress/phase-09/test-proposal.md`
+  - The Phase 9 code and tests changed in `git diff main...HEAD`
+
+  Do:
+  1. Map every Phase 9 goal, decision (`P9-D1` to `P9-D4`), and approved test case (`P9-T1` to `P9-T9`) to the file:line and test name that meet it.
+  2. Check how the R1–R55 traceability table in `docs/PROGRESS.md` changes after Phase 9 (specifically R25 "Clean and readable code" moving from `missing` to `met`, R27 test count moving to `584/584 + 113 hook cases`, and the updated overall summary counts).
+  3. Check which rows of `docs/layers/PRODUCTION-LAYERS.md` ("Database", "Caching") need wording updates now that Phase 9 is complete.
+  4. Output a Markdown table for the Phase 9 items and at most 5 short notes.
+  ```
+- **Purpose:** requirement traceability at the end of Phase 9.
+- **Outcome:** **R25 (`Clean and readable code`)** moves from `missing` to **met**, bringing overall totals to **31 met · 10 partial · 14 missing**; all `P9-D1`–`P9-D4` and `P9-T1`–`P9-T9` met after `0f4fcb1` and `0db33e8`.
 
 ## What was built (files)
+
+Implemented in commits `dbc93ad` (failing tests), `31b6b89` (core/infra/api/rules implementation), `807ed6a` (`DetectChanges` in `P9-T2`), `0f4fcb1` (gate tests), `0db33e8` (`DatabaseMigration` WAL + `AssessmentProcessingResult` XML summary), and `4f152ee` (`OpenConnectionAsync` in `DatabaseQueryPlanTests`):
+
+- `src/MortgageApplications.Core/Applications/AssessmentProcessingResult.cs` and `MortgageApplicationService.cs`:
+  - `AssessmentProcessingResult` carries `string? RulesVersion = null` (populated from `result.RulesVersion` on `Completed`, `null` on `Failed`/`Skipped`/`NotFound`).
+- `src/MortgageApplications.Infrastructure/Persistence/EfMortgageApplicationRepository.cs` and `DatabaseMigration.cs`:
+  - `FindForProcessingAsync` projects the 5 scalar inputs (`AnnualIncome`, `MonthlyExpenses`, `DepositAmount`, `PropertyValue`, `TermYears`) instead of materializing/tracking the parent `MortgageApplication`.
+  - `UpdateAssessmentAsync` calls `db.Assessments.Update(assessment)` only when `db.Entry(assessment).State == EntityState.Detached`, so for an already-tracked assessment EF Core writes only the modified columns (`Status`, `Result`, `AssessedAt`/`FailedAt`).
+  - `DatabaseMigration.MigrateDatabaseAsync` executes `PRAGMA journal_mode=WAL;` after `MigrateAsync` so existing file-backed SQLite databases in `DELETE` mode are switched to `WAL`.
+- `src/MortgageApplications.Api/Program.cs`, `Observability/AssessmentTelemetry.cs`, and `Assessments/AssessmentWorker.cs`:
+  - `Program.cs` splits `OTEL_RESOURCE_ATTRIBUTES` on `,` (`RemoveEmptyEntries | TrimEntries`) and checks `kv.StartsWith("service.name=", StringComparison.Ordinal)` with a non-whitespace value.
+  - `AssessmentTelemetry.RecordProcessed` sets `OutcomeTag` on `activity` once (removing the duplicate loop write), and `AssessmentWorker` passes `result.RulesVersion ?? affordabilityOptions.Value.RulesVersion!`.
+- `.claude/rules/backend.md` and `tests/CLAUDE.md`:
+  - Updated to reflect `P3-D1` (DTO mapping at the API boundary) and `P9-D4` (`AffordabilityCalculatorPropertyTests` exception).
+- Tests (`tests/MortgageApplications.UnitTests/` and `tests/MortgageApplications.IntegrationTests/`):
+  - `MortgageApplicationServiceTests.cs` (`P9-T1`, `P9-T7`), `AssessmentRepositoryTests.cs` (`P9-T2`, `P9-T8`), `DatabaseQueryPlanTests.cs` (new, `P9-T3`, `P9-T4`), `OtlpExportTests.cs` (`P9-T5`), `CapturingLoggerProvider.cs` and `AssessmentWorkerTests.cs` (`P9-T6` / `RR5`), `AssessmentSpanTests.cs` (`P9-T1`, `P9-T7`), and `JsonStrictnessTests.cs` (`P9-T9`).
 
 ## Tests
 
@@ -123,16 +204,60 @@ Full proposal, verbatim: [`phase-09/test-proposal.md`](phase-09/test-proposal.md
 
 **Recommended selection:** all 9 cases (`P9-T1`–`P9-T7` `must`, plus `P9-T8` detached-update fallback and `P9-T9` shared `Production` host in `JsonStrictnessTests`).
 
+### Results
+
+- **Red first (`dbc93ad`, before implementation):**
+  - `MortgageApplicationServiceTests`: 2 failed (`P9-T1` E1 and E2: `RulesVersion` was `null` instead of `"1.0"`).
+  - `AssessmentRepositoryTests`: 1 failed (`P9-T2`: `db.ChangeTracker.Entries<MortgageApplication>()` was not empty).
+  - `OtlpExportTests`: 2 failed (`P9-T5`: `"custom.service.name=other"` and `"deployment.environment=demo,service.name=   "` suppressed the default `"mortgage-applications"` service name).
+- **Red then green on the gate findings (`0f4fcb1` → `0db33e8` + `4f152ee`):**
+  - `DatabaseQueryPlanTests.MigrateDatabaseAsync_enables_wal_mode_on_file_database` (`0f4fcb1`): failed red with `Expected: "wal", Actual: "delete"` when the file-backed SQLite database was initialized in `DELETE` mode prior to `MigrateDatabaseAsync`. Passed after `0db33e8` added `await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", cancellationToken);`.
+- **Green (`4f152ee`):** `./scripts/verify.sh` full → 0 warnings, 0 errors, **586 tests** (`275` unit + `311` integration), **113 hook cases**, `VERIFY PASSED (full)`.
+- **Integration tests 3 times in a row (after `4f152ee`):** run 1: `311/311` (17.5 s); run 2: `311/311` (17.2 s); run 3: `311/311` (17.4 s).
+
 ## Security gate
+
+`security-auditor` (`P09-05`, Antigravity IDE · Gemini 4 Argon). **Verdict: PASS.**
+- `gitleaks git --no-banner --redact -v` (169 commits) and `gitleaks dir --no-banner --redact .`: 0 leaks.
+- `semgrep scan --config p/csharp --config p/secrets --error --quiet` (full and `--baseline-commit main`): 0 findings.
+- `dotnet list MortgageApplications.slnx package --vulnerable --include-transitive`: 0 vulnerable packages.
+- Manual OWASP Top 10:2025 review: 0 findings (`AssessmentProcessingResult.RulesVersion` is allowlisted in rules §6; `EfMortgageApplicationRepository` and `DatabaseQueryPlanTests` use parameterized EF Core commands; `OTEL_RESOURCE_ATTRIBUTES` parsing cannot throw or leak data).
 
 ## Review gate
 
+1. **`dotnet-reviewer` (`P09-06`, Antigravity IDE · Gemini 4 Argon, read-only):**
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| R1 | `DatabaseQueryPlanTests.cs:36`: `P9-T3` explained hand-written `IQueryable` expressions instead of capturing the SQL commands executed by `EfMortgageApplicationRepository`, and omitted `IX_AffordabilityAssessments_ApplicationId`. | High | Fixed, `0f4fcb1` + `4f152ee`: `RecordingCommandInterceptor` (`DbCommandInterceptor`) captures the real commands from `FindAsync`, `FindAssessmentAsync`, `FindForProcessingAsync`, and the `OwnerId` and `ApplicationId` index queries, asserting both `IX_MortgageApplications_OwnerId` and `IX_AffordabilityAssessments_ApplicationId`. |
+| R2 | `MortgageApplicationServiceTests.cs:354` & `AssessmentSpanTests.cs`: `P9-T1` lacked the custom `RulesVersion = "2.1"` unit test and a worker telemetry test where the calculator's stored `RulesVersion` (`"2.1"`) differs from `IOptions<AffordabilityOptions>.Value.RulesVersion` (`"1.0"`). | High | Fixed, `0f4fcb1`: added `ProcessAssessmentAsync_completed_reports_custom_rules_version_from_result` (`275` unit tests) and `Completed_span_uses_stored_rules_version_while_failed_falls_back_to_options` + single-`OutcomeTag` assertion in `AssessmentSpanTests`. |
+| R3 | `DatabaseMigration.cs:13`: `MigrateDatabaseAsync` relied on EF Core's `Create()` default for WAL on new files, leaving an existing file in `DELETE` journal mode unchanged. | Medium | Fixed, `0f4fcb1` (test initializes file in `DELETE` mode, failed red) + `0db33e8` (`ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;")` in `MigrateDatabaseAsync`). |
+| R4 | `DatabaseQueryPlanTests.cs:1`: unused `using` directives before `DbCommandInterceptor` was added. | Low | Fixed, `0f4fcb1` (both namespaces used by `RecordingCommandInterceptor`). |
+| R5 | `AssessmentProcessingResult.cs:6`: XML `<summary>` omitted `RulesVersion`. | Low | Fixed, `0db33e8`. |
+
+2. **`spec-checker` (`P09-07`, Antigravity IDE · Gemini 4 Argon, read-only):**
+   - **R25 (`Clean and readable code`):** `missing` → **met** (overall totals: **31 met · 10 partial · 14 missing**; all remaining 24 items belong to Phase 10 `README.md` or Phase 11 rehearsal/slides).
+   - All `P9-D1`–`P9-D4` and `P9-T1`–`P9-T9` verified as **met**.
+
 ## AI output corrected or rejected (REAL cases only)
+
+- **EF Core `DetectChanges()` timing in `P9-T2` (`dbc93ad`):** `AssessmentRepositoryTests.FindForProcessingAsync_does_not_track_application_and_update_modifies_only_changed_columns` initially read `entry.Properties.Where(p => p.IsModified)` right after `work.Assessment.Complete(...)` without calling `db.ChangeTracker.DetectChanges()`, returning `[]` because snapshot change tracking runs on `DetectChanges()` / `SaveChangesAsync()`. Fixed in `807ed6a`.
+- **`DatabaseQueryPlanTests` SQLite `.ToQueryString()` and `PRAGMA journal_mode=WAL` (`dbc93ad`):**
+  - `.ToQueryString()` prepends SQLite CLI `.param set` lines, which failed `EXPLAIN QUERY PLAN`; replaced with `RecordingCommandInterceptor` (`0f4fcb1`, `R1`).
+  - `MigrateDatabaseAsync_enables_wal_mode_on_file_database` initially passed without modifying `DatabaseMigration.cs` because EF Core creates brand-new SQLite files in WAL mode; caught by `dotnet-reviewer` (`R3`), proven red by initializing the temp file in `DELETE` mode (`0f4fcb1`), and fixed in `DatabaseMigration.cs` (`0db33e8`).
 
 ## Optimisations considered
 
+- **Scalar projection + tracked-only `UpdateAssessmentAsync` (`EfMortgageApplicationRepository.cs`, `P9-D1 A`):** `FindForProcessingAsync` no longer materializes or tracks the parent `MortgageApplication` entity on every background assessment, and `UpdateAssessmentAsync` writes only the 3 modified columns (`Status`, `Result`, `AssessedAt`/`FailedAt`) instead of all 7 columns (`P9-T2`).
+- **Shared `Production` host in `JsonStrictnessTests` (`P9-D1 A`, `P9-T9`):** reuses one `Production` `WebApplicationFactory<Program>` across the class; measured `JsonStrictnessTests` duration is **2.03 s** for all 13 cases (`dotnet test --filter-class "*JsonStrictnessTests"`).
+- **Index & caching verification (`P9-D2 A`, `DatabaseQueryPlanTests`):** all 5 repository/index queries execute in `< 1 ms` in-process using SQLite index/primary-key `SEARCH` plans (`IX_MortgageApplications_OwnerId`, `IX_AffordabilityAssessments_ApplicationId`, and `PK_MortgageApplications` / `PK_AffordabilityAssessments`) with `0` `SCAN` lines, and all responses are per-owner (`Cache-Control: no-store`), confirming output caching is unnecessary.
+
 ## Open issues
 
+- None for Phase 9. Multi-instance worker scaling items (`RowVersion` concurrency token and `AttemptCount` retry cap, `P9-D3 A`) are documented in `PRODUCTION-LAYERS.md` ("Scaling") and carried into Phase 10 (`README.md`).
+
 ## Time spent (approx.)
+
+~30 min (`2026-11-16 02:35 UTC` to `03:05 UTC`, commits `6983b6f`–`4f152ee`, in Google Antigravity IDE · Gemini 4 Argon).
 
 ## Human review (Alessandro writes this; the agent leaves it empty)
