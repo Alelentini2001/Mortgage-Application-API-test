@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Net;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
-using MortgageApplications.Api.Identity;
 using MortgageApplications.Core.Applications;
 
 namespace MortgageApplications.IntegrationTests;
@@ -21,7 +20,7 @@ public sealed class TelemetryAllowlistTests
     private static readonly string[] _metricKeys = ["assessment.outcome", "assessment.decision", "assessment.rules_version"];
 
     private static readonly string[] _logKeys =
-        ["AssessmentId", "ApplicationId", "Outcome", "Count", "RetryDelaySeconds", "{OriginalFormat}"];
+        ["AssessmentId", "ApplicationId", "Outcome", "Count", "RetryDelaySeconds", "FailureType", "{OriginalFormat}"];
 
     // What the ASP.NET Core instrumentation (1.20.1) sets on our server spans today, minus the client-controlled
     // user_agent.original, plus our assessment.id. Rules section 6 does not name these HTTP keys yet (see the phase
@@ -99,7 +98,7 @@ public sealed class TelemetryAllowlistTests
         await capture.WaitForProcessSpanAsync(failed);
 
         Assert.Contains(factory.Logs.Entries, e => e.EventName == "ProcessingError");
-        var owner = host.Services.GetRequiredService<ICurrentUser>().OwnerId;
+        const string owner = ApiFactory.DefaultOwner;
         var clean = new ForbiddenNumbers([], []);
         var texts = capture.Spans.Select(s => s.Text)
             .Concat(capture.Measurements.Select(m => m.TagText))
@@ -142,7 +141,7 @@ public sealed class TelemetryAllowlistTests
         Assert.Empty(_serverSpanKeys.Except(keys));
     }
 
-    // O22: our own log entries carry only allowlisted field names. Control: the new queued log is among them.
+    // O22: our own log entries carry only allowlisted field names. Control: the queued and token-rejected logs are among them.
     [Fact]
     public async Task Our_log_field_names_are_in_the_allowlist()
     {
@@ -151,9 +150,11 @@ public sealed class TelemetryAllowlistTests
 
         await Telemetry.AssessAsync(client, Http.BaseBody);
         await Telemetry.AssessFailedAsync(factory.Services, client, Http.BaseBody);
+        await factory.CreateAnonymousClient().PostJsonWithAuthorizationAsync("/api/applications", Http.BaseBody, "Bearer not-a-jwt");
 
         var ours = factory.Logs.Entries.Where(e => e.Category.StartsWith("MortgageApplications.", StringComparison.Ordinal)).ToList();
         Assert.Contains(ours, e => e.EventName == "AssessmentQueued");
+        Assert.Contains(ours, e => e.EventName == "TokenRejected");
         Assert.All(ours.SelectMany(e => e.State), kv => Assert.Contains(kv.Key, _logKeys));
     }
 

@@ -34,6 +34,20 @@ public sealed class ComposeFileTests
         Assert.DoesNotContain("aspire", text, StringComparison.OrdinalIgnoreCase);
     }
 
+    // AU110 (A13): compose turns the dev token endpoint on, runs as Development, keeps the port on loopback, and no
+    // longer says there is no authentication.
+    [Fact]
+    public void Default_compose_file_enables_dev_auth_on_loopback_only()
+    {
+        var text = File.ReadAllText(Path.Combine(_root, "compose.yaml"));
+
+        Assert.Contains("DevAuth__Enabled: \"true\"", text, StringComparison.Ordinal);
+        Assert.Contains("ASPNETCORE_ENVIRONMENT: Development", text, StringComparison.Ordinal);
+        Assert.Contains("- \"127.0.0.1:8080:8080\"", text, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"-\s*""?(0\.0\.0\.0:)?8080:8080", text);
+        Assert.DoesNotContain("no authentication", text, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string FindRepoRoot()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)

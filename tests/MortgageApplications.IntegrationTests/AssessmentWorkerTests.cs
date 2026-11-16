@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MortgageApplications.Api.Assessments;
-using MortgageApplications.Api.Identity;
 using MortgageApplications.Core.Applications;
 using MortgageApplications.Infrastructure.Persistence;
 
@@ -250,7 +249,7 @@ public sealed class AssessmentWorkerTests
         var error = Assert.Single(entries, e => e.EventName == "ProcessingError");
         Assert.Equal(LogLevel.Error, error.Level);
         Assert.Contains(failedId, error.Message, StringComparison.OrdinalIgnoreCase);
-        var owner = host.Services.GetRequiredService<ICurrentUser>().OwnerId;
+        const string owner = ApiFactory.DefaultOwner;
         foreach (var sentinel in new[] { "85123", "912.34", "61234", "301234", "240000", owner })
         {
             Assert.DoesNotContain(entries, e => e.Text.Contains(sentinel, StringComparison.Ordinal));
@@ -292,7 +291,7 @@ public sealed class AssessmentWorkerTests
         Assert.Equal("Completed", Http.Status(nextBody));
 
         var failedId = await failed.IdAsync();
-        var owner = factory.Services.GetRequiredService<ICurrentUser>().OwnerId;
+        const string owner = ApiFactory.DefaultOwner;
         var entries = factory.Logs.Entries;
         Assert.Contains(entries, e => e.Category == typeof(AssessmentWorker).FullName
             && e.Level == LogLevel.Warning

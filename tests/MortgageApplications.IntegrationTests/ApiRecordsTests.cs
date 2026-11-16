@@ -1,4 +1,5 @@
 using MortgageApplications.Api.Applications;
+using MortgageApplications.Api.Identity;
 using MortgageApplications.Core.Affordability;
 using MortgageApplications.Core.Applications;
 
@@ -48,5 +49,15 @@ public sealed class ApiRecordsTests
         Assert.DoesNotContain(_sentinel, check.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(_sentinel, result.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(_sentinel, assessment.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dev_token_records_ToString_hide_the_subject_and_token()
+    {
+        var request = new DevTokenRequest { Subject = _sentinel };
+        var response = new DevTokenResponse(_sentinel, DateTimeOffset.UnixEpoch);
+
+        Assert.DoesNotContain(_sentinel, request.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(_sentinel, response.ToString(), StringComparison.Ordinal);
     }
 }

@@ -78,7 +78,9 @@ if (otlpEndpointKeys.Any(key => !string.IsNullOrWhiteSpace(builder.Configuration
 }
 
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<ICurrentUser, DevelopmentCurrentUser>();
+// Authentication (Phase 7, ADR 0004): JWT bearer, ES256 only; the owner is the token's sub (ClaimsCurrentUser), and
+// the fallback policy requires an authenticated caller on every endpoint not marked AllowAnonymous.
+builder.Services.AddJwtAuthentication();
 builder.Services.AddScoped<MortgageApplicationService>();
 builder.Services.AddInfrastructure(
     builder.Configuration.GetConnectionString("MortgageApplications")
@@ -97,7 +99,11 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddValidation();
 builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = ValidationErrorKeys.UseJsonNames);
 builder.Services.AddExceptionHandler<ProblemExceptionHandler>();
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer<BearerSecurityTransformer>();
+    options.AddOperationTransformer<BearerSecurityTransformer>();
+});
 
 var app = builder.Build();
 
@@ -108,16 +114,27 @@ app.UseExceptionHandler(new ExceptionHandlerOptions
     SuppressDiagnosticsCallback = context => context.Exception is BadHttpRequestException,
 });
 app.UseStatusCodePages();
+// After the status-code pages, so a 401 from the challenge gets the same ProblemDetails body as other errors.
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
     // Development only: production runs migrations as a separate step (ADR 0002).
     await app.Services.MigrateDatabaseAsync();
-    app.MapOpenApi();
-    app.MapScalarApiReference();
+    // Anonymous in Development only, where they are mapped; they hold no data (A3).
+    app.MapOpenApi().AllowAnonymous();
+    app.MapScalarApiReference().AllowAnonymous();
+
+    // Fail closed: the dev token endpoint exists only here and only with the explicit flag. Outside Development
+    // the flag stops startup (DevAuthOptionsValidator).
+    if (app.Services.GetRequiredService<IOptions<DevAuthOptions>>().Value.Enabled)
+    {
+        app.MapDevTokenEndpoint();
+    }
 }
 
-app.MapGet("/health", () => TypedResults.Ok("Healthy"));
+app.MapGet("/health", () => TypedResults.Ok("Healthy")).AllowAnonymous();
 app.MapApplicationEndpoints();
 
 await app.RunAsync();

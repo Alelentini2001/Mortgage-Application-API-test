@@ -77,13 +77,53 @@ jobs:
           fi
           echo "The api container runs as uid $uid, which owns /app/data."
 
+      # Phase 7: the API requires a bearer token. Without one, a create is a 401 that says Bearer.
+      - name: Anonymous POST /api/applications returns 401
+        run: |
+          body='{"annualIncome":85000.00,"monthlyExpenses":900.00,"depositAmount":60000.00,"propertyValue":300000.00,"termYears":30}'
+          status=$(curl -sS --max-time 10 -o anonymous.json -D anonymous-headers.txt -w '%{http_code}' \
+            -H 'Content-Type: application/json' -d "$body" http://127.0.0.1:8080/api/applications) \
+            || status="curl-exit-$?"
+          if [ "$status" != "401" ]; then
+            echo "::error::An anonymous POST /api/applications returned $status, expected 401."
+            docker compose logs --no-color
+            exit 1
+          fi
+          if ! grep -qi '^www-authenticate: bearer' anonymous-headers.txt; then
+            echo "::error::The 401 has no 'WWW-Authenticate: Bearer' header."
+            exit 1
+          fi
+          echo "An anonymous POST returned 401 with WWW-Authenticate: Bearer."
+
+      # compose runs Development with DevAuth__Enabled, so POST /dev/token issues a token (loopback only). The token
+      # is masked, kept in a header file for curl -H @file (never on a command line), and never printed.
+      - name: Get a dev token
+        run: |
+          status=$(curl -sS --max-time 10 -o token.json -w '%{http_code}' \
+            -H 'Content-Type: application/json' -d '{"subject":"ci-smoke"}' http://127.0.0.1:8080/dev/token) \
+            || status="curl-exit-$?"
+          if [ "$status" != "200" ]; then
+            echo "::error::POST /dev/token returned $status, expected 200."
+            docker compose logs --no-color
+            exit 1
+          fi
+          token=$(jq -r '.token // empty' token.json)
+          rm -f token.json
+          if [ -z "$token" ]; then
+            echo "::error::POST /dev/token returned no token."
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          printf 'Authorization: Bearer %s\n' "$token" > auth-header.txt
+          echo "POST /dev/token returned a token."
+
       # /health does not touch the database: this proves the startup migration ran and /app/data is writable.
       # The body is the synthetic golden example E1 (tests/.../Http.cs), not personal data.
       - name: POST then GET an application
         run: |
           body='{"annualIncome":85000.00,"monthlyExpenses":900.00,"depositAmount":60000.00,"propertyValue":300000.00,"termYears":30}'
           # On a transport error, keep going so the status check below prints the container logs.
-          status=$(curl -sS --max-time 10 -o created.json -D headers.txt -w '%{http_code}' \
+          status=$(curl -sS --max-time 10 -o created.json -D headers.txt -w '%{http_code}' -H @auth-header.txt \
             -H 'Content-Type: application/json' -d "$body" http://127.0.0.1:8080/api/applications) \
             || status="curl-exit-$?"
           if [ "$status" != "201" ]; then
@@ -99,8 +139,8 @@ jobs:
               exit 1
               ;;
           esac
-          status=$(curl -sS --max-time 10 -o fetched.json -w '%{http_code}' "http://127.0.0.1:8080$location") \
-            || status="curl-exit-$?"
+          status=$(curl -sS --max-time 10 -o fetched.json -w '%{http_code}' -H @auth-header.txt \
+            "http://127.0.0.1:8080$location") || status="curl-exit-$?"
           if [ "$status" != "200" ]; then
             echo "::error::GET $location returned $status, expected 200."
             docker compose logs --no-color
@@ -121,7 +161,7 @@ jobs:
           id=$(jq -r '.id' created.json)
           app="/api/applications/$id"
           status=$(curl -sS --max-time 10 -X POST -o accepted.json -D assess-headers.txt -w '%{http_code}' \
-            "http://127.0.0.1:8080$app/assessments") || status="curl-exit-$?"
+            -H @auth-header.txt "http://127.0.0.1:8080$app/assessments") || status="curl-exit-$?"
           if [ "$status" != "202" ]; then
             echo "::error::POST $app/assessments returned $status, expected 202."
             docker compose logs --no-color
@@ -137,7 +177,7 @@ jobs:
           esac
           deadline=$((SECONDS + 30))
           while :; do
-            curl -sS --max-time 5 -o assessment.json "http://127.0.0.1:8080$location" || true
+            curl -sS --max-time 5 -o assessment.json -H @auth-header.txt "http://127.0.0.1:8080$location" || true
             state=$(jq -r '.status // empty' assessment.json 2>/dev/null || true)
             if [ -n "$state" ] && [ "$state" != "Pending" ]; then
               break
