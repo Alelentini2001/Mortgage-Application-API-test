@@ -1,15 +1,36 @@
 # Demo requests for the Mortgage Applications API (VS Code REST Client, Rider or Visual Studio).
 # Start the API first: dotnet run --project src/MortgageApplications.Api
 # Development only: the OpenAPI document is at /openapi/v1.json and the Scalar UI at /scalar.
+# Every /api/ request needs a bearer token. The launch profiles set DevAuth__Enabled=true, so POST /dev/token issues
+# one (Development only). Run the two token requests first; tokens last 15 minutes and die when the API stops.
 
 @baseUrl = http://localhost:5227
 
-### Health
+### Health (anonymous)
 GET {{baseUrl}}/health
+
+### Get a token for alice (used by every request below)
+# @name token
+POST {{baseUrl}}/dev/token
+Content-Type: application/json
+
+{
+  "subject": "alice"
+}
+
+### Get a token for bob (used by the cross-user request at the end)
+# @name bobToken
+POST {{baseUrl}}/dev/token
+Content-Type: application/json
+
+{
+  "subject": "bob"
+}
 
 ### Create an application (golden example E1: expected Approved)
 # @name create
 POST {{baseUrl}}/api/applications
+Authorization: Bearer {{token.response.body.token}}
 Content-Type: application/json
 
 {
@@ -22,17 +43,21 @@ Content-Type: application/json
 
 ### Get it back (the id comes from the response above)
 GET {{baseUrl}}/api/applications/{{create.response.body.id}}
+Authorization: Bearer {{token.response.body.token}}
 
 ### Start an assessment (202 Accepted, status Pending; the Location header points at the assessment)
 # @name assess
 POST {{baseUrl}}/api/applications/{{create.response.body.id}}/assessments
+Authorization: Bearer {{token.response.body.token}}
 
 ### Poll the assessment: always 200. Repeat until status is Completed (with the result) or Failed (with failedAt)
 GET {{baseUrl}}/api/applications/{{create.response.body.id}}/assessments/{{assess.response.body.id}}
+Authorization: Bearer {{token.response.body.token}}
 
 ### Create a high-LTV application (golden example E2: deposit 20,000, expected Declined on LTV)
 # @name createDeclined
 POST {{baseUrl}}/api/applications
+Authorization: Bearer {{token.response.body.token}}
 Content-Type: application/json
 
 {
@@ -46,12 +71,15 @@ Content-Type: application/json
 ### Assess it: still 202, and it completes as Declined (a result, not an error)
 # @name assessDeclined
 POST {{baseUrl}}/api/applications/{{createDeclined.response.body.id}}/assessments
+Authorization: Bearer {{token.response.body.token}}
 
 ### Poll it until status is Completed; result.decision is Declined
 GET {{baseUrl}}/api/applications/{{createDeclined.response.body.id}}/assessments/{{assessDeclined.response.body.id}}
+Authorization: Bearer {{token.response.body.token}}
 
 ### Invalid input: 400 ValidationProblemDetails naming termYears
 POST {{baseUrl}}/api/applications
+Authorization: Bearer {{token.response.body.token}}
 Content-Type: application/json
 
 {
@@ -64,6 +92,7 @@ Content-Type: application/json
 
 ### Loan below the 1,000 minimum: 400 naming depositAmount
 POST {{baseUrl}}/api/applications
+Authorization: Bearer {{token.response.body.token}}
 Content-Type: application/json
 
 {
@@ -76,6 +105,7 @@ Content-Type: application/json
 
 ### Unknown property (an attempt to set the owner): 400
 POST {{baseUrl}}/api/applications
+Authorization: Bearer {{token.response.body.token}}
 Content-Type: application/json
 
 {
@@ -89,3 +119,8 @@ Content-Type: application/json
 
 ### Unknown id: 404 ProblemDetails
 GET {{baseUrl}}/api/applications/0193a8f2-0000-7000-8000-000000000000
+Authorization: Bearer {{token.response.body.token}}
+
+### Another user: bob asks for alice's application and gets the same 404 as an unknown id (no existence leak)
+GET {{baseUrl}}/api/applications/{{create.response.body.id}}
+Authorization: Bearer {{bobToken.response.body.token}}
