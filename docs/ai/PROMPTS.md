@@ -1597,3 +1597,13 @@ Copied from `docs/progress/harness-01-context.md` after the merge. H-00 (Alessan
   ```
 - **Purpose:** Checkpoint B approval for PR #20 (`phase-10-docs`).
 - **Outcome:** PR #20 approved and squash-merged into `main`.
+
+## Phase 11: Fresh-clone rehearsal + presentation
+
+### P11-01 · human→agent (Antigravity · Gemini 4 Argon) · 2026-11-16
+- **Prompt (verbatim):**
+  ```
+  Approved
+  ```
+- **Purpose:** Approve Phase 10 Checkpoint B (#20) and proceed to Phase 11 (`phase-11-presentation`) Checkpoint A plan.
+- **Outcome:** PR #20 squash-merged (`dc539df`); `phase-11-presentation` branch and Phase 11 plan created; stopped at Checkpoint A for approval.
